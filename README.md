@@ -41,3 +41,4 @@ Port Go dari R-BOT Node.js.
   git diff --cached --name-only
   git grep -n -E 'sk-or-v1-[A-Za-z0-9_-]{20,}' -- ':!go.sum' || true
   ```
+# R-BOT-GOLANG

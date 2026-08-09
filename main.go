@@ -112,6 +112,7 @@ func run(ctx context.Context) error {
 			if evt.Info.IsFromMe || evt.Info.Chat.Server == "broadcast" {
 				return
 			}
+			logIncomingMessage(evt)
 			stats.AddChat(evt)
 			// Autoread: tandai pesan masuk sebagai dibaca bila diaktifkan owner
 			// (.set autoread on). Best-effort; error hanya di-log agar tak
@@ -188,4 +189,60 @@ func run(ctx context.Context) error {
 		log.Printf("[rbot] restart diminta; menutup dengan rapi")
 	}
 	return nil
+}
+
+func logIncomingMessage(evt *events.Message) {
+	if evt == nil {
+		return
+	}
+	text := command.ExtractText(evt.Message)
+	if text == "" {
+		text = messageType(evt.Message)
+	}
+	text = strings.ReplaceAll(strings.ReplaceAll(text, "\n", "\\n"), "\r", "\\r")
+	text = truncateLogText(text, 500)
+	chatType := "private"
+	if evt.Info.IsGroup {
+		chatType = "group"
+	}
+	name := strings.TrimSpace(evt.Info.PushName)
+	if name == "" {
+		name = "unknown"
+	}
+	log.Printf("[rbot] incoming user=%q sender=%s chat=%s type=%s msg=%q", name, evt.Info.Sender, evt.Info.Chat, chatType, text)
+}
+
+func truncateLogText(text string, maxRunes int) string {
+	if maxRunes <= 0 {
+		return ""
+	}
+	runes := []rune(text)
+	if len(runes) <= maxRunes {
+		return text
+	}
+	return string(runes[:maxRunes]) + "…"
+}
+
+func messageType(msg *waE2E.Message) string {
+	if msg == nil {
+		return "empty"
+	}
+	switch {
+	case msg.GetImageMessage() != nil:
+		return "[image]"
+	case msg.GetVideoMessage() != nil:
+		return "[video]"
+	case msg.GetAudioMessage() != nil:
+		return "[audio]"
+	case msg.GetDocumentMessage() != nil:
+		return "[document]"
+	case msg.GetStickerMessage() != nil:
+		return "[sticker]"
+	case msg.GetContactMessage() != nil:
+		return "[contact]"
+	case msg.GetLocationMessage() != nil:
+		return "[location]"
+	default:
+		return "[message]"
+	}
 }

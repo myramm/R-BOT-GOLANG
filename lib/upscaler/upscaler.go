@@ -13,6 +13,8 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/textproto"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -21,7 +23,7 @@ import (
 )
 
 const (
-	VideoMaxBytes = 5 * 1024 * 1024
+	VideoMaxBytes = 10 * 1024 * 1024
 	imageBase     = "https://imgupscaler.com"
 	videoAPI      = "https://api.unblurimage.ai/api/upscaler"
 	imageAPI      = "https://api.unwatermark.ai/api"
@@ -130,7 +132,12 @@ func multipartBody(fields map[string]string, fileField, fileName string, data []
 		}
 	}
 	if fileField != "" {
-		part, err := writer.CreateFormFile(fileField, fileName)
+		header := make(textproto.MIMEHeader)
+		header.Set("Content-Disposition", fmt.Sprintf(`form-data; name=%q; filename=%q`, fileField, fileName))
+		if contentType != "" {
+			header.Set("Content-Type", contentType)
+		}
+		part, err := writer.CreatePart(header)
 		if err != nil {
 			return nil, "", err
 		}
@@ -232,24 +239,26 @@ func UpscaleImage(ctx context.Context, data []byte, level int, mimeType string) 
 	}
 
 	// Fallback mempertahankan perilaku Node lama bila engine utama sedang gagal.
-	fallbackErrors := make([]error, 0, 2)
+	fallbackErrors := make([]error, 0, 1)
 	if fallback, err := upscaleImageUnwatermark(ctx, data, level, mimeType); err == nil {
 		return fallback, nil
 	} else {
 		fallbackErrors = append(fallbackErrors, err)
 	}
-	if fallback, err := upscaleImageWidipe(ctx, data); err == nil {
-		return fallback, nil
-	} else {
-		fallbackErrors = append(fallbackErrors, err)
-	}
+	// Jangan memakai widipe.com lagi: endpoint tersebut saat ini menyajikan
+	// sertifikat untuk serv00.com. TLS tidak boleh dilemahkan hanya agar fallback
+	// berjalan; detail kegagalannya juga tidak membantu hasil HD.
 	return nil, errors.Join(append([]error{lastErr}, fallbackErrors...)...)
 }
 
 func upscaleImageImgLarger(ctx context.Context, data []byte, scale int, mimeType string) ([]byte, error) {
+	data, mimeType, err := normalizeImgLargerImage(ctx, data, mimeType)
+	if err != nil {
+		return nil, err
+	}
 	ext := "jpg"
-	if i := strings.LastIndex(mimeType, "/"); i >= 0 && i+1 < len(mimeType) {
-		ext = strings.ReplaceAll(mimeType[i+1:], "jpeg", "jpg")
+	if mimeType == "image/png" {
+		ext = "png"
 	}
 	body, contentType, err := multipartBody(map[string]string{
 		"tool": "upscale", "mode": "batch", "scaleRadio": strconv.Itoa(scale),
@@ -458,6 +467,49 @@ func jsonText(value any) string {
 	}
 }
 
+func normalizeImgLargerImage(ctx context.Context, data []byte, _ string) ([]byte, string, error) {
+	detectedMIME := http.DetectContentType(data)
+	switch detectedMIME {
+	case "image/jpeg", "image/png":
+		return data, detectedMIME, nil
+	}
+	// WhatsApp kadang memberi MIME image/jpeg untuk byte WebP/HEIC/format lain.
+	// Jangan mengirim byte tersebut dengan label JPEG karena ImgUpscaler akan
+	// membalas "Parameter error"; validasi berdasarkan magic bytes dan konversi
+	// format yang tidak didukung menjadi JPEG.
+	convertCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(convertCtx, "ffmpeg", "-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-frames:v", "1", "-f", "mjpeg", "-q:v", "2", "pipe:1")
+	cmd.Stdin = bytes.NewReader(data)
+	var output limitedBuffer
+	cmd.Stdout = &output
+	if err := cmd.Run(); err != nil || output.Len() == 0 {
+		if err == nil {
+			err = fmt.Errorf("hasil konversi kosong")
+		}
+		return nil, "", fmt.Errorf("format gambar tidak didukung ImgUpscaler: %w", err)
+	}
+	return output.Bytes(), "image/jpeg", nil
+}
+
+const maxNormalizedImageBytes = 20 * 1024 * 1024
+
+type limitedBuffer struct {
+	bytes.Buffer
+}
+
+func (b *limitedBuffer) Write(p []byte) (int, error) {
+	remaining := maxNormalizedImageBytes - b.Len()
+	if remaining <= 0 {
+		return 0, fmt.Errorf("hasil konversi gambar terlalu besar")
+	}
+	if len(p) > remaining {
+		_, _ = b.Buffer.Write(p[:remaining])
+		return remaining, fmt.Errorf("hasil konversi gambar terlalu besar")
+	}
+	return b.Buffer.Write(p)
+}
+
 func upscaleImageUnwatermark(ctx context.Context, data []byte, level int, mimeType string) ([]byte, error) {
 	slot, err := uploadSlot(ctx, imageAPI+"/web/common/upload/image", "image_file_name", "image.jpg")
 	if err != nil {
@@ -489,42 +541,6 @@ func upscaleImageUnwatermark(ctx context.Context, data []byte, level int, mimeTy
 	}
 	if url == "" {
 		return nil, out
-	}
-	return download(ctx, url)
-}
-
-func upscaleImageWidipe(ctx context.Context, data []byte) ([]byte, error) {
-	body, contentType, err := multipartBody(nil, "image", "photo.jpg", data, "image/jpeg")
-	if err != nil {
-		return nil, err
-	}
-	resp, err := request(ctx, http.MethodPost, "https://widipe.com/hd", body, time.Minute, map[string]string{
-		"Content-Type": contentType,
-	})
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("widipe HTTP %d", resp.StatusCode)
-	}
-	contentType = resp.Header.Get("Content-Type")
-	if strings.Contains(contentType, "image") {
-		return io.ReadAll(resp.Body)
-	}
-	var out struct {
-		URL    string `json:"url"`
-		Result string `json:"result"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return nil, err
-	}
-	url := out.URL
-	if url == "" {
-		url = out.Result
-	}
-	if url == "" {
-		return nil, fmt.Errorf("hasil widipe tidak valid")
 	}
 	return download(ctx, url)
 }

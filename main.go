@@ -25,6 +25,7 @@ import (
 	"rbot/brain/config"
 	"rbot/brain/lifecycle"
 	"rbot/brain/settings"
+	"rbot/brain/stats"
 	"rbot/brain/store"
 	_ "rbot/cmd"
 )
@@ -73,6 +74,7 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("buka store aplikasi: %w", err)
 	}
 	defer func() {
+		stats.Flush()
 		if err := store.Close(); err != nil {
 			log.Printf("[rbot] gagal menutup store: %v", err)
 		}
@@ -110,6 +112,7 @@ func run(ctx context.Context) error {
 			if evt.Info.IsFromMe || evt.Info.Chat.Server == "broadcast" {
 				return
 			}
+			stats.AddChat(evt)
 			// Autoread: tandai pesan masuk sebagai dibaca bila diaktifkan owner
 			// (.set autoread on). Best-effort; error hanya di-log agar tak
 			// mengganggu pemrosesan command.

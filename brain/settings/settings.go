@@ -1,7 +1,5 @@
 // Package settings menyimpan pengaturan bot yang bisa diubah saat runtime lewat
-// command (mis. .set autoread on). Berbeda dari config (read-only dari config.json),
-// setting di sini persisten di store (bbolt) dan di-cache di memori supaya cepat
-// dibaca di jalur pesan masuk.
+// command. Setting persisten disimpan di store dan di-cache di memori.
 package settings
 
 import (
@@ -12,10 +10,10 @@ import (
 
 const storeKey = "settings"
 
-// data adalah bentuk tersimpan di store (JSON). Tambah field baru di sini saat
-// menambah setting runtime lain.
+// data adalah bentuk tersimpan di store.
 type data struct {
-	AutoRead bool `json:"autoRead"`
+	AutoRead   bool `json:"autoRead"`
+	ButtonMode int  `json:"buttonMode"`
 }
 
 var (
@@ -24,21 +22,24 @@ var (
 	loaded bool
 )
 
-// Load membaca setting dari store ke cache. Aman dipanggil sekali saat start;
-// bila key belum ada, cache tetap nilai default (semua false).
+// Load membaca setting dari store ke cache. Default mode button = 1.
 func Load() error {
 	mu.Lock()
 	defer mu.Unlock()
 	var d data
-	if err := store.GetOr(storeKey, &d); err != nil {
+	found, err := store.Get(storeKey, &d)
+	if err != nil {
 		return err
+	}
+	if !found || d.ButtonMode < 0 || d.ButtonMode > 4 {
+		d.ButtonMode = 1
 	}
 	cache = d
 	loaded = true
 	return nil
 }
 
-// AutoRead mengembalikan status autoread (default false bila belum di-Load).
+// AutoRead mengembalikan status autoread.
 func AutoRead() bool {
 	mu.RLock()
 	defer mu.RUnlock()
@@ -53,3 +54,30 @@ func SetAutoRead(on bool) error {
 	mu.Unlock()
 	return store.Set(storeKey, snapshot)
 }
+
+// ButtonMode mengembalikan mode tampilan button global (0..4).
+func ButtonMode() int {
+	mu.RLock()
+	defer mu.RUnlock()
+	if !loaded && cache.ButtonMode == 0 {
+		return 1
+	}
+	return cache.ButtonMode
+}
+
+// SetButtonMode menyimpan mode tampilan button global (0..4).
+func SetButtonMode(mode int) error {
+	if mode < 0 || mode > 4 {
+		return &invalidButtonMode{mode: mode}
+	}
+	mu.Lock()
+	cache.ButtonMode = mode
+	loaded = true
+	snapshot := cache
+	mu.Unlock()
+	return store.Set(storeKey, snapshot)
+}
+
+type invalidButtonMode struct{ mode int }
+
+func (e *invalidButtonMode) Error() string { return "mode button harus antara 0 dan 4" }

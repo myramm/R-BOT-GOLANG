@@ -30,6 +30,14 @@ Port Go dari R-BOT Node.js.
 - `.setsponsor` / `.setpromo` — kelola sponsor teks, gambar, dan video.
 - `.hd` / `.enhance` / `.upscale` — upscale foto 2K–16K dan video HD dengan AI; 8K/16K untuk premium.
 - `.smooth` / `.pelancar` / `.interpolate` — perlancar video 30–60 FPS; sampai 120 FPS untuk premium.
+- `.meme` / `.randommeme` / `.lahelu` — kirim meme random dari Lahelu.
+- `.pin` / `.pinterest` / `.pint` — cari dan kirim gambar Pinterest.
+- `.pixiv` / `.px` / `.pixivsearch` — cari dan kirim artwork Pixiv.
+- `.sticker` / `.s` / `.stiker` — ubah gambar/video menjadi sticker WebP.
+- `.toimg` / `.toimage` / `.tomedia` / `.unstick` — ubah sticker/PDF menjadi media.
+- `.totalchat` / `.chatstats` / `.statistik` — statistik chat pribadi, grup, dan global owner.
+- `.button` / `.btn` / `.settheme` — atur mode tampilan button tersimpan.
+- `.reload` / `.reloadcmd` — restart binary Go untuk memuat perubahan.
 
 ## Keamanan GitHub
 

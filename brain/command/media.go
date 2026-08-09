@@ -66,6 +66,26 @@ func (c *Ctx) SendMediaBytes(ctx context.Context, data []byte, kind MediaKind, c
 	return err
 }
 
+// SendStickerBytes mengunggah WebP lalu mengirimnya sebagai sticker WhatsApp.
+func (c *Ctx) SendStickerBytes(ctx context.Context, data []byte) error {
+	up, err := c.Client.Upload(ctx, data, whatsmeow.MediaImage)
+	if err != nil {
+		return err
+	}
+	msg := &waE2E.Message{StickerMessage: &waE2E.StickerMessage{
+		URL:           proto.String(up.URL),
+		DirectPath:    proto.String(up.DirectPath),
+		MediaKey:      up.MediaKey,
+		Mimetype:      proto.String("image/webp"),
+		FileEncSHA256: up.FileEncSHA256,
+		FileSHA256:    up.FileSHA256,
+		FileLength:    proto.Uint64(up.FileLength),
+	}}
+	attachQuote(msg, c.Evt)
+	_, err = c.Client.SendMessage(ctx, c.Evt.Info.Chat, msg)
+	return err
+}
+
 func buildMediaMessage(kind MediaKind, up whatsmeow.UploadResponse, caption, fileName, mimetype string) *waE2E.Message {
 	switch kind {
 	case MediaVideo:
@@ -146,6 +166,8 @@ func attachQuote(msg *waE2E.Message, evt *events.Message) {
 		msg.AudioMessage.ContextInfo = ci
 	case msg.DocumentMessage != nil:
 		msg.DocumentMessage.ContextInfo = ci
+	case msg.StickerMessage != nil:
+		msg.StickerMessage.ContextInfo = ci
 	}
 }
 

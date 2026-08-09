@@ -29,6 +29,15 @@ const (
 
 const mediaDownloadTimeout = 5 * time.Minute
 
+// VideoMetadata adalah metadata opsional untuk pesan video mandiri.
+// Nilai nol berarti field tersebut tidak disertakan.
+type VideoMetadata struct {
+	Seconds       uint32
+	Width         uint32
+	Height        uint32
+	JPEGThumbnail []byte
+}
+
 // SendMedia mengunduh media dari url, mengunggah ke WhatsApp, lalu mengirimnya
 // sebagai balasan (quote pesan pemicu). caption dipakai untuk image/video/document.
 // fileName & mimetype hanya dipakai document/audio; kosongkan untuk default.
@@ -42,8 +51,19 @@ func (c *Ctx) SendMedia(ctx context.Context, url string, kind MediaKind, caption
 
 // SendMediaBytes seperti SendMedia tapi memakai byte yang sudah ada di memori
 // (hasil konversi/unduh lokal), bukan mengunduh dari URL. Dipakai command
-// konverter (rvo, sticker, toimg, get, dll).
+// konverter (rvo, sticker, toimg, get, dll). Pesan dikirim dengan quote.
 func (c *Ctx) SendMediaBytes(ctx context.Context, data []byte, kind MediaKind, caption, fileName, mimetype string) error {
+	return c.sendMediaBytes(ctx, data, kind, caption, fileName, mimetype, true, nil)
+}
+
+// SendMediaBytesStandalone mengirim media tanpa mengutip pesan pemicu. Ini
+// dipakai downloader agar hasil media tampil sebagai pesan baru di chat.
+// Untuk video, metadata opsional dapat mengisi thumbnail, durasi, dan dimensi.
+func (c *Ctx) SendMediaBytesStandalone(ctx context.Context, data []byte, kind MediaKind, caption, fileName, mimetype string, video *VideoMetadata) error {
+	return c.sendMediaBytes(ctx, data, kind, caption, fileName, mimetype, false, video)
+}
+
+func (c *Ctx) sendMediaBytes(ctx context.Context, data []byte, kind MediaKind, caption, fileName, mimetype string, quoted bool, video *VideoMetadata) error {
 	appInfo := whatsmeow.MediaImage
 	switch kind {
 	case MediaVideo:
@@ -60,8 +80,24 @@ func (c *Ctx) SendMediaBytes(ctx context.Context, data []byte, kind MediaKind, c
 	}
 
 	msg := buildMediaMessage(kind, up, caption, fileName, mimetype)
-	// Sematkan quote ke pesan pemicu lewat ContextInfo tiap tipe.
-	attachQuote(msg, c.Evt)
+	if video != nil && msg.VideoMessage != nil {
+		if video.Seconds > 0 {
+			msg.VideoMessage.Seconds = proto.Uint32(video.Seconds)
+		}
+		if video.Width > 0 {
+			msg.VideoMessage.Width = proto.Uint32(video.Width)
+		}
+		if video.Height > 0 {
+			msg.VideoMessage.Height = proto.Uint32(video.Height)
+		}
+		if len(video.JPEGThumbnail) > 0 {
+			msg.VideoMessage.JPEGThumbnail = video.JPEGThumbnail
+		}
+	}
+	if quoted {
+		// Sematkan quote ke pesan pemicu lewat ContextInfo tiap tipe.
+		attachQuote(msg, c.Evt)
+	}
 	_, err = c.Client.SendMessage(ctx, c.Evt.Info.Chat, msg)
 	return err
 }

@@ -49,7 +49,7 @@ func buttonHandler(ctx context.Context, c *command.Ctx) error {
 
 func buttonHelp(ctx context.Context, c *command.Ctx) error {
 	prefix := config.MainPrefix()
-	text := fmt.Sprintf("🔘 *PENGATURAN TEMA BUTTON GLOBAL*\n\nStatus saat ini: *Mode %d*\n\nCara ganti: *%sbutton <0–4>*\n\n• *%sbutton 0* — teks biasa\n• *%sbutton 1* — Quick Reply\n• *%sbutton 2* — Action Button\n• *%sbutton 3* — Single Select\n• *%sbutton 4* — Hybrid\n\n_Mode disimpan untuk kompatibilitas; pesan Go saat ini tetap dikirim sebagai teks/media biasa._", settings.ButtonMode(), prefix, prefix, prefix, prefix, prefix)
+	text := fmt.Sprintf("🔘 *PENGATURAN TEMA BUTTON GLOBAL*\n\nStatus saat ini: *Mode %d*\n\nCara ganti: *%sbutton <0–4>*\n\n• *%sbutton 0* — teks biasa\n• *%sbutton 1* — Quick Reply\n• *%sbutton 2* — Action Button\n• *%sbutton 3* — Single Select\n• *%sbutton 4* — Hybrid\n\n_Mode disimpan untuk kompatibilitas; pesan Go saat ini tetap dikirim sebagai teks/media biasa._", settings.ButtonMode(), prefix, prefix, prefix, prefix, prefix, prefix)
 	_, err := c.Reply(ctx, text)
 	return err
 }

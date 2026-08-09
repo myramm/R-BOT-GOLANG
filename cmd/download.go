@@ -3,12 +3,18 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"math"
+	"os"
+	"os/exec"
 	"path"
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
 
 	"rbot/brain/command"
 	"rbot/brain/config"
+	"rbot/lib/httpx"
 	"rbot/lib/kamino"
 )
 
@@ -115,12 +121,26 @@ func sendOneMedia(ctx context.Context, c *command.Ctx, m kamino.Media, title, ca
 	// Audio besar (atau ukuran tak diketahui) dikirim sebagai document (port asDocument).
 	fileName, mimetype := "", ""
 	if m.Type == "audio" {
-		kind = command.MediaDocument
-		fileName = safeFileName(title, m.Ext)
-		mimetype = "audio/mpeg"
+		kind = command.MediaAudio
+		if size, sizeErr := httpx.HeadSize(ctx, m.URL, 15*time.Second); sizeErr != nil || size < 0 || size > audioDocThresholdBytes() {
+			kind = command.MediaDocument
+			fileName = safeFileName(title, m.Ext)
+			mimetype = "audio/mpeg"
+		}
 	}
 
-	err := c.SendMedia(ctx, m.URL, kind, caption, fileName, mimetype, maxUploadBytes)
+	var err error
+	if m.Type == "video" {
+		data, downloadErr := httpx.GetBytes(ctx, m.URL, 5*time.Minute, maxUploadBytes)
+		if downloadErr == nil {
+			metadata := downloadVideoMetadata(ctx, data)
+			err = c.SendMediaBytesStandalone(ctx, data, command.MediaVideo, caption, "", "video/mp4", metadata)
+		} else {
+			err = downloadErr
+		}
+	} else {
+		err = c.SendMedia(ctx, m.URL, kind, caption, fileName, mimetype, maxUploadBytes)
+	}
 	if err != nil {
 		// Fallback: kirim link download langsung (port cabang catch/terlalu besar).
 		prefix := ""
@@ -131,6 +151,76 @@ func sendOneMedia(ctx context.Context, c *command.Ctx, m kamino.Media, title, ca
 		return e == nil
 	}
 	return true
+}
+
+// downloadVideoMetadata mengambil metadata video secara best-effort. Bila ffprobe
+// atau ffmpeg tidak tersedia, nil dikembalikan dan video tetap dikirim tanpa
+// thumbnail/durasi/dimensi tambahan.
+func downloadVideoMetadata(ctx context.Context, data []byte) *command.VideoMetadata {
+	processCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+
+	file, err := os.CreateTemp("", "rbot-download-*.mp4")
+	if err != nil {
+		return nil
+	}
+	name := file.Name()
+	defer os.Remove(name)
+	if _, err := file.Write(data); err != nil {
+		_ = file.Close()
+		return nil
+	}
+	if err := file.Close(); err != nil {
+		return nil
+	}
+
+	metadata := &command.VideoMetadata{}
+	if out, err := exec.CommandContext(processCtx, "ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", name).Output(); err == nil {
+		if duration, parseErr := strconv.ParseFloat(strings.TrimSpace(string(out)), 64); parseErr == nil && duration > 0 && !math.IsNaN(duration) && !math.IsInf(duration, 0) {
+			seconds := math.Ceil(duration)
+			maxSeconds := float64(^uint32(0))
+			if seconds > maxSeconds {
+				seconds = maxSeconds
+			}
+			metadata.Seconds = uint32(seconds)
+		}
+	}
+	if out, err := exec.CommandContext(processCtx, "ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0:s=x", name).Output(); err == nil {
+		parts := strings.Split(strings.TrimSpace(string(out)), "x")
+		if len(parts) == 2 {
+			metadata.Width, _ = parsePositiveUint32(parts[0])
+			metadata.Height, _ = parsePositiveUint32(parts[1])
+		}
+	}
+	if thumb := downloadVideoThumbnail(processCtx, name); len(thumb) > 0 {
+		metadata.JPEGThumbnail = thumb
+	}
+	if metadata.Seconds == 0 && metadata.Width == 0 && metadata.Height == 0 && len(metadata.JPEGThumbnail) == 0 {
+		return nil
+	}
+	return metadata
+}
+
+func downloadVideoThumbnail(ctx context.Context, name string) []byte {
+	const maxThumbnailBytes = 256 * 1024
+	for _, quality := range []string{"8", "15"} {
+		thumb, err := exec.CommandContext(ctx, "ffmpeg", "-v", "error", "-i", name, "-frames:v", "1", "-vf", "scale=480:480:force_original_aspect_ratio=decrease", "-f", "image2pipe", "-c:v", "mjpeg", "-q:v", quality, "pipe:1").Output()
+		if err == nil && len(thumb) > 0 && len(thumb) <= maxThumbnailBytes {
+			return thumb
+		}
+	}
+	return nil
+}
+
+func parsePositiveUint32(s string) (uint32, error) {
+	n, err := strconv.ParseUint(strings.TrimSpace(s), 10, 32)
+	if err != nil || n == 0 {
+		if err == nil {
+			err = fmt.Errorf("nilai harus positif")
+		}
+		return 0, err
+	}
+	return uint32(n), nil
 }
 
 // safeFileName membersihkan judul jadi nama file aman (port safeFileName).

@@ -1,0 +1,39 @@
+# === Rahasia & kredensial — JANGAN pernah di-commit ===
+# config.json memuat API key OpenRouter, nomor bot/owner, & invite grup.
+config.json
+config.local.json
+
+# File environment dan backup konfigurasi lokal.
+.env
+.env.*
+*.bak
+
+# Jangan pernah memasukkan database/state runtime meskipun berada di luar data/.
+*.db
+*.lmdb
+*.lmdb-*
+*.sqlite
+*.sqlite3
+
+# Kunci pribadi/credential deployment.
+*.pem
+*.key
+*.crt
+
+# Sesi login WhatsApp (whatsmeow) — setara password akun WA.
+session/
+
+# Database & state runtime (termasuk restart.json, lmdb, sqlite).
+data/
+
+# === Biner hasil kompilasi ===
+# Nama biner mengikuti nama modul/direktori; abaikan yang umum.
+/rbot
+/bot-go
+/main
+*.exe
+*.out
+
+# === Lain-lain ===
+*.log
+.DS_Store

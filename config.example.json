@@ -1,0 +1,80 @@
+{
+  "prefix": [".", "/", "$"],
+  "botName": "R-BOT",
+  "footer": "R-BOT ©2021",
+  "logoUrl": "https://example.com/logo.jpg",
+
+  "botNumber": "628xxxxxxxxxx",
+  "ownerNumber": "628xxxxxxxxxx",
+  "owners": ["xxxxxxxxxxxxx@lid"],
+
+  "sticker": {
+    "packname": "R-BOT",
+    "author": "R-BOT Sticker"
+  },
+
+  "energy": {
+    "dailyLimit": "00",
+    "premiumDaily": 1000,
+    "pajakExpired": 0.2,
+    "diskonGrup": 0.03,
+    "cost": {
+      "hd": 3,
+      "smooth": 3,
+      "ai": 2,
+      "play": 2,
+      "download": 2,
+      "sticker": 1
+    }
+  },
+
+  "grupOfficial": {
+    "invite": "https://chat.whatsapp.com/xxxxxxxxxxxxxxxxxxxxxx",
+    "jid": ""
+  },
+
+  "media": {
+    "maxDuration": 50,
+    "maxFileSize": 31457280,
+    "maxResolution": 2048
+  },
+
+  "web": {
+    "host": "0.0.0.0",
+    "port": 7090,
+    "password": ""
+  },
+
+  "logLevel": "ERROR",
+  "maxJadibot": 5,
+
+  "ai": {
+    "apiKey": "",
+    "models": [
+      "openrouter/free",
+      "nvidia/nemotron-3-super-120b-a12b:free",
+      "google/gemma-4-26b-a4b-it:free",
+      "inclusionai/ling-3.0-flash:free",
+      "nvidia/nemotron-3-nano-30b-a3b:free"
+    ],
+    "systemPrompt": "Kamu adalah R-BOT, asisten AI WhatsApp yang cerdas, ramah, dan helpful. Jawab selalu dalam bahasa Indonesia kecuali pengguna minta bahasa lain. Jawab langsung, jelas, dan to-the-point. Jangan pura-pura jadi AI lain."
+  },
+
+  "kamino": {
+    "apiUrl": "https://dl.kaminoater.top",
+    "resolveTimeoutMs": 120000,
+    "audioDocMB": 32
+  },
+
+  "pipedInstances": [
+    "https://api.piped.private.coffee",
+    "https://pipedapi.kavin.rocks",
+    "https://pipedapi.adminforge.de",
+    "https://pipedapi.leptons.xyz",
+    "https://pipedapi.reallyaweso.me",
+    "https://piped-api.lunar.icu",
+    "https://pipedapi.ducks.party",
+    "https://pipedapi.drgns.space",
+    "https://pipedapi.orangenet.cc"
+  ]
+}

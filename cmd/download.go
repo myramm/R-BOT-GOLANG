@@ -1,0 +1,150 @@
+package cmd
+
+import (
+	"context"
+	"fmt"
+	"path"
+	"regexp"
+	"strings"
+
+	"rbot/brain/command"
+	"rbot/brain/config"
+	"rbot/lib/kamino"
+)
+
+const (
+	maxUploadBytes    = 64 * 1024 * 1024 // batas kirim WhatsApp (port MAX_UPLOAD_BYTES)
+	audioDocThreshold = 32 * 1024 * 1024 // default; audio > ini dikirim sebagai document
+)
+
+var reHTTP = regexp.MustCompile(`(?i)^https?://`)
+var reFileUnsafe = regexp.MustCompile(`[\\/:*?"<>|]+`)
+var reSpaces = regexp.MustCompile(`\s+`)
+
+func init() {
+	command.Register(&command.Command{
+		Name:        "download",
+		Category:    "Downloader",
+		Alias:       []string{"dl"},
+		Description: "Download video/foto/lagu dari TikTok, Instagram, YouTube, Spotify, Facebook, X, Threads, Pinterest. Contoh: .download <link>  •  YouTube jadi mp3: .download <link> mp3",
+		Handler:     downloadHandler,
+	})
+}
+
+// audioDocThresholdBytes: ambang audio→document dari config (audioDocMB), fallback 32MB.
+func audioDocThresholdBytes() int64 {
+	if mb := config.C.Kamino.AudioDocMB; mb > 0 {
+		return int64(mb) * 1024 * 1024
+	}
+	return audioDocThreshold
+}
+
+func downloadHandler(ctx context.Context, c *command.Ctx) error {
+	url := ""
+	if len(c.Args) > 0 {
+		url = strings.TrimSpace(c.Args[0])
+	}
+	if url == "" || !reHTTP.MatchString(url) {
+		_, err := c.Reply(ctx, "Kasih link-nya. Contoh:\n.download https://vt.tiktok.com/xxxx\n.download <link youtube> mp3")
+		return err
+	}
+	platform := kamino.Detect(url)
+	if platform == "" {
+		_, err := c.Reply(ctx, "Link tidak dikenali. Didukung: TikTok, Instagram, YouTube, Spotify, Facebook, X (Twitter), Threads, Pinterest.")
+		return err
+	}
+
+	c.React(ctx, "⏳")
+
+	arg := ""
+	if len(c.Args) > 1 {
+		arg = c.Args[1]
+	}
+	data, err := kamino.Resolve(ctx, url, platform, arg)
+	if err != nil {
+		c.React(ctx, "❌")
+		_, e := c.Reply(ctx, fmt.Sprintf("Gagal memproses: %s. Coba lagi sebentar lagi.", err.Error()))
+		return e
+	}
+	if data.Playlist {
+		c.React(ctx, "❌")
+		_, e := c.Reply(ctx, "Ini link playlist/album. Kirim link satu video/lagu saja ya, bukan playlist.")
+		return e
+	}
+	if len(data.Medias) == 0 {
+		c.React(ctx, "❌")
+		_, e := c.Reply(ctx, "Tidak bisa ambil media. Mungkin private, dihapus, atau link salah.")
+		return e
+	}
+
+	caption := "*" + data.Title + "*"
+	if data.Source != "" {
+		caption += "\n_via " + data.Source + "_"
+	}
+
+	sentAny := false
+	for i, m := range data.Medias {
+		cap := ""
+		if i == 0 {
+			cap = caption
+		}
+		if sendOneMedia(ctx, c, m, data.Title, cap) {
+			sentAny = true
+		}
+	}
+
+	if sentAny {
+		c.React(ctx, "✅")
+	} else {
+		c.React(ctx, "❌")
+	}
+	return nil
+}
+
+// sendOneMedia mengirim satu media; fallback ke link teks bila gagal/terlalu besar.
+// Mengembalikan true bila ada sesuatu yang terkirim.
+func sendOneMedia(ctx context.Context, c *command.Ctx, m kamino.Media, title, caption string) bool {
+	kind := command.MediaVideo
+	switch m.Type {
+	case "audio":
+		kind = command.MediaAudio
+	case "image":
+		kind = command.MediaImage
+	}
+
+	// Audio besar (atau ukuran tak diketahui) dikirim sebagai document (port asDocument).
+	fileName, mimetype := "", ""
+	if m.Type == "audio" {
+		kind = command.MediaDocument
+		fileName = safeFileName(title, m.Ext)
+		mimetype = "audio/mpeg"
+	}
+
+	err := c.SendMedia(ctx, m.URL, kind, caption, fileName, mimetype, maxUploadBytes)
+	if err != nil {
+		// Fallback: kirim link download langsung (port cabang catch/terlalu besar).
+		prefix := ""
+		if caption != "" {
+			prefix = caption + "\n\n"
+		}
+		_, e := c.Reply(ctx, fmt.Sprintf("%sGagal kirim %s ke WhatsApp (mungkin terlalu besar). Link download langsung:\n%s", prefix, m.Type, m.URL))
+		return e == nil
+	}
+	return true
+}
+
+// safeFileName membersihkan judul jadi nama file aman (port safeFileName).
+func safeFileName(title, ext string) string {
+	base := reSpaces.ReplaceAllString(reFileUnsafe.ReplaceAllString(title, " "), " ")
+	base = strings.TrimSpace(base)
+	if len(base) > 80 {
+		base = strings.TrimSpace(base[:80])
+	}
+	if base == "" {
+		base = "audio"
+	}
+	if ext == "" {
+		ext = "mp3"
+	}
+	return base + "." + strings.TrimPrefix(path.Ext("."+ext), ".")
+}

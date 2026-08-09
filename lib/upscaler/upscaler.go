@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -37,12 +38,12 @@ type apiError struct {
 }
 
 type result struct {
-	URL             string   `json:"url"`
-	ObjectName      string   `json:"object_name"`
-	OutputImageURL  string   `json:"output_image_url"`
-	OutputURLs      []string `json:"output_urls"`
-	JobID           string   `json:"job_id"`
-	OutputURL       string   `json:"output_url"`
+	URL            string   `json:"url"`
+	ObjectName     string   `json:"object_name"`
+	OutputImageURL string   `json:"output_image_url"`
+	OutputURLs     []string `json:"output_urls"`
+	JobID          string   `json:"job_id"`
+	OutputURL      string   `json:"output_url"`
 }
 
 func (e apiError) Error() string {
@@ -231,13 +232,18 @@ func UpscaleImage(ctx context.Context, data []byte, level int, mimeType string) 
 	}
 
 	// Fallback mempertahankan perilaku Node lama bila engine utama sedang gagal.
+	fallbackErrors := make([]error, 0, 2)
 	if fallback, err := upscaleImageUnwatermark(ctx, data, level, mimeType); err == nil {
 		return fallback, nil
+	} else {
+		fallbackErrors = append(fallbackErrors, err)
 	}
 	if fallback, err := upscaleImageWidipe(ctx, data); err == nil {
 		return fallback, nil
+	} else {
+		fallbackErrors = append(fallbackErrors, err)
 	}
-	return nil, lastErr
+	return nil, errors.Join(append([]error{lastErr}, fallbackErrors...)...)
 }
 
 func upscaleImageImgLarger(ctx context.Context, data []byte, scale int, mimeType string) ([]byte, error) {
@@ -259,55 +265,197 @@ func upscaleImageImgLarger(ctx context.Context, data []byte, scale int, mimeType
 	if err != nil {
 		return nil, err
 	}
-	var uploaded struct {
-		TaskID string `json:"taskId"`
-	}
+	var uploaded json.RawMessage
 	if err := decodeResponse(resp, &uploaded); err != nil {
 		return nil, err
 	}
-	if uploaded.TaskID == "" {
-		return nil, fmt.Errorf("imglarger tidak mengembalikan taskId")
+	taskID, message, err := parseImgLargerTaskResponse(uploaded)
+	if err != nil {
+		return nil, err
+	}
+	if taskID == "" {
+		if message != "" {
+			return nil, fmt.Errorf("imglarger gagal: %s", message)
+		}
+		return nil, fmt.Errorf("imglarger tidak mengembalikan taskId (respons API berubah atau ditolak)")
 	}
 
 	for i := 0; i < 60; i++ {
 		if err := sleepContext(ctx, 3*time.Second); err != nil {
 			return nil, err
 		}
-		payload := fmt.Sprintf(`{"tool":"upscale","taskId":%q,"scaleRadio":%d}`, uploaded.TaskID, scale)
+		payload := fmt.Sprintf(`{"tool":"upscale","taskId":%q,"scaleRadio":%d}`, taskID, scale)
 		poll, err := request(ctx, http.MethodPost, imageBase+"/api/legacy/status", strings.NewReader(payload), 20*time.Second, map[string]string{
 			"Content-Type": "application/json", "Origin": imageBase, "Referer": imageBase + "/",
 		})
 		if err != nil {
 			continue
 		}
-		var status struct {
-			Status      string   `json:"status"`
-			DownloadURL []string `json:"downloadUrls"`
-			Raw         struct {
-				Data struct {
-					Status      string   `json:"status"`
-					DownloadURL []string `json:"downloadUrls"`
-				} `json:"data"`
-			} `json:"raw"`
-		}
-		if err := decodeResponse(poll, &status); err != nil {
+		var statusRaw json.RawMessage
+		if err := decodeResponse(poll, &statusRaw); err != nil {
 			continue
 		}
-		urls := append(status.DownloadURL, status.Raw.Data.DownloadURL...)
+		state, urls, statusMessage := parseImgLargerStatusResponse(statusRaw)
 		for _, url := range urls {
 			if url != "" && !strings.HasSuffix(url, "/results/") {
 				return download(ctx, url)
 			}
 		}
-		state := status.Status
-		if state == "" {
-			state = status.Raw.Data.Status
-		}
 		if state == "failed" || state == "error" {
+			if statusMessage != "" {
+				return nil, fmt.Errorf("imglarger job gagal: %s", statusMessage)
+			}
 			return nil, fmt.Errorf("imglarger job gagal")
 		}
 	}
 	return nil, fmt.Errorf("imglarger timeout")
+}
+
+func parseImgLargerTaskResponse(raw []byte) (taskID, message string, err error) {
+	var root any
+	decoder := json.NewDecoder(strings.NewReader(string(raw)))
+	decoder.UseNumber()
+	if err := decoder.Decode(&root); err != nil {
+		return "", "", fmt.Errorf("decode respons imglarger: %w", err)
+	}
+	message = findJSONTextPriority(root, "message", "error", "msg")
+	// Prioritaskan field task-specific. Field id generik hanya dipakai sebagai
+	// fallback terakhir agar ID objek lain tidak salah dianggap task ID.
+	if taskID := findJSONTextPriority(root, "taskId", "task_id", "taskID", "pid", "jobId", "job_id"); taskID != "" {
+		return taskID, message, nil
+	}
+	// Respons legacy tertentu hanya menaruh token di raw.data.code.
+	if taskID := findJSONTextNonNumeric(root, "code"); taskID != "" {
+		return taskID, message, nil
+	}
+	if taskID := findJSONTextPriority(root, "id"); taskID != "" {
+		return taskID, message, nil
+	}
+	return "", message, nil
+}
+
+func parseImgLargerStatusResponse(raw []byte) (state string, urls []string, message string) {
+	var root any
+	decoder := json.NewDecoder(strings.NewReader(string(raw)))
+	decoder.UseNumber()
+	if decoder.Decode(&root) != nil {
+		return "", nil, ""
+	}
+	state = strings.ToLower(findJSONTextPriority(root, "status", "state"))
+	message = findJSONTextPriority(root, "message", "error", "msg")
+	for _, key := range []string{"downloadUrls", "download_urls", "downloadUrl", "download_url", "urls", "outputUrls", "output_urls", "outputUrl", "output_url", "url"} {
+		findJSONURLs(root, key, &urls)
+	}
+	return state, uniqueStrings(urls), message
+}
+
+func findJSONTextPriority(value any, keys ...string) string {
+	if object, ok := value.(map[string]any); ok {
+		for _, key := range keys {
+			if text := jsonText(object[key]); text != "" {
+				return text
+			}
+		}
+		for _, container := range []string{"data", "result", "raw", "response", "payload"} {
+			if nested, ok := object[container]; ok {
+				if text := findJSONTextPriority(nested, keys...); text != "" {
+					return text
+				}
+			}
+		}
+	}
+	if values, ok := value.([]any); ok {
+		for _, nested := range values {
+			if text := findJSONTextPriority(nested, keys...); text != "" {
+				return text
+			}
+		}
+	}
+	return ""
+}
+
+func findJSONURLs(value any, key string, urls *[]string) {
+	switch current := value.(type) {
+	case map[string]any:
+		for currentKey, nested := range current {
+			if currentKey == key {
+				collectJSONURLs(nested, urls)
+			}
+			findJSONURLs(nested, key, urls)
+		}
+	case []any:
+		for _, nested := range current {
+			findJSONURLs(nested, key, urls)
+		}
+	}
+}
+
+func collectJSONURLs(value any, urls *[]string) {
+	switch value := value.(type) {
+	case string:
+		if strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://") {
+			*urls = append(*urls, value)
+		}
+	case []any:
+		for _, nested := range value {
+			collectJSONURLs(nested, urls)
+		}
+	}
+}
+
+func uniqueStrings(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
+}
+
+func findJSONTextNonNumeric(value any, key string) string {
+	if object, ok := value.(map[string]any); ok {
+		if text := jsonText(object[key]); text != "" && !isNumericJSONText(text) {
+			return text
+		}
+		for _, container := range []string{"data", "result", "raw", "response", "payload"} {
+			if nested, ok := object[container]; ok {
+				if text := findJSONTextNonNumeric(nested, key); text != "" {
+					return text
+				}
+			}
+		}
+	}
+	if values, ok := value.([]any); ok {
+		for _, nested := range values {
+			if text := findJSONTextNonNumeric(nested, key); text != "" {
+				return text
+			}
+		}
+	}
+	return ""
+}
+
+func isNumericJSONText(value string) bool {
+	if value == "" {
+		return false
+	}
+	_, err := strconv.ParseFloat(value, 64)
+	return err == nil
+}
+
+func jsonText(value any) string {
+	switch value := value.(type) {
+	case string:
+		return strings.TrimSpace(value)
+	case json.Number:
+		return value.String()
+	default:
+		return ""
+	}
 }
 
 func upscaleImageUnwatermark(ctx context.Context, data []byte, level int, mimeType string) ([]byte, error) {

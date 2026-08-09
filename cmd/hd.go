@@ -223,7 +223,7 @@ func hdHandler(ctx context.Context, c *command.Ctx) error {
 	if err != nil {
 		c.React(ctx, "❌")
 		c.ReportError(ctx, err)
-		_, replyErr := c.Reply(ctx, "❌ Gagal memproses media: "+err.Error())
+		_, replyErr := c.Reply(ctx, "❌ Gagal memproses media. Coba lagi beberapa saat.")
 		return replyErr
 	}
 

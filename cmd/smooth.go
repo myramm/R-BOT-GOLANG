@@ -24,7 +24,7 @@ const (
 	smoothDefaultMaxLength = 50
 	smoothDefaultMaxBytes  = 30 * 1024 * 1024
 	smoothPremiumMaxBytes  = 60 * 1024 * 1024
-	smoothProcessTimeout    = 10 * time.Minute
+	smoothProcessTimeout   = 10 * time.Minute
 )
 
 func init() {
@@ -155,23 +155,27 @@ func smoothHandler(ctx context.Context, c *command.Ctx) error {
 		if err == nil {
 			err = fmt.Errorf("media kosong")
 		}
+		c.ReportError(ctx, err)
 		_, replyErr := c.Reply(ctx, "❌ Gagal mengunduh video: "+err.Error())
 		return replyErr
 	}
 
 	maxBytes := smoothMaxBytes(premiumUser)
 	if int64(len(data)) > maxBytes {
+		c.ReportErrorMessage(ctx, fmt.Sprintf("File terlalu besar. Maksimal %dMB.", maxBytes/(1024*1024)))
 		c.React(ctx, "❌")
 		_, replyErr := c.Reply(ctx, fmt.Sprintf("❌ File terlalu besar. Maksimal %dMB.", maxBytes/(1024*1024)))
 		return replyErr
 	}
 	duration, ok := hdVideoDuration(processCtx, data)
 	if !ok {
+		c.ReportErrorMessage(ctx, "Tidak bisa membaca durasi video. Pastikan ffprobe terpasang di server.")
 		c.React(ctx, "❌")
 		_, replyErr := c.Reply(ctx, "❌ Tidak bisa membaca durasi video. Pastikan ffprobe terpasang di server.")
 		return replyErr
 	}
 	if duration > float64(smoothMaxDuration(premiumUser)) {
+		c.ReportErrorMessage(ctx, fmt.Sprintf("Video terlalu panjang. Maksimal %d detik.", smoothMaxDuration(premiumUser)))
 		c.React(ctx, "❌")
 		_, replyErr := c.Reply(ctx, fmt.Sprintf("❌ Video terlalu panjang. Maksimal %d detik.", smoothMaxDuration(premiumUser)))
 		return replyErr
@@ -179,11 +183,13 @@ func smoothHandler(ctx context.Context, c *command.Ctx) error {
 
 	result, err := smoothTranscode(processCtx, data, fps)
 	if err != nil {
+		c.ReportError(ctx, err)
 		c.React(ctx, "❌")
 		_, replyErr := c.Reply(ctx, "❌ Gagal memproses video: "+err.Error())
 		return replyErr
 	}
 	if err := c.SendMediaBytes(ctx, result, command.MediaVideo, fmt.Sprintf("✨ Video %dfps selesai", fps), "", "video/mp4"); err != nil {
+		c.ReportError(ctx, err)
 		c.React(ctx, "❌")
 		_, replyErr := c.Reply(ctx, "❌ Gagal mengirim hasil: "+err.Error())
 		return replyErr

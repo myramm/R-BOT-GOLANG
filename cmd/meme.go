@@ -115,6 +115,7 @@ func memeHandler(ctx context.Context, c *command.Ctx) error {
 }
 
 func memeError(ctx context.Context, c *command.Ctx, err error) error {
+	c.ReportError(ctx, err)
 	c.React(ctx, "❌")
 	_, replyErr := c.Reply(ctx, "❌ Gagal mengambil meme: "+err.Error())
 	return replyErr

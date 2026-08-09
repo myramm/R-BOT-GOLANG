@@ -33,11 +33,11 @@ type pinImageVariant struct {
 }
 
 type pinRaw struct {
-	ID          string                      `json:"id"`
-	Title       string                      `json:"title"`
-	GridTitle   string                      `json:"grid_title"`
-	Description string                      `json:"description"`
-	Images      map[string]pinImageVariant  `json:"images"`
+	ID          string                     `json:"id"`
+	Title       string                     `json:"title"`
+	GridTitle   string                     `json:"grid_title"`
+	Description string                     `json:"description"`
+	Images      map[string]pinImageVariant `json:"images"`
 	Pinner      struct {
 		Username string `json:"username"`
 	} `json:"pinner"`
@@ -66,14 +66,14 @@ func init() {
 
 func pinterestHeaders(sourceURL, handler string) map[string]string {
 	return map[string]string{
-		"Accept":                 "application/json, text/javascript, */*, q=0.01",
-		"Referer":                pinterestBase + "/",
-		"User-Agent":             httpx.UA,
-		"x-app-version":          "a9522f",
-		"x-pinterest-appstate":   "active",
+		"Accept":                  "application/json, text/javascript, */*, q=0.01",
+		"Referer":                 pinterestBase + "/",
+		"User-Agent":              httpx.UA,
+		"x-app-version":           "a9522f",
+		"x-pinterest-appstate":    "active",
 		"x-pinterest-pws-handler": handler,
-		"x-pinterest-source-url": sourceURL,
-		"x-requested-with":       "XMLHttpRequest",
+		"x-pinterest-source-url":  sourceURL,
+		"x-requested-with":        "XMLHttpRequest",
 	}
 }
 
@@ -246,6 +246,7 @@ func pinHandler(ctx context.Context, c *command.Ctx) error {
 }
 
 func pinError(ctx context.Context, c *command.Ctx, message string) error {
+	c.ReportErrorMessage(ctx, message)
 	c.React(ctx, "❌")
 	_, err := c.Reply(ctx, "❌ "+message)
 	return err

@@ -36,6 +36,7 @@ type VideoMetadata struct {
 	Width         uint32
 	Height        uint32
 	JPEGThumbnail []byte
+	FileSize      int64
 }
 
 // SendMedia mengunduh media dari url, mengunggah ke WhatsApp, lalu mengirimnya

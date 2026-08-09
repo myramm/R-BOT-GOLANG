@@ -81,11 +81,18 @@ func toimgHandler(ctx context.Context, c *command.Ctx) error {
 
 func toimgSticker(ctx context.Context, c *command.Ctx, processCtx context.Context, data []byte) error {
 	input, err := os.CreateTemp("", "rbot-toimg-*.webp")
-	if err != nil { return toimgError(ctx, c, err.Error()) }
+	if err != nil {
+		return toimgError(ctx, c, err.Error())
+	}
 	inputName := input.Name()
 	defer os.Remove(inputName)
-	if _, err := input.Write(data); err != nil { _ = input.Close(); return toimgError(ctx, c, err.Error()) }
-	if err := input.Close(); err != nil { return toimgError(ctx, c, err.Error()) }
+	if _, err := input.Write(data); err != nil {
+		_ = input.Close()
+		return toimgError(ctx, c, err.Error())
+	}
+	if err := input.Close(); err != nil {
+		return toimgError(ctx, c, err.Error())
+	}
 
 	// Coba baca jumlah frame. Bila gagal, tetap fallback ke PNG.
 	probe := exec.CommandContext(processCtx, "ffprobe", "-v", "error", "-select_streams", "v:0", "-count_frames", "-show_entries", "stream=nb_read_frames", "-of", "default=noprint_wrappers=1:nokey=1", inputName)
@@ -96,43 +103,72 @@ func toimgSticker(ctx context.Context, c *command.Ctx, processCtx context.Contex
 		outputName := inputName + ".mp4"
 		defer os.Remove(outputName)
 		cmd := exec.CommandContext(processCtx, "ffmpeg", "-y", "-i", inputName, "-movflags", "+faststart", "-pix_fmt", "yuv420p", "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2:flags=lanczos", outputName)
-		if out, err := cmd.CombinedOutput(); err != nil { return toimgError(ctx, c, "ffmpeg gagal: "+tailText(string(out), 240)) }
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return toimgError(ctx, c, "ffmpeg gagal: "+tailText(string(out), 240))
+		}
 		result, err := os.ReadFile(outputName)
-		if err != nil { return toimgError(ctx, c, err.Error()) }
-		if err := c.SendMediaBytes(ctx, result, command.MediaVideo, "🎞️ Stiker → video", "sticker.mp4", "video/mp4"); err != nil { return toimgError(ctx, c, err.Error()) }
+		if err != nil {
+			return toimgError(ctx, c, err.Error())
+		}
+		if err := c.SendMediaBytes(ctx, result, command.MediaVideo, "🎞️ Stiker → video", "sticker.mp4", "video/mp4"); err != nil {
+			return toimgError(ctx, c, err.Error())
+		}
 		c.React(ctx, "✅")
 		return nil
 	}
 	outputName := inputName + ".png"
 	defer os.Remove(outputName)
 	cmd := exec.CommandContext(processCtx, "ffmpeg", "-y", "-i", inputName, "-frames:v", "1", "-vf", "format=rgba", outputName)
-	if out, err := cmd.CombinedOutput(); err != nil { return toimgError(ctx, c, "ffmpeg gagal: "+tailText(string(out), 240)) }
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return toimgError(ctx, c, "ffmpeg gagal: "+tailText(string(out), 240))
+	}
 	result, err := os.ReadFile(outputName)
-	if err != nil { return toimgError(ctx, c, err.Error()) }
-	if err := c.SendMediaBytes(ctx, result, command.MediaImage, "🖼️ Stiker → gambar", "sticker.png", "image/png"); err != nil { return toimgError(ctx, c, err.Error()) }
+	if err != nil {
+		return toimgError(ctx, c, err.Error())
+	}
+	if err := c.SendMediaBytes(ctx, result, command.MediaImage, "🖼️ Stiker → gambar", "sticker.png", "image/png"); err != nil {
+		return toimgError(ctx, c, err.Error())
+	}
 	c.React(ctx, "✅")
 	return nil
 }
 
 func toimgPDF(ctx context.Context, c *command.Ctx, processCtx context.Context, data []byte) error {
 	dir, err := os.MkdirTemp("", "rbot-toimg-pdf-")
-	if err != nil { return toimgError(ctx, c, err.Error()) }
+	if err != nil {
+		return toimgError(ctx, c, err.Error())
+	}
 	defer os.RemoveAll(dir)
 	inputName := filepath.Join(dir, "input.pdf")
-	if err := os.WriteFile(inputName, data, 0o600); err != nil { return toimgError(ctx, c, err.Error()) }
+	if err := os.WriteFile(inputName, data, 0o600); err != nil {
+		return toimgError(ctx, c, err.Error())
+	}
 	prefix := filepath.Join(dir, "page")
 	cmd := exec.CommandContext(processCtx, "pdftoppm", "-f", "1", "-l", "5", "-jpeg", "-r", "120", inputName, prefix)
-	if out, err := cmd.CombinedOutput(); err != nil { return toimgError(ctx, c, "pdftoppm gagal: "+tailText(string(out), 240)) }
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return toimgError(ctx, c, "pdftoppm gagal: "+tailText(string(out), 240))
+	}
 	pages, err := filepath.Glob(prefix + "-*.jpg")
-	if err != nil || len(pages) == 0 { return toimgError(ctx, c, "PDF tidak menghasilkan gambar halaman") }
+	if err != nil || len(pages) == 0 {
+		return toimgError(ctx, c, "PDF tidak menghasilkan gambar halaman")
+	}
 	for i, page := range pages {
 		result, readErr := os.ReadFile(page)
-		if readErr != nil { continue }
+		if readErr != nil {
+			continue
+		}
 		caption := fmt.Sprintf("📄 Halaman %d/%d", i+1, len(pages))
-		if sendErr := c.SendMediaBytes(ctx, result, command.MediaImage, caption, fmt.Sprintf("page-%d.jpg", i+1), "image/jpeg"); sendErr != nil { return toimgError(ctx, c, sendErr.Error()) }
+		if sendErr := c.SendMediaBytes(ctx, result, command.MediaImage, caption, fmt.Sprintf("page-%d.jpg", i+1), "image/jpeg"); sendErr != nil {
+			return toimgError(ctx, c, sendErr.Error())
+		}
 	}
 	c.React(ctx, "✅")
 	return nil
 }
 
-func toimgError(ctx context.Context, c *command.Ctx, message string) error { c.React(ctx, "❌"); _, err := c.Reply(ctx, "❌ "+message); return err }
+func toimgError(ctx context.Context, c *command.Ctx, message string) error {
+	c.ReportErrorMessage(ctx, message)
+	c.React(ctx, "❌")
+	_, err := c.Reply(ctx, "❌ "+message)
+	return err
+}

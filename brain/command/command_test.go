@@ -2,7 +2,9 @@ package command
 
 import (
 	"context"
+	"errors"
 	"testing"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 
@@ -39,6 +41,27 @@ func TestExtractText(t *testing.T) {
 				t.Errorf("ExtractText = %q, mau %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestReportErrorCallsHook(t *testing.T) {
+	oldHook := ErrorHook
+	defer func() { ErrorHook = oldHook }()
+
+	called := make(chan error, 1)
+	ErrorHook = func(_ context.Context, _ *Ctx, err error) {
+		called <- err
+	}
+	want := errors.New("imglarger tidak mengembalikan taskId")
+	(&Ctx{InvokedAs: "hd"}).ReportError(context.Background(), want)
+
+	select {
+	case got := <-called:
+		if got != want {
+			t.Fatalf("error hook menerima %v, mau %v", got, want)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("ErrorHook tidak terpanggil")
 	}
 }
 

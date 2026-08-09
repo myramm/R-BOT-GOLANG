@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -154,62 +155,67 @@ func sendOneMedia(ctx context.Context, c *command.Ctx, m kamino.Media, title, ca
 }
 
 // downloadVideoMetadata mengambil metadata video secara best-effort. Bila ffprobe
-// atau ffmpeg tidak tersedia, nil dikembalikan dan video tetap dikirim tanpa
-// thumbnail/durasi/dimensi tambahan.
+// atau ffmpeg tidak tersedia, ukuran file tetap diisi dan video tetap dikirim
+// tanpa metadata tambahan yang gagal dibaca.
 func downloadVideoMetadata(ctx context.Context, data []byte) *command.VideoMetadata {
+	metadata := &command.VideoMetadata{FileSize: int64(len(data))}
 	processCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 
-	file, err := os.CreateTemp("", "rbot-download-*.mp4")
+	tmpDir, err := os.MkdirTemp("", "rbot-video-*")
 	if err != nil {
-		return nil
+		return metadata
 	}
-	name := file.Name()
-	defer os.Remove(name)
-	if _, err := file.Write(data); err != nil {
-		_ = file.Close()
-		return nil
-	}
-	if err := file.Close(); err != nil {
-		return nil
+	defer os.RemoveAll(tmpDir)
+
+	videoPath := filepath.Join(tmpDir, "video.mp4")
+	thumbPath := filepath.Join(tmpDir, "thumb.jpg")
+	if err := os.WriteFile(videoPath, data, 0o600); err != nil {
+		return metadata
 	}
 
-	metadata := &command.VideoMetadata{}
-	if out, err := exec.CommandContext(processCtx, "ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", name).Output(); err == nil {
-		if duration, parseErr := strconv.ParseFloat(strings.TrimSpace(string(out)), 64); parseErr == nil && duration > 0 && !math.IsNaN(duration) && !math.IsInf(duration, 0) {
-			seconds := math.Ceil(duration)
-			maxSeconds := float64(^uint32(0))
-			if seconds > maxSeconds {
-				seconds = maxSeconds
-			}
-			metadata.Seconds = uint32(seconds)
+	// Satu probe mengisi resolusi dan durasi stream video.
+	if out, err := exec.CommandContext(processCtx, "ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height,duration", "-of", "csv=p=0", videoPath).Output(); err == nil {
+		fields := strings.Split(strings.TrimSpace(string(out)), ",")
+		if len(fields) >= 2 {
+			metadata.Width, _ = parsePositiveUint32(fields[0])
+			metadata.Height, _ = parsePositiveUint32(fields[1])
+		}
+		if len(fields) >= 3 {
+			metadata.Seconds = parseVideoDuration(fields[2])
 		}
 	}
-	if out, err := exec.CommandContext(processCtx, "ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0:s=x", name).Output(); err == nil {
-		parts := strings.Split(strings.TrimSpace(string(out)), "x")
-		if len(parts) == 2 {
-			metadata.Width, _ = parsePositiveUint32(parts[0])
-			metadata.Height, _ = parsePositiveUint32(parts[1])
+	// Beberapa container hanya menyediakan durasi pada format, bukan stream.
+	if metadata.Seconds == 0 {
+		if out, err := exec.CommandContext(processCtx, "ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", videoPath).Output(); err == nil {
+			metadata.Seconds = parseVideoDuration(string(out))
 		}
 	}
-	if thumb := downloadVideoThumbnail(processCtx, name); len(thumb) > 0 {
-		metadata.JPEGThumbnail = thumb
-	}
-	if metadata.Seconds == 0 && metadata.Width == 0 && metadata.Height == 0 && len(metadata.JPEGThumbnail) == 0 {
-		return nil
+
+	// Ambil frame pertama sebagai JPEG thumbnail. Gagal membuat thumbnail tidak
+	// menggagalkan pengiriman video karena field ini hanya metadata opsional.
+	if err := exec.CommandContext(processCtx, "ffmpeg", "-y", "-v", "error", "-i", videoPath, "-frames:v", "1", "-vf", "scale=640:-2", "-q:v", "5", thumbPath).Run(); err == nil {
+		if thumb, readErr := os.ReadFile(thumbPath); readErr == nil && len(thumb) <= 256*1024 {
+			metadata.JPEGThumbnail = thumb
+		}
 	}
 	return metadata
 }
 
-func downloadVideoThumbnail(ctx context.Context, name string) []byte {
-	const maxThumbnailBytes = 256 * 1024
-	for _, quality := range []string{"8", "15"} {
-		thumb, err := exec.CommandContext(ctx, "ffmpeg", "-v", "error", "-i", name, "-frames:v", "1", "-vf", "scale=480:480:force_original_aspect_ratio=decrease", "-f", "image2pipe", "-c:v", "mjpeg", "-q:v", quality, "pipe:1").Output()
-		if err == nil && len(thumb) > 0 && len(thumb) <= maxThumbnailBytes {
-			return thumb
-		}
+func parseVideoDuration(raw string) uint32 {
+	duration, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
+	if err != nil || duration <= 0 || math.IsNaN(duration) || math.IsInf(duration, 0) {
+		return 0
 	}
-	return nil
+	seconds := math.Round(duration)
+	if seconds < 1 {
+		seconds = 1
+	}
+	maxSeconds := float64(^uint32(0))
+	if seconds > maxSeconds {
+		seconds = maxSeconds
+	}
+	return uint32(seconds)
 }
 
 func parsePositiveUint32(s string) (uint32, error) {

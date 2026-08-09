@@ -20,10 +20,10 @@ import (
 const hdDefaultMaxDuration = 50
 
 type hdMedia struct {
-	message   *waE2E.Message
-	image     bool
-	mimeType  string
-	fileName  string
+	message  *waE2E.Message
+	image    bool
+	mimeType string
+	fileName string
 }
 
 func init() {
@@ -187,6 +187,7 @@ func hdHandler(ctx context.Context, c *command.Ctx) error {
 		if err == nil {
 			err = fmt.Errorf("media kosong")
 		}
+		c.ReportError(ctx, err)
 		_, replyErr := c.Reply(ctx, "❌ Gagal mengunduh media: "+err.Error())
 		return replyErr
 	}
@@ -221,6 +222,7 @@ func hdHandler(ctx context.Context, c *command.Ctx) error {
 	}
 	if err != nil {
 		c.React(ctx, "❌")
+		c.ReportError(ctx, err)
 		_, replyErr := c.Reply(ctx, "❌ Gagal memproses media: "+err.Error())
 		return replyErr
 	}
@@ -232,6 +234,7 @@ func hdHandler(ctx context.Context, c *command.Ctx) error {
 	}
 	if err != nil {
 		c.React(ctx, "❌")
+		c.ReportError(ctx, err)
 		_, replyErr := c.Reply(ctx, "❌ Gagal mengirim hasil: "+err.Error())
 		return replyErr
 	}

@@ -133,6 +133,7 @@ func stickerEncode(ctx context.Context, data []byte, video bool) ([]byte, error)
 }
 
 func stickerError(ctx context.Context, c *command.Ctx, message string) error {
+	c.ReportErrorMessage(ctx, message)
 	c.React(ctx, "❌")
 	_, err := c.Reply(ctx, "❌ "+message)
 	return err

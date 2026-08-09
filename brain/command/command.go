@@ -316,6 +316,34 @@ var (
 	MakananSectionHook func(evt *events.Message) string
 )
 
+// ReportError meneruskan error teknis ke hook runtime tanpa mengubah balasan
+// command ke user. Dipakai handler yang sudah menampilkan error lalu return nil.
+// Pelaporan dilakukan sinkron agar laporan owner dibuat sebelum balasan user.
+func (c *Ctx) ReportError(ctx context.Context, err error) {
+	notifyErrorHookSync(ctx, c, err)
+}
+
+// ReportErrorMessage adalah bentuk praktis ReportError untuk helper yang sudah
+// mengubah error menjadi pesan user-facing.
+func (c *Ctx) ReportErrorMessage(ctx context.Context, message string) {
+	if message != "" {
+		c.ReportError(ctx, fmt.Errorf("%s", message))
+	}
+}
+
+func notifyErrorHookSync(ctx context.Context, c *Ctx, err error) {
+	hook := ErrorHook
+	if hook == nil || err == nil {
+		return
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("[rbot] panic saat meneruskan error command: %v", r)
+		}
+	}()
+	hook(ctx, c, err)
+}
+
 func notifyErrorHook(ctx context.Context, c *Ctx, err error) {
 	hook := ErrorHook
 	if hook == nil || err == nil {

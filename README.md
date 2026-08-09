@@ -29,6 +29,7 @@ Port Go dari R-BOT Node.js.
 - `.resetai` — hapus riwayat percakapan AI.
 - `.setsponsor` / `.setpromo` — kelola sponsor teks, gambar, dan video.
 - `.hd` / `.enhance` / `.upscale` — upscale foto 2K–16K dan video HD dengan AI; 8K/16K untuk premium.
+- `.smooth` / `.pelancar` / `.interpolate` — perlancar video 30–60 FPS; sampai 120 FPS untuk premium.
 
 ## Keamanan GitHub
 

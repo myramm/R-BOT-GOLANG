@@ -105,6 +105,7 @@ func run(ctx context.Context) error {
 	}
 	clientLog := waLog.Stdout("Client", level, true)
 	client := whatsmeow.NewClient(device, clientLog)
+	command.ErrorHook = forwardCommandError
 	var notifyOnce sync.Once
 	client.AddEventHandler(func(rawEvt any) {
 		switch evt := rawEvt.(type) {
@@ -189,6 +190,36 @@ func run(ctx context.Context) error {
 		log.Printf("[rbot] restart diminta; menutup dengan rapi")
 	}
 	return nil
+}
+
+func forwardCommandError(ctx context.Context, c *command.Ctx, commandErr error) {
+	if c == nil || c.Client == nil || c.Evt == nil || commandErr == nil {
+		return
+	}
+	ownerRaw := config.PrimaryOwnerAddress()
+	if ownerRaw == "" {
+		log.Printf("[rbot] error command %q tidak diteruskan: owner belum dikonfigurasi", c.InvokedAs)
+		return
+	}
+	if !strings.Contains(ownerRaw, "@") {
+		ownerRaw += "@s.whatsapp.net"
+	}
+	ownerJID, err := types.ParseJID(ownerRaw)
+	if err != nil {
+		log.Printf("[rbot] error command %q tidak diteruskan: JID owner %q tidak valid: %v", c.InvokedAs, ownerRaw, err)
+		return
+	}
+
+	name := strings.TrimSpace(c.Evt.Info.PushName)
+	if name == "" {
+		name = "unknown"
+	}
+	report := fmt.Sprintf("⚠️ *Command Error*\n\nCommand: *%s*\nDari: %s (%s)\nChat: %s\n\nError:\n%s", c.InvokedAs, name, c.Sender().String(), c.Chat().String(), truncateLogText(commandErr.Error(), 1000))
+	reportCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if _, err := c.Client.SendMessage(reportCtx, ownerJID, &waE2E.Message{Conversation: proto.String(report)}); err != nil {
+		log.Printf("[rbot] gagal meneruskan error command %q ke owner: %v", c.InvokedAs, err)
+	}
 }
 
 func logIncomingMessage(evt *events.Message) {

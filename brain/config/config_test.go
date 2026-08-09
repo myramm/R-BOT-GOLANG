@@ -94,6 +94,21 @@ func TestPajakDiskonDijepit(t *testing.T) {
 	}
 }
 
+func TestPrimaryOwnerAddress(t *testing.T) {
+	C = Config{OwnerNumber: " 628123456789 ", Owners: []string{"123@lid"}}
+	if got := PrimaryOwnerAddress(); got != "628123456789" {
+		t.Errorf("PrimaryOwnerAddress nomor = %q", got)
+	}
+	C = Config{Owners: []string{" 123@lid "}}
+	if got := PrimaryOwnerAddress(); got != "123@lid" {
+		t.Errorf("PrimaryOwnerAddress owners = %q", got)
+	}
+	C = Config{}
+	if got := PrimaryOwnerAddress(); got != "" {
+		t.Errorf("PrimaryOwnerAddress kosong = %q", got)
+	}
+}
+
 func TestBareNumberDanDigits(t *testing.T) {
 	if got := BareNumber("6283891155427@s.whatsapp.net"); got != "6283891155427" {
 		t.Errorf("BareNumber @ = %q", got)

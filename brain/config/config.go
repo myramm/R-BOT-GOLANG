@@ -133,6 +133,20 @@ func Digits(s string) string {
 	return nonDigit.ReplaceAllString(s, "")
 }
 
+// PrimaryOwnerAddress mengembalikan alamat owner utama untuk notifikasi bot.
+// OwnerNumber diprioritaskan karena merupakan nomor yang ditampilkan ke user;
+// bila kosong, gunakan owners[0] yang juga dapat berupa JID LID.
+func PrimaryOwnerAddress() string {
+	owner := strings.TrimSpace(C.OwnerNumber)
+	if owner == "" && len(C.Owners) > 0 {
+		owner = strings.TrimSpace(C.Owners[0])
+	}
+	if owner == "" || strings.Contains(owner, "@") {
+		return owner
+	}
+	return Digits(owner)
+}
+
 // jsNumber meniru Number(x) di JS untuk RawMessage berisi angka atau string.
 // Mengembalikan (nilai, true) bila terdefinisi & terbaca sebagai angka; (0,
 // false) bila absen atau bukan angka (setara NaN → pemanggil pakai default).

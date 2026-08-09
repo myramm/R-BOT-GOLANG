@@ -34,10 +34,7 @@ func reqHandler(ctx context.Context, c *command.Ctx) error {
 
 	// Rangkai JID owner tujuan. Node: kalau sudah ada "@" pakai apa adanya,
 	// selain itu anggap nomor biasa dan tempel @s.whatsapp.net.
-	ownerRaw := ""
-	if len(config.C.Owners) > 0 {
-		ownerRaw = strings.TrimSpace(config.C.Owners[0])
-	}
+	ownerRaw := config.PrimaryOwnerAddress()
 	if ownerRaw == "" {
 		_, err := c.Reply(ctx, "Maaf, request gagal terkirim ke owner. Coba lagi nanti ya.")
 		return err

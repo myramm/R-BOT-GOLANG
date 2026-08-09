@@ -308,10 +308,28 @@ var (
 	ResumeHook func(ctx context.Context, client *whatsmeow.Client, evt *events.Message, text string)
 	// StatsHook: catat statistik pemakaian command.
 	StatsHook func(cmdName string, evt *events.Message)
+	// ErrorHook menerima error command/panic agar runtime dapat meneruskannya
+	// ke owner tanpa membuat command dispatcher bergantung pada transport tujuan.
+	ErrorHook func(ctx context.Context, c *Ctx, err error)
 	// RestSectionHook & MakananSectionHook: bagian tambahan pesan "energi habis".
 	RestSectionHook    func(evt *events.Message) string
 	MakananSectionHook func(evt *events.Message) string
 )
+
+func notifyErrorHook(ctx context.Context, c *Ctx, err error) {
+	hook := ErrorHook
+	if hook == nil || err == nil {
+		return
+	}
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[rbot] panic saat meneruskan error command: %v", r)
+			}
+		}()
+		hook(ctx, c, err)
+	}()
+}
 
 func memberGrup(ctx context.Context, client *whatsmeow.Client, evt *events.Message) bool {
 	if MemberGrupHook == nil {
@@ -411,11 +429,14 @@ func Dispatch(ctx context.Context, client *whatsmeow.Client, evt *events.Message
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
-				log.Printf("[rbot] panic di command %q: %v", key, r)
+				err := fmt.Errorf("panic: %v", r)
+				log.Printf("[rbot] panic di command %q: %v", key, err)
+				notifyErrorHook(ctx, c, err)
 			}
 		}()
 		if err := cmd.Handler(ctx, c); err != nil {
 			log.Printf("[rbot] error command %q: %v", key, err)
+			notifyErrorHook(ctx, c, err)
 		}
 	}()
 

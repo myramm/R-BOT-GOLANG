@@ -19,6 +19,20 @@ Port Go dari R-BOT Node.js.
    go run .
    ```
 
+   Untuk deployment foreground di `tmux`, gunakan supervisor `start.sh`:
+
+   ```bash
+   chmod +x start.sh
+   tmux new -s rbot
+   ./start.sh
+   # detach: Ctrl-b lalu d
+   # attach lagi: tmux attach -t rbot
+   ```
+
+   `start.sh` membangun binary sebelum start dan mengulang saat proses crash. Exit normal
+   atau signal tidak diulang. Binary dapat diganti lewat `RBOT_BINARY=/path/rbot` dan jeda
+   restart lewat `RBOT_RESTART_DELAY=5`.
+
 `config.json` sengaja di-ignore oleh Git. Jangan pernah menambahkan file itu dengan
 `git add -f`, dan jangan menaruh API key di source code atau `config.example.json`.
 

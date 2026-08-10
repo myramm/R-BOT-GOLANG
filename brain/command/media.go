@@ -57,6 +57,12 @@ func (c *Ctx) SendMediaBytes(ctx context.Context, data []byte, kind MediaKind, c
 	return c.sendMediaBytes(ctx, data, kind, caption, fileName, mimetype, true, nil)
 }
 
+// SendMediaBytesWithMetadata seperti SendMediaBytes, tetapi dapat menyertakan
+// metadata video (thumbnail, durasi, dan dimensi) pada pesan yang dikutip.
+func (c *Ctx) SendMediaBytesWithMetadata(ctx context.Context, data []byte, kind MediaKind, caption, fileName, mimetype string, video *VideoMetadata) error {
+	return c.sendMediaBytes(ctx, data, kind, caption, fileName, mimetype, true, video)
+}
+
 // SendMediaBytesStandalone mengirim media tanpa mengutip pesan pemicu. Ini
 // dipakai downloader agar hasil media tampil sebagai pesan baru di chat.
 // Untuk video, metadata opsional dapat mengisi thumbnail, durasi, dan dimensi.
@@ -81,26 +87,31 @@ func (c *Ctx) sendMediaBytes(ctx context.Context, data []byte, kind MediaKind, c
 	}
 
 	msg := buildMediaMessage(kind, up, caption, fileName, mimetype)
-	if video != nil && msg.VideoMessage != nil {
-		if video.Seconds > 0 {
-			msg.VideoMessage.Seconds = proto.Uint32(video.Seconds)
-		}
-		if video.Width > 0 {
-			msg.VideoMessage.Width = proto.Uint32(video.Width)
-		}
-		if video.Height > 0 {
-			msg.VideoMessage.Height = proto.Uint32(video.Height)
-		}
-		if len(video.JPEGThumbnail) > 0 {
-			msg.VideoMessage.JPEGThumbnail = video.JPEGThumbnail
-		}
-	}
+	applyVideoMetadata(msg, video)
 	if quoted {
 		// Sematkan quote ke pesan pemicu lewat ContextInfo tiap tipe.
 		attachQuote(msg, c.Evt)
 	}
 	_, err = c.Client.SendMessage(ctx, c.Evt.Info.Chat, msg)
 	return err
+}
+
+func applyVideoMetadata(msg *waE2E.Message, video *VideoMetadata) {
+	if msg == nil || msg.VideoMessage == nil || video == nil {
+		return
+	}
+	if video.Seconds > 0 {
+		msg.VideoMessage.Seconds = proto.Uint32(video.Seconds)
+	}
+	if video.Width > 0 {
+		msg.VideoMessage.Width = proto.Uint32(video.Width)
+	}
+	if video.Height > 0 {
+		msg.VideoMessage.Height = proto.Uint32(video.Height)
+	}
+	if len(video.JPEGThumbnail) > 0 {
+		msg.VideoMessage.JPEGThumbnail = video.JPEGThumbnail
+	}
 }
 
 // SendStickerBytes mengunggah WebP lalu mengirimnya sebagai sticker WhatsApp.

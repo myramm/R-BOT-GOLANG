@@ -230,7 +230,8 @@ func hdHandler(ctx context.Context, c *command.Ctx) error {
 	if media.image {
 		err = c.SendMediaBytes(ctx, output, command.MediaImage, fmt.Sprintf("✨ Foto %s selesai!", upscaler.ImageLevels[level]), "", media.mimeType)
 	} else {
-		err = c.SendMediaBytes(ctx, output, command.MediaVideo, "✨ Video HD selesai!", "", "video/mp4")
+		metadata := downloadVideoMetadata(ctx, output)
+		err = c.SendMediaBytesWithMetadata(ctx, output, command.MediaVideo, "✨ Video HD selesai!", "", "video/mp4", metadata)
 	}
 	if err != nil {
 		c.React(ctx, "❌")

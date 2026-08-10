@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"os"
 	"os/exec"
@@ -94,35 +96,41 @@ func toimgSticker(ctx context.Context, c *command.Ctx, processCtx context.Contex
 		return toimgError(ctx, c, err.Error())
 	}
 
-	// Coba baca jumlah frame. Bila gagal, tetap fallback ke PNG.
-	probe := exec.CommandContext(processCtx, "ffprobe", "-v", "error", "-select_streams", "v:0", "-count_frames", "-show_entries", "stream=nb_read_frames", "-of", "default=noprint_wrappers=1:nokey=1", inputName)
-	probeOut, _ := probe.Output()
-	frames := strings.TrimSpace(string(probeOut))
-	animated := frames != "" && frames != "1" && frames != "N/A"
-	if animated {
+	// Jangan memakai ffprobe -count_frames untuk menentukan animasi. Pada
+	// beberapa WebP sticker WhatsApp, timestamp/frame duration yang rusak
+	// membuat ffprobe mengembalikan hasil yang tidak konsisten dan ffmpeg
+	// kemudian berhenti dengan "maximum 0.666667" tanpa menulis frame.
+	if isAnimatedWebP(data) {
 		outputName := inputName + ".mp4"
 		defer os.Remove(outputName)
-		cmd := exec.CommandContext(processCtx, "ffmpeg", "-y", "-i", inputName, "-movflags", "+faststart", "-pix_fmt", "yuv420p", "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2:flags=lanczos", outputName)
-		if out, err := cmd.CombinedOutput(); err != nil {
-			return toimgError(ctx, c, "ffmpeg gagal: "+tailText(string(out), 240))
+		args := []string{
+			"-y", "-hide_banner", "-loglevel", "error", "-max_error_rate", "1.0",
+			"-fflags", "+discardcorrupt", "-err_detect", "ignore_err", "-i", inputName,
+			"-vf", "fps=30,scale=trunc(iw/2)*2:trunc(ih/2)*2:flags=lanczos,format=yuv420p",
+			"-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart", outputName,
 		}
-		result, err := os.ReadFile(outputName)
-		if err != nil {
-			return toimgError(ctx, c, err.Error())
+		if _, err := exec.CommandContext(processCtx, "ffmpeg", args...).CombinedOutput(); err == nil {
+			if result, readErr := readNonEmptyFile(outputName); readErr == nil {
+				if sendErr := c.SendMediaBytes(ctx, result, command.MediaVideo, "🎞️ Stiker → video", "sticker.mp4", "video/mp4"); sendErr != nil {
+					return toimgError(ctx, c, sendErr.Error())
+				}
+				c.React(ctx, "✅")
+				return nil
+			}
 		}
-		if err := c.SendMediaBytes(ctx, result, command.MediaVideo, "🎞️ Stiker → video", "sticker.mp4", "video/mp4"); err != nil {
-			return toimgError(ctx, c, err.Error())
-		}
-		c.React(ctx, "✅")
-		return nil
 	}
+
 	outputName := inputName + ".png"
 	defer os.Remove(outputName)
-	cmd := exec.CommandContext(processCtx, "ffmpeg", "-y", "-i", inputName, "-frames:v", "1", "-vf", "format=rgba", outputName)
-	if out, err := cmd.CombinedOutput(); err != nil {
+	args := []string{
+		"-y", "-hide_banner", "-loglevel", "error", "-max_error_rate", "1.0",
+		"-fflags", "+discardcorrupt", "-err_detect", "ignore_err", "-i", inputName,
+		"-frames:v", "1", "-vf", "format=rgba", outputName,
+	}
+	if out, err := exec.CommandContext(processCtx, "ffmpeg", args...).CombinedOutput(); err != nil {
 		return toimgError(ctx, c, "ffmpeg gagal: "+tailText(string(out), 240))
 	}
-	result, err := os.ReadFile(outputName)
+	result, err := readNonEmptyFile(outputName)
 	if err != nil {
 		return toimgError(ctx, c, err.Error())
 	}
@@ -131,6 +139,51 @@ func toimgSticker(ctx context.Context, c *command.Ctx, processCtx context.Contex
 	}
 	c.React(ctx, "✅")
 	return nil
+}
+
+// isAnimatedWebP membaca flag animasi dari header WebP tanpa mendekode semua
+// frame. VP8X menyimpan animation bit pada byte flags, sedangkan ANIM adalah
+// fallback untuk file WebP yang tidak memiliki chunk VP8X standar.
+func isAnimatedWebP(data []byte) bool {
+	if len(data) < 16 || !bytes.Equal(data[:4], []byte("RIFF")) || !bytes.Equal(data[8:12], []byte("WEBP")) {
+		return false
+	}
+	if bytes.Equal(data[12:16], []byte("VP8X")) && len(data) > 20 {
+		return data[20]&0x02 != 0
+	}
+	return hasWebPChunk(data[12:], "ANIM")
+}
+
+func hasWebPChunk(data []byte, wanted string) bool {
+	if len(wanted) != 4 {
+		return false
+	}
+	for offset := 0; offset+8 <= len(data); {
+		if string(data[offset:offset+4]) == wanted {
+			return true
+		}
+		size := int(binary.LittleEndian.Uint32(data[offset+4 : offset+8]))
+		next := offset + 8 + size
+		if size&1 != 0 {
+			next++
+		}
+		if next <= offset || next > len(data) {
+			return false
+		}
+		offset = next
+	}
+	return false
+}
+
+func readNonEmptyFile(name string) ([]byte, error) {
+	result, err := os.ReadFile(name)
+	if err != nil {
+		return nil, err
+	}
+	if len(result) == 0 {
+		return nil, fmt.Errorf("hasil ffmpeg kosong")
+	}
+	return result, nil
 }
 
 func toimgPDF(ctx context.Context, c *command.Ctx, processCtx context.Context, data []byte) error {

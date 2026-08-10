@@ -47,6 +47,65 @@ func TestNormalizeImgLargerJPEG(t *testing.T) {
 	}
 }
 
+func TestImageChain(t *testing.T) {
+	tests := map[int][]int{
+		2:  {2},
+		4:  {4},
+		8:  {4, 2},
+		16: {4, 4},
+	}
+	for level, want := range tests {
+		got := imageChain(level)
+		if len(got) != len(want) {
+			t.Fatalf("imageChain(%d) = %v, want %v", level, got, want)
+		}
+		for i := range want {
+			if got[i] != want[i] {
+				t.Fatalf("imageChain(%d) = %v, want %v", level, got, want)
+			}
+		}
+	}
+}
+
+func TestVideoCreateJobFields(t *testing.T) {
+	body, contentType, err := multipartBody(map[string]string{
+		"original_video_url": "https://cdn.example/video.mp4",
+		"resolution":         "2k",
+		"is_preview":         "false",
+	}, "", "", nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if contentType == "" || !strings.HasPrefix(contentType, "multipart/form-data;") {
+		t.Fatalf("content type = %q, want multipart form", contentType)
+	}
+	text := body.String()
+	for _, want := range []string{"name=\"original_video_url\"", "https://cdn.example/video.mp4", "name=\"resolution\"", "\r\n2k\r\n", "name=\"is_preview\"", "\r\nfalse\r\n"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("body tidak memuat %q: %s", want, text)
+		}
+	}
+}
+
+func TestVideoResultURLs(t *testing.T) {
+	for name, result := range map[string]result{
+		"output":      {OutputURL: "https://cdn.example/output.mp4"},
+		"video":       {VideoURL: "https://cdn.example/video.mp4"},
+		"outputVideo": {OutputVideoURL: "https://cdn.example/output-video.mp4"},
+	} {
+		got := result.OutputURL
+		if got == "" {
+			got = result.OutputVideoURL
+		}
+		if got == "" {
+			got = result.VideoURL
+		}
+		if got == "" {
+			t.Fatalf("%s result URL kosong", name)
+		}
+	}
+}
+
 func TestVideoMaxBytes(t *testing.T) {
 	if VideoMaxBytes != 10*1024*1024 {
 		t.Fatalf("VideoMaxBytes = %d, want %d", VideoMaxBytes, 10*1024*1024)

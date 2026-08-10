@@ -8,7 +8,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -25,9 +24,8 @@ import (
 const (
 	VideoMaxBytes = 10 * 1024 * 1024
 	imageBase     = "https://imgupscaler.com"
-	videoAPI      = "https://api.unblurimage.ai/api/upscaler"
-	imageAPI      = "https://api.unwatermark.ai/api"
-	cdnBase       = "https://cdn.unwatermark.ai"
+	videoAPI      = "https://api.unwatermark.ai/api"
+	cdnBase       = "https://cdn.unblurimage.ai"
 	userAgent     = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
 
@@ -43,8 +41,11 @@ type result struct {
 	URL            string   `json:"url"`
 	ObjectName     string   `json:"object_name"`
 	OutputImageURL string   `json:"output_image_url"`
+	OutputVideoURL string   `json:"output_video_url"`
+	VideoURL       string   `json:"video_url"`
 	OutputURLs     []string `json:"output_urls"`
 	JobID          string   `json:"job_id"`
+	TaskID         string   `json:"task_id"`
 	OutputURL      string   `json:"output_url"`
 }
 
@@ -217,8 +218,10 @@ func imageChain(level int) []int {
 	}
 }
 
-// UpscaleImage menaikkan resolusi foto. Level yang didukung: 2, 4, 8, 16.
-// Level tinggi dikerjakan bertahap agar setiap job tetap maksimal 4x.
+// UpscaleImage menaikkan resolusi foto memakai ImgLarger. Level yang didukung:
+// 2, 4, 8, 16. Level tinggi dikerjakan bertahap agar setiap job tetap maksimal 4x.
+// Tidak ada perpindahan engine: error dari ImgLarger dikembalikan langsung agar
+// hasil HD konsisten dan penyebab kegagalan mudah dilacak.
 func UpscaleImage(ctx context.Context, data []byte, level int, mimeType string) ([]byte, error) {
 	if _, ok := ImageLevels[level]; !ok {
 		return nil, fmt.Errorf("resolusi %dK tidak didukung", level)
@@ -227,28 +230,14 @@ func UpscaleImage(ctx context.Context, data []byte, level int, mimeType string) 
 		mimeType = "image/jpeg"
 	}
 	current := data
-	var lastErr error
 	for _, scale := range imageChain(level) {
-		current, lastErr = upscaleImageImgLarger(ctx, current, scale, mimeType)
-		if lastErr != nil {
-			break
+		var err error
+		current, err = upscaleImageImgLarger(ctx, current, scale, mimeType)
+		if err != nil {
+			return nil, err
 		}
 	}
-	if lastErr == nil {
-		return current, nil
-	}
-
-	// Fallback mempertahankan perilaku Node lama bila engine utama sedang gagal.
-	fallbackErrors := make([]error, 0, 1)
-	if fallback, err := upscaleImageUnwatermark(ctx, data, level, mimeType); err == nil {
-		return fallback, nil
-	} else {
-		fallbackErrors = append(fallbackErrors, err)
-	}
-	// Jangan memakai widipe.com lagi: endpoint tersebut saat ini menyajikan
-	// sertifikat untuk serv00.com. TLS tidak boleh dilemahkan hanya agar fallback
-	// berjalan; detail kegagalannya juga tidak membantu hasil HD.
-	return nil, errors.Join(append([]error{lastErr}, fallbackErrors...)...)
+	return current, nil
 }
 
 func upscaleImageImgLarger(ctx context.Context, data []byte, scale int, mimeType string) ([]byte, error) {
@@ -510,41 +499,6 @@ func (b *limitedBuffer) Write(p []byte) (int, error) {
 	return b.Buffer.Write(p)
 }
 
-func upscaleImageUnwatermark(ctx context.Context, data []byte, level int, mimeType string) ([]byte, error) {
-	slot, err := uploadSlot(ctx, imageAPI+"/web/common/upload/image", "image_file_name", "image.jpg")
-	if err != nil {
-		return nil, err
-	}
-	source, err := putUpload(ctx, slot, mimeType, data)
-	if err != nil {
-		return nil, err
-	}
-	body, contentType, err := multipartBody(map[string]string{
-		"original_image_url": source, "upscale_type": strconv.Itoa(level),
-	}, "", "", nil, "")
-	if err != nil {
-		return nil, err
-	}
-	resp, err := request(ctx, http.MethodPost, imageAPI+"/web/unblurimage/v1/image-upscaler-v2/create-job", body, 3*time.Minute, map[string]string{
-		"Content-Type": contentType,
-	})
-	if err != nil {
-		return nil, err
-	}
-	var out apiError
-	if err := decodeResponse(resp, &out); err != nil {
-		return nil, err
-	}
-	url := out.Result.OutputImageURL
-	if url == "" && len(out.Result.OutputURLs) > 0 {
-		url = out.Result.OutputURLs[0]
-	}
-	if url == "" {
-		return nil, out
-	}
-	return download(ctx, url)
-}
-
 // UpscaleVideo mengirim video ke server job enhancer dan menunggu hasilnya.
 func UpscaleVideo(ctx context.Context, data []byte, fileName string) ([]byte, error) {
 	if len(data) > VideoMaxBytes {
@@ -553,7 +507,7 @@ func UpscaleVideo(ctx context.Context, data []byte, fileName string) ([]byte, er
 	if fileName == "" {
 		fileName = "video.mp4"
 	}
-	slot, err := uploadSlot(ctx, videoAPI+"/v1/ai-video-enhancer/upload-video", "video_file_name", fileName)
+	slot, err := uploadSlot(ctx, videoAPI+"/web/common/upload/video", "video_file_name", fileName)
 	if err != nil {
 		return nil, err
 	}
@@ -561,11 +515,17 @@ func UpscaleVideo(ctx context.Context, data []byte, fileName string) ([]byte, er
 	if err != nil {
 		return nil, err
 	}
-	body, contentType, err := multipartBody(map[string]string{"original_video_file": source}, "", "", nil, "")
+	// Endpoint aktif menerima multipart form dengan URL hasil upload dan
+	// resolusi upscale. JSON akan dianggap body kosong oleh endpoint ini (422).
+	body, contentType, err := multipartBody(map[string]string{
+		"original_video_url": source,
+		"resolution":         "2k",
+		"is_preview":         "false",
+	}, "", "", nil, "")
 	if err != nil {
 		return nil, err
 	}
-	resp, err := request(ctx, http.MethodPost, videoAPI+"/v2/ai-video-enhancer/create-job", body, 3*time.Minute, map[string]string{
+	resp, err := request(ctx, http.MethodPost, videoAPI+"/web/unblurimage/v1/video-enhancer/create-job", body, 3*time.Minute, map[string]string{
 		"Content-Type": contentType,
 	})
 	if err != nil {
@@ -575,7 +535,11 @@ func UpscaleVideo(ctx context.Context, data []byte, fileName string) ([]byte, er
 	if err := decodeResponse(resp, &created); err != nil {
 		return nil, err
 	}
-	if created.Result.JobID == "" {
+	jobID := created.Result.JobID
+	if jobID == "" {
+		jobID = created.Result.TaskID
+	}
+	if jobID == "" {
 		return nil, created
 	}
 
@@ -583,7 +547,10 @@ func UpscaleVideo(ctx context.Context, data []byte, fileName string) ([]byte, er
 		if err := sleepContext(ctx, 5*time.Second); err != nil {
 			return nil, err
 		}
-		poll, err := request(ctx, http.MethodGet, videoAPI+"/v2/ai-video-enhancer/get-job/"+created.Result.JobID, nil, 3*time.Minute, identityHeaders())
+		poll, err := request(ctx, http.MethodGet, videoAPI+"/web/unblurimage/v1/video-enhancer/get-job/"+jobID, nil, 3*time.Minute, map[string]string{
+			"Origin":  "https://unblurimage.ai",
+			"Referer": "https://unblurimage.ai/",
+		})
 		if err != nil {
 			continue
 		}
@@ -591,10 +558,17 @@ func UpscaleVideo(ctx context.Context, data []byte, fileName string) ([]byte, er
 		if err := decodeResponse(poll, &status); err != nil {
 			continue
 		}
-		if status.Result.OutputURL != "" {
-			return download(ctx, status.Result.OutputURL)
+		outputURL := status.Result.OutputURL
+		if outputURL == "" {
+			outputURL = status.Result.OutputVideoURL
 		}
-		if code := fmt.Sprint(status.Code); code == "300015" || code == "300019" {
+		if outputURL == "" {
+			outputURL = status.Result.VideoURL
+		}
+		if outputURL != "" {
+			return download(ctx, outputURL)
+		}
+		if code := fmt.Sprint(status.Code); code == "300015" || code == "300019" || code == "400202" || code == "400301" {
 			return nil, status
 		}
 	}

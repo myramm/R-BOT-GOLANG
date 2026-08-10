@@ -67,6 +67,19 @@ func TestImageChain(t *testing.T) {
 	}
 }
 
+func TestIdentityHeaders(t *testing.T) {
+	headers := identityHeaders()
+	if headers["Product-Code"] != productCode {
+		t.Fatalf("Product-Code = %q, want %q", headers["Product-Code"], productCode)
+	}
+	if headers["Product-Serial"] == "" {
+		t.Fatal("Product-Serial kosong")
+	}
+	if headers["Origin"] != "https://unblurimage.ai" {
+		t.Fatalf("Origin = %q", headers["Origin"])
+	}
+}
+
 func TestVideoCreateJobFields(t *testing.T) {
 	body, contentType, err := multipartBody(map[string]string{
 		"original_video_url": "https://cdn.example/video.mp4",

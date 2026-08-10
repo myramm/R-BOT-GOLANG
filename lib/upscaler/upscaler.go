@@ -26,10 +26,13 @@ const (
 	imageBase     = "https://imgupscaler.com"
 	videoAPI      = "https://api.unwatermark.ai/api"
 	cdnBase       = "https://cdn.unblurimage.ai"
+	productCode   = "067003"
 	userAgent     = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
 
 var ImageLevels = map[int]string{2: "2K", 4: "4K", 8: "8K", 16: "16K"}
+
+var videoDeviceID = randomID()
 
 type apiError struct {
 	Code    any    `json:"code"`
@@ -119,8 +122,9 @@ func identityHeaders() map[string]string {
 		"Accept-Language": "en-US,en;q=0.9",
 		"Origin":          "https://unblurimage.ai",
 		"Referer":         "https://unblurimage.ai/",
-		"product-serial":  randomID(),
-		"device-id":       randomID(),
+		"Product-Code":    productCode,
+		"Product-Serial":  videoDeviceID,
+		"device-id":       videoDeviceID,
 	}
 }
 
@@ -525,9 +529,9 @@ func UpscaleVideo(ctx context.Context, data []byte, fileName string) ([]byte, er
 	if err != nil {
 		return nil, err
 	}
-	resp, err := request(ctx, http.MethodPost, videoAPI+"/web/unblurimage/v1/video-enhancer/create-job", body, 3*time.Minute, map[string]string{
-		"Content-Type": contentType,
-	})
+	headers := identityHeaders()
+	headers["Content-Type"] = contentType
+	resp, err := request(ctx, http.MethodPost, videoAPI+"/web/unblurimage/v1/video-enhancer/create-job", body, 3*time.Minute, headers)
 	if err != nil {
 		return nil, err
 	}
@@ -547,10 +551,7 @@ func UpscaleVideo(ctx context.Context, data []byte, fileName string) ([]byte, er
 		if err := sleepContext(ctx, 5*time.Second); err != nil {
 			return nil, err
 		}
-		poll, err := request(ctx, http.MethodGet, videoAPI+"/web/unblurimage/v1/video-enhancer/get-job/"+jobID, nil, 3*time.Minute, map[string]string{
-			"Origin":  "https://unblurimage.ai",
-			"Referer": "https://unblurimage.ai/",
-		})
+		poll, err := request(ctx, http.MethodGet, videoAPI+"/web/unblurimage/v1/video-enhancer/get-job/"+jobID, nil, 3*time.Minute, identityHeaders())
 		if err != nil {
 			continue
 		}

@@ -80,6 +80,24 @@ func TestIdentityHeaders(t *testing.T) {
 	}
 }
 
+func TestVideoEnhancerPaths(t *testing.T) {
+	if videoAPI != "https://api.unblurimage.ai/api" {
+		t.Fatalf("videoAPI = %q", videoAPI)
+	}
+	if videoUploadPath != "/upscaler/v1/ai-video-enhancer/upload-video" {
+		t.Fatalf("videoUploadPath = %q", videoUploadPath)
+	}
+	if videoCreateJobPath != "/upscaler/v2/ai-video-enhancer/create-job" {
+		t.Fatalf("videoCreateJobPath = %q", videoCreateJobPath)
+	}
+	if videoGetJobPath != "/upscaler/v2/ai-video-enhancer/get-job/" {
+		t.Fatalf("videoGetJobPath = %q", videoGetJobPath)
+	}
+	if cdnBase != "https://cdn.unwatermark.ai" {
+		t.Fatalf("cdnBase = %q", cdnBase)
+	}
+}
+
 func TestVideoCreateJobFields(t *testing.T) {
 	body, contentType, err := multipartBody(map[string]string{
 		"original_video_file": "https://cdn.example/video.mp4",
@@ -99,22 +117,10 @@ func TestVideoCreateJobFields(t *testing.T) {
 	}
 }
 
-func TestVideoResultURLs(t *testing.T) {
-	for name, result := range map[string]result{
-		"output":      {OutputURL: "https://cdn.example/output.mp4"},
-		"video":       {VideoURL: "https://cdn.example/video.mp4"},
-		"outputVideo": {OutputVideoURL: "https://cdn.example/output-video.mp4"},
-	} {
-		got := result.OutputURL
-		if got == "" {
-			got = result.OutputVideoURL
-		}
-		if got == "" {
-			got = result.VideoURL
-		}
-		if got == "" {
-			t.Fatalf("%s result URL kosong", name)
-		}
+func TestVideoResultURL(t *testing.T) {
+	video := result{OutputURL: "https://cdn.example/output.mp4"}
+	if video.OutputURL == "" {
+		t.Fatal("output_url kosong")
 	}
 }
 

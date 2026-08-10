@@ -22,12 +22,15 @@ import (
 )
 
 const (
-	VideoMaxBytes = 10 * 1024 * 1024
-	imageBase     = "https://imgupscaler.com"
-	videoAPI      = "https://api.unblurimage.ai/api"
-	cdnBase       = "https://cdn.unwatermark.ai"
-	productCode   = "067003"
-	userAgent     = "Gienetic/1.2.0 Mobile"
+	VideoMaxBytes      = 10 * 1024 * 1024
+	imageBase          = "https://imgupscaler.com"
+	videoAPI           = "https://api.unblurimage.ai/api"
+	cdnBase            = "https://cdn.unwatermark.ai"
+	productCode        = "067003"
+	userAgent          = "Gienetic/1.2.0 Mobile"
+	videoUploadPath    = "/upscaler/v1/ai-video-enhancer/upload-video"
+	videoCreateJobPath = "/upscaler/v2/ai-video-enhancer/create-job"
+	videoGetJobPath    = "/upscaler/v2/ai-video-enhancer/get-job/"
 )
 
 var ImageLevels = map[int]string{2: "2K", 4: "4K", 8: "8K", 16: "16K"}
@@ -41,15 +44,10 @@ type apiError struct {
 }
 
 type result struct {
-	URL            string   `json:"url"`
-	ObjectName     string   `json:"object_name"`
-	OutputImageURL string   `json:"output_image_url"`
-	OutputVideoURL string   `json:"output_video_url"`
-	VideoURL       string   `json:"video_url"`
-	OutputURLs     []string `json:"output_urls"`
-	JobID          string   `json:"job_id"`
-	TaskID         string   `json:"task_id"`
-	OutputURL      string   `json:"output_url"`
+	URL        string `json:"url"`
+	ObjectName string `json:"object_name"`
+	JobID      string `json:"job_id"`
+	OutputURL  string `json:"output_url"`
 }
 
 func (e apiError) Error() string {
@@ -512,7 +510,7 @@ func UpscaleVideo(ctx context.Context, data []byte, fileName string) ([]byte, er
 	if fileName == "" {
 		fileName = "video.mp4"
 	}
-	slot, err := uploadSlot(ctx, videoAPI+"/upscaler/v1/ai-video-enhancer/upload-video", "video_file_name", fileName)
+	slot, err := uploadSlot(ctx, videoAPI+videoUploadPath, "video_file_name", fileName)
 	if err != nil {
 		return nil, err
 	}
@@ -532,7 +530,7 @@ func UpscaleVideo(ctx context.Context, data []byte, fileName string) ([]byte, er
 	}
 	headers := identityHeaders()
 	headers["Content-Type"] = contentType
-	resp, err := request(ctx, http.MethodPost, videoAPI+"/upscaler/v2/ai-video-enhancer/create-job", body, 3*time.Minute, headers)
+	resp, err := request(ctx, http.MethodPost, videoAPI+videoCreateJobPath, body, 3*time.Minute, headers)
 	if err != nil {
 		return nil, err
 	}
@@ -542,9 +540,6 @@ func UpscaleVideo(ctx context.Context, data []byte, fileName string) ([]byte, er
 	}
 	jobID := created.Result.JobID
 	if jobID == "" {
-		jobID = created.Result.TaskID
-	}
-	if jobID == "" {
 		return nil, created
 	}
 
@@ -552,7 +547,7 @@ func UpscaleVideo(ctx context.Context, data []byte, fileName string) ([]byte, er
 		if err := sleepContext(ctx, 5*time.Second); err != nil {
 			return nil, err
 		}
-		poll, err := request(ctx, http.MethodGet, videoAPI+"/upscaler/v2/ai-video-enhancer/get-job/"+jobID, nil, 3*time.Minute, identityHeaders())
+		poll, err := request(ctx, http.MethodGet, videoAPI+videoGetJobPath+jobID, nil, 3*time.Minute, identityHeaders())
 		if err != nil {
 			continue
 		}
@@ -560,15 +555,8 @@ func UpscaleVideo(ctx context.Context, data []byte, fileName string) ([]byte, er
 		if err := decodeResponse(poll, &status); err != nil {
 			continue
 		}
-		outputURL := status.Result.OutputURL
-		if outputURL == "" {
-			outputURL = status.Result.OutputVideoURL
-		}
-		if outputURL == "" {
-			outputURL = status.Result.VideoURL
-		}
-		if outputURL != "" {
-			return download(ctx, outputURL)
+		if status.Result.OutputURL != "" {
+			return download(ctx, status.Result.OutputURL)
 		}
 		if code := fmt.Sprint(status.Code); code == "300015" || code == "300019" || code == "400202" || code == "400301" {
 			return nil, status

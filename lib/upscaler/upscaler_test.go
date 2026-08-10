@@ -75,16 +75,15 @@ func TestIdentityHeaders(t *testing.T) {
 	if headers["Product-Serial"] == "" {
 		t.Fatal("Product-Serial kosong")
 	}
-	if headers["Origin"] != "https://unblurimage.ai" {
+	if headers["Origin"] != "https://imgupscaler.ai" {
 		t.Fatalf("Origin = %q", headers["Origin"])
 	}
 }
 
 func TestVideoCreateJobFields(t *testing.T) {
 	body, contentType, err := multipartBody(map[string]string{
-		"original_video_url": "https://cdn.example/video.mp4",
-		"resolution":         "2k",
-		"is_preview":         "false",
+		"original_video_file": "https://cdn.example/video.mp4",
+		"is_preview":          "false",
 	}, "", "", nil, "")
 	if err != nil {
 		t.Fatal(err)
@@ -93,7 +92,7 @@ func TestVideoCreateJobFields(t *testing.T) {
 		t.Fatalf("content type = %q, want multipart form", contentType)
 	}
 	text := body.String()
-	for _, want := range []string{"name=\"original_video_url\"", "https://cdn.example/video.mp4", "name=\"resolution\"", "\r\n2k\r\n", "name=\"is_preview\"", "\r\nfalse\r\n"} {
+	for _, want := range []string{"name=\"original_video_file\"", "https://cdn.example/video.mp4", "name=\"is_preview\"", "\r\nfalse\r\n"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("body tidak memuat %q: %s", want, text)
 		}

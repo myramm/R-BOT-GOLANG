@@ -1,7 +1,11 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -67,6 +71,10 @@ func stickerHandler(ctx context.Context, c *command.Ctx) error {
 	if err != nil {
 		return stickerError(ctx, c, "Gagal membuat WebP: "+err.Error())
 	}
+	webp, err = stickerAddExif(webp, config.C.Sticker.Packname, config.C.Sticker.Author)
+	if err != nil {
+		return stickerError(ctx, c, "Gagal memasang metadata sticker: "+err.Error())
+	}
 	if len(webp) > stickerMaxOutput {
 		return stickerError(ctx, c, "Sticker lebih besar dari batas 1MB. Coba media yang lebih sederhana.")
 	}
@@ -99,6 +107,87 @@ func stickerVideoOrImage(m *waE2E.Message) *stickerSource {
 		return &stickerSource{message: m}
 	}
 	return nil
+}
+
+const stickerPackID = "com.rbot.sticker"
+
+// stickerAddExif menambahkan metadata pack/author WhatsApp ke WebP tanpa
+// mengubah gambar. Metadata disimpan sebagai chunk EXIF RIFF sehingga aman
+// untuk sticker statis maupun animasi dan tidak membutuhkan webpmux.
+func stickerAddExif(webp []byte, packname, author string) ([]byte, error) {
+	if len(webp) < 12 || string(webp[:4]) != "RIFF" || string(webp[8:12]) != "WEBP" {
+		return nil, errors.New("hasil encoder bukan WebP RIFF yang valid")
+	}
+	if binary.LittleEndian.Uint32(webp[4:8]) != uint32(len(webp)-8) {
+		return nil, errors.New("ukuran RIFF WebP tidak valid")
+	}
+
+	packname = strings.TrimSpace(packname)
+	author = strings.TrimSpace(author)
+	if packname == "" {
+		packname = "R-BOT"
+	}
+	if author == "" {
+		author = packname
+	}
+	metadata, err := json.Marshal(map[string]any{
+		"sticker-pack-id":        stickerPackID,
+		"sticker-pack-name":      packname,
+		"sticker-pack-publisher": author,
+		"emojis":                 []string{},
+	})
+	if err != nil {
+		return nil, err
+	}
+	// Ini adalah header EXIF canonical yang dipakai berbagai sticker maker
+	// WhatsApp (tag 0x5741), lalu JSON metadata ditempel setelah header.
+	// WhatsApp mengharapkan layout ini; jangan diganti menjadi EXIF kamera umum.
+	exif := []byte{
+		0x49, 0x49, 0x2a, 0x00, 0x08, 0x00, 0x00, 0x00,
+		0x01, 0x00, 0x41, 0x57, 0x07, 0x00, 0x00, 0x00,
+		0x16, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	}
+	exif = append(exif, metadata...)
+
+	var out bytes.Buffer
+	out.Grow(len(webp) + 8 + len(exif) + 1)
+	out.Write(webp[:12])
+	for offset := 12; offset < len(webp); {
+		if len(webp)-offset < 8 {
+			return nil, errors.New("chunk WebP tidak lengkap")
+		}
+		chunkSize := binary.LittleEndian.Uint32(webp[offset+4 : offset+8])
+		end := offset + 8 + int(chunkSize)
+		if end < offset || end > len(webp) {
+			return nil, errors.New("ukuran chunk WebP tidak valid")
+		}
+		paddedEnd := end
+		if chunkSize%2 != 0 {
+			paddedEnd++
+		}
+		if paddedEnd > len(webp) {
+			return nil, errors.New("padding chunk WebP tidak lengkap")
+		}
+		if string(webp[offset:offset+4]) != "EXIF" {
+			out.Write(webp[offset:paddedEnd])
+		}
+		offset = paddedEnd
+	}
+	writeWebPChunk(&out, "EXIF", exif)
+	result := out.Bytes()
+	binary.LittleEndian.PutUint32(result[4:8], uint32(len(result)-8))
+	return result, nil
+}
+
+func writeWebPChunk(out *bytes.Buffer, name string, payload []byte) {
+	out.WriteString(name)
+	var size [4]byte
+	binary.LittleEndian.PutUint32(size[:], uint32(len(payload)))
+	out.Write(size[:])
+	out.Write(payload)
+	if len(payload)%2 != 0 {
+		out.WriteByte(0)
+	}
 }
 
 func stickerEncode(ctx context.Context, data []byte, video bool) ([]byte, error) {

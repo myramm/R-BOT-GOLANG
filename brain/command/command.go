@@ -293,7 +293,7 @@ var heavyCommands = map[string]bool{
 
 // skipSponsor: command yang tidak memicu footer sponsor (port SKIP_SPONSOR).
 var skipSponsor = map[string]bool{
-	"menu": true, "sponsor": true, "setsponsor": true,
+	"menu": true, "sponsor": true, "setsponsor": true, "report": true,
 }
 
 // Hooks diisi oleh paket lain lewat init() supaya command.go tidak perlu

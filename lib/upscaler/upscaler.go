@@ -11,8 +11,8 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
-	"os/exec"
 	"path"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -22,13 +22,18 @@ import (
 
 const (
 	VideoMaxBytes           = 10 * 1024 * 1024
-	imageBase               = "https://imgupscaler.com"
+	iloveIMGPage            = "https://www.iloveimg.com/upscale-image"
+	iloveIMGAPI             = "https://api29g.iloveimg.com/v1"
 	freeConvertAPI          = "https://api.freeconvert.com/v1"
 	freeConvertVideoQuality = 60
 	userAgent               = "Gienetic/1.2.0 Mobile"
 )
 
-var ImageLevels = map[int]string{2: "2K", 4: "4K", 8: "8K", 16: "16K"}
+var (
+	ImageLevels      = map[int]string{4: "4K"}
+	iloveIMGTokenRE  = regexp.MustCompile(`"token"\s*:\s*"(eyJ[^"]+)"`)
+	iloveIMGTaskIDRE = regexp.MustCompile(`ilovepdfConfig\.taskId\s*=\s*'([^']+)'`)
+)
 
 func request(ctx context.Context, method, url string, body io.Reader, timeout time.Duration, headers map[string]string) (*http.Response, error) {
 	cctx, cancel := context.WithTimeout(ctx, timeout)
@@ -106,303 +111,164 @@ func download(ctx context.Context, url string) ([]byte, error) {
 	return httpx.GetBytes(ctx, url, 2*time.Minute, 0)
 }
 
-func imageChain(level int) []int {
-	switch level {
-	case 2:
-		return []int{2}
-	case 4:
-		return []int{4}
-	case 8:
-		return []int{4, 2}
-	case 16:
-		return []int{4, 4}
-	default:
-		return nil
-	}
-}
-
-// UpscaleImage menaikkan resolusi foto memakai ImgLarger. Level yang didukung:
-// 2, 4, 8, 16. Level tinggi dikerjakan bertahap agar setiap job tetap maksimal 4x.
-// Tidak ada perpindahan engine: error dari ImgLarger dikembalikan langsung agar
-// hasil HD konsisten dan penyebab kegagalan mudah dilacak.
-func UpscaleImage(ctx context.Context, data []byte, level int, mimeType string) ([]byte, error) {
-	if _, ok := ImageLevels[level]; !ok {
-		return nil, fmt.Errorf("resolusi %dK tidak didukung", level)
-	}
-	if mimeType == "" {
-		mimeType = "image/jpeg"
-	}
-	current := data
-	for _, scale := range imageChain(level) {
-		var err error
-		current, err = upscaleImageImgLarger(ctx, current, scale, mimeType)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return current, nil
-}
-
-func upscaleImageImgLarger(ctx context.Context, data []byte, scale int, mimeType string) ([]byte, error) {
-	data, mimeType, err := normalizeImgLargerImage(ctx, data, mimeType)
-	if err != nil {
-		return nil, err
-	}
-	ext := "jpg"
-	if mimeType == "image/png" {
-		ext = "png"
-	}
-	body, contentType, err := multipartBody(map[string]string{
-		"tool": "upscale", "mode": "batch", "scaleRadio": strconv.Itoa(scale),
-	}, "file", "image."+ext, data, mimeType)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := request(ctx, http.MethodPost, imageBase+"/api/legacy/upload", body, time.Minute, map[string]string{
-		"Content-Type": contentType,
-		"Origin":       imageBase,
-		"Referer":      imageBase + "/",
-	})
-	if err != nil {
-		return nil, err
-	}
-	var uploaded json.RawMessage
-	if err := decodeResponse(resp, &uploaded); err != nil {
-		return nil, err
-	}
-	taskID, message, err := parseImgLargerTaskResponse(uploaded)
-	if err != nil {
-		return nil, err
-	}
-	if taskID == "" {
-		if message != "" {
-			return nil, fmt.Errorf("imglarger gagal: %s", message)
-		}
-		return nil, fmt.Errorf("imglarger tidak mengembalikan taskId (respons API berubah atau ditolak)")
-	}
-
-	for i := 0; i < 60; i++ {
-		if err := sleepContext(ctx, 3*time.Second); err != nil {
-			return nil, err
-		}
-		payload := fmt.Sprintf(`{"tool":"upscale","taskId":%q,"scaleRadio":%d}`, taskID, scale)
-		poll, err := request(ctx, http.MethodPost, imageBase+"/api/legacy/status", strings.NewReader(payload), 20*time.Second, map[string]string{
-			"Content-Type": "application/json", "Origin": imageBase, "Referer": imageBase + "/",
-		})
-		if err != nil {
-			continue
-		}
-		var statusRaw json.RawMessage
-		if err := decodeResponse(poll, &statusRaw); err != nil {
-			continue
-		}
-		state, urls, statusMessage := parseImgLargerStatusResponse(statusRaw)
-		for _, url := range urls {
-			if url != "" && !strings.HasSuffix(url, "/results/") {
-				return download(ctx, url)
-			}
-		}
-		if state == "failed" || state == "error" {
-			if statusMessage != "" {
-				return nil, fmt.Errorf("imglarger job gagal: %s", statusMessage)
-			}
-			return nil, fmt.Errorf("imglarger job gagal")
-		}
-	}
-	return nil, fmt.Errorf("imglarger timeout")
-}
-
-func parseImgLargerTaskResponse(raw []byte) (taskID, message string, err error) {
-	var root any
-	decoder := json.NewDecoder(strings.NewReader(string(raw)))
-	decoder.UseNumber()
-	if err := decoder.Decode(&root); err != nil {
-		return "", "", fmt.Errorf("decode respons imglarger: %w", err)
-	}
-	message = findJSONTextPriority(root, "message", "error", "msg")
-	// Prioritaskan field task-specific. Field id generik hanya dipakai sebagai
-	// fallback terakhir agar ID objek lain tidak salah dianggap task ID.
-	if taskID := findJSONTextPriority(root, "taskId", "task_id", "taskID", "pid", "jobId", "job_id"); taskID != "" {
-		return taskID, message, nil
-	}
-	// Respons legacy tertentu hanya menaruh token di raw.data.code.
-	if taskID := findJSONTextNonNumeric(root, "code"); taskID != "" {
-		return taskID, message, nil
-	}
-	if taskID := findJSONTextPriority(root, "id"); taskID != "" {
-		return taskID, message, nil
-	}
-	return "", message, nil
-}
-
-func parseImgLargerStatusResponse(raw []byte) (state string, urls []string, message string) {
-	var root any
-	decoder := json.NewDecoder(strings.NewReader(string(raw)))
-	decoder.UseNumber()
-	if decoder.Decode(&root) != nil {
-		return "", nil, ""
-	}
-	state = strings.ToLower(findJSONTextPriority(root, "status", "state"))
-	message = findJSONTextPriority(root, "message", "error", "msg")
-	for _, key := range []string{"downloadUrls", "download_urls", "downloadUrl", "download_url", "urls", "outputUrls", "output_urls", "outputUrl", "output_url", "url"} {
-		findJSONURLs(root, key, &urls)
-	}
-	return state, uniqueStrings(urls), message
-}
-
 func findJSONTextPriority(value any, keys ...string) string {
-	if text := jsonText(value); text != "" {
-		return text
-	}
 	if object, ok := value.(map[string]any); ok {
 		for _, key := range keys {
-			if text := jsonText(object[key]); text != "" {
-				return text
+			if text, ok := object[key].(string); ok && strings.TrimSpace(text) != "" {
+				return strings.TrimSpace(text)
 			}
 		}
-		for _, container := range []string{"data", "result", "raw", "response", "payload"} {
-			if nested, ok := object[container]; ok {
+		for _, nestedKey := range []string{"data", "result", "raw", "response", "payload"} {
+			if nested, ok := object[nestedKey]; ok {
 				if text := findJSONTextPriority(nested, keys...); text != "" {
 					return text
 				}
 			}
 		}
 	}
-	if values, ok := value.([]any); ok {
-		for _, nested := range values {
+	if list, ok := value.([]any); ok {
+		for _, nested := range list {
 			if text := findJSONTextPriority(nested, keys...); text != "" {
 				return text
 			}
 		}
 	}
-	return ""
-}
-
-func findJSONURLs(value any, key string, urls *[]string) {
-	switch current := value.(type) {
-	case map[string]any:
-		for currentKey, nested := range current {
-			if currentKey == key {
-				collectJSONURLs(nested, urls)
-			}
-			findJSONURLs(nested, key, urls)
-		}
-	case []any:
-		for _, nested := range current {
-			findJSONURLs(nested, key, urls)
-		}
-	}
-}
-
-func collectJSONURLs(value any, urls *[]string) {
-	switch value := value.(type) {
-	case string:
-		if strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://") {
-			*urls = append(*urls, value)
-		}
-	case []any:
-		for _, nested := range value {
-			collectJSONURLs(nested, urls)
-		}
-	}
-}
-
-func uniqueStrings(values []string) []string {
-	seen := make(map[string]struct{}, len(values))
-	out := make([]string, 0, len(values))
-	for _, value := range values {
-		if _, ok := seen[value]; ok {
-			continue
-		}
-		seen[value] = struct{}{}
-		out = append(out, value)
-	}
-	return out
-}
-
-func findJSONTextNonNumeric(value any, key string) string {
-	if object, ok := value.(map[string]any); ok {
-		if text := jsonText(object[key]); text != "" && !isNumericJSONText(text) {
-			return text
-		}
-		for _, container := range []string{"data", "result", "raw", "response", "payload"} {
-			if nested, ok := object[container]; ok {
-				if text := findJSONTextNonNumeric(nested, key); text != "" {
-					return text
-				}
-			}
-		}
-	}
-	if values, ok := value.([]any); ok {
-		for _, nested := range values {
-			if text := findJSONTextNonNumeric(nested, key); text != "" {
-				return text
-			}
-		}
+	if text, ok := value.(string); ok {
+		return strings.TrimSpace(text)
 	}
 	return ""
-}
-
-func isNumericJSONText(value string) bool {
-	if value == "" {
-		return false
-	}
-	_, err := strconv.ParseFloat(value, 64)
-	return err == nil
 }
 
 func jsonText(value any) string {
-	switch value := value.(type) {
-	case string:
-		return strings.TrimSpace(value)
-	case json.Number:
-		return value.String()
-	default:
-		return ""
+	if text, ok := value.(string); ok {
+		return strings.TrimSpace(text)
 	}
+	return ""
 }
 
-func normalizeImgLargerImage(ctx context.Context, data []byte, _ string) ([]byte, string, error) {
-	detectedMIME := http.DetectContentType(data)
-	switch detectedMIME {
-	case "image/jpeg", "image/png":
-		return data, detectedMIME, nil
+func iloveIMGSession(ctx context.Context) (token, task string, err error) {
+	resp, err := request(ctx, http.MethodGet, iloveIMGPage, nil, 30*time.Second, map[string]string{
+		"Accept": "text/html,application/xhtml+xml",
+	})
+	if err != nil {
+		return "", "", fmt.Errorf("gagal membuka iLoveIMG: %w", err)
 	}
-	// WhatsApp kadang memberi MIME image/jpeg untuk byte WebP/HEIC/format lain.
-	// Jangan mengirim byte tersebut dengan label JPEG karena ImgUpscaler akan
-	// membalas "Parameter error"; validasi berdasarkan magic bytes dan konversi
-	// format yang tidak didukung menjadi JPEG.
-	convertCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(convertCtx, "ffmpeg", "-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-frames:v", "1", "-f", "mjpeg", "-q:v", "2", "pipe:1")
-	cmd.Stdin = bytes.NewReader(data)
-	var output limitedBuffer
-	cmd.Stdout = &output
-	if err := cmd.Run(); err != nil || output.Len() == 0 {
-		if err == nil {
-			err = fmt.Errorf("hasil konversi kosong")
-		}
-		return nil, "", fmt.Errorf("format gambar tidak didukung ImgUpscaler: %w", err)
+	body, readErr := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if readErr != nil {
+		return "", "", fmt.Errorf("gagal membaca halaman iLoveIMG: %w", readErr)
 	}
-	return output.Bytes(), "image/jpeg", nil
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", "", fmt.Errorf("iLoveIMG HTTP %d", resp.StatusCode)
+	}
+	tokenMatch := iloveIMGTokenRE.FindSubmatch(body)
+	taskMatch := iloveIMGTaskIDRE.FindSubmatch(body)
+	if len(tokenMatch) < 2 || len(taskMatch) < 2 {
+		return "", "", fmt.Errorf("iLoveIMG tidak mengembalikan token/task")
+	}
+	return string(tokenMatch[1]), string(taskMatch[1]), nil
 }
 
-const maxNormalizedImageBytes = 20 * 1024 * 1024
-
-type limitedBuffer struct {
-	bytes.Buffer
+func iloveIMGUpload(ctx context.Context, data []byte, mimeType, token, task string) (string, error) {
+	if mimeType == "" || !strings.HasPrefix(strings.ToLower(mimeType), "image/") {
+		mimeType = "image/jpeg"
+	}
+	body, contentType, err := multipartBody(map[string]string{
+		"name": "image.jpg", "chunk": "0", "chunks": "1", "task": task, "preview": "1", "v": "web.0",
+	}, "file", "image.jpg", data, mimeType)
+	if err != nil {
+		return "", err
+	}
+	resp, err := request(ctx, http.MethodPost, iloveIMGAPI+"/upload", body, 2*time.Minute, map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  contentType,
+		"Origin":        "https://www.iloveimg.com",
+		"Referer":       iloveIMGPage,
+	})
+	if err != nil {
+		return "", fmt.Errorf("gagal upload gambar ke iLoveIMG: %w", err)
+	}
+	responseBody, readErr := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if readErr != nil {
+		return "", fmt.Errorf("gagal membaca respons upload iLoveIMG: %w", readErr)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("upload iLoveIMG HTTP %d: %s", resp.StatusCode, responseSnippet(responseBody))
+	}
+	var result struct {
+		ServerFilename string `json:"server_filename"`
+	}
+	if err := json.Unmarshal(responseBody, &result); err != nil {
+		return "", fmt.Errorf("respons upload iLoveIMG tidak valid: %w", err)
+	}
+	if result.ServerFilename == "" {
+		return "", fmt.Errorf("iLoveIMG tidak mengembalikan server_filename")
+	}
+	return result.ServerFilename, nil
 }
 
-func (b *limitedBuffer) Write(p []byte) (int, error) {
-	remaining := maxNormalizedImageBytes - b.Len()
-	if remaining <= 0 {
-		return 0, fmt.Errorf("hasil konversi gambar terlalu besar")
+func iloveIMGUpscale(ctx context.Context, serverFilename, token, task string, level int) ([]byte, error) {
+	body, contentType, err := multipartBody(map[string]string{
+		"task": task, "server_filename": serverFilename, "scale": strconv.Itoa(level),
+	}, "", "", nil, "")
+	if err != nil {
+		return nil, err
 	}
-	if len(p) > remaining {
-		_, _ = b.Buffer.Write(p[:remaining])
-		return remaining, fmt.Errorf("hasil konversi gambar terlalu besar")
+	resp, err := request(ctx, http.MethodPost, iloveIMGAPI+"/upscale", body, 5*time.Minute, map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  contentType,
+		"Origin":        "https://www.iloveimg.com",
+		"Referer":       iloveIMGPage,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("gagal memproses upscale iLoveIMG: %w", err)
 	}
-	return b.Buffer.Write(p)
+	result, readErr := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if readErr != nil {
+		return nil, fmt.Errorf("gagal membaca hasil upscale iLoveIMG: %w", readErr)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("upscale iLoveIMG HTTP %d: %s", resp.StatusCode, responseSnippet(result))
+	}
+	if len(result) == 0 {
+		return nil, fmt.Errorf("iLoveIMG mengembalikan hasil gambar kosong")
+	}
+	detected := http.DetectContentType(result)
+	if detected != "image/jpeg" && detected != "image/png" && detected != "image/webp" {
+		return nil, fmt.Errorf("iLoveIMG tidak mengembalikan gambar: %s", responseSnippet(result))
+	}
+	return result, nil
+}
+
+func responseSnippet(data []byte) string {
+	text := strings.TrimSpace(string(data))
+	if len(text) > 160 {
+		return text[:160] + "..."
+	}
+	return text
+}
+
+// UpscaleImage menaikkan foto memakai flow upscale-image milik iLoveIMG.
+// Flow pada Pastebin hanya menyediakan scale 4, sehingga level yang diterima
+// dibatasi ke 4K.
+func UpscaleImage(ctx context.Context, data []byte, level int, mimeType string) ([]byte, error) {
+	if _, ok := ImageLevels[level]; !ok {
+		return nil, fmt.Errorf("resolusi %dK tidak didukung; gunakan 4K", level)
+	}
+	if len(data) == 0 {
+		return nil, fmt.Errorf("gambar kosong")
+	}
+	token, task, err := iloveIMGSession(ctx)
+	if err != nil {
+		return nil, err
+	}
+	serverFilename, err := iloveIMGUpload(ctx, data, mimeType, token, task)
+	if err != nil {
+		return nil, err
+	}
+	return iloveIMGUpscale(ctx, serverFilename, token, task, level)
 }
 
 type freeConvertJob struct {

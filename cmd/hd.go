@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"strconv"
@@ -106,10 +107,10 @@ func hdUsage() string {
 		"📷 *Cara pakai HD / Upscale:*\n\n"+
 			"1️⃣ Kirim foto/video dengan caption *%shd*\n"+
 			"2️⃣ Atau reply foto/video dengan *%shd*\n\n"+
-			"*Resolusi foto:* %shd 2k / 4k / 8k / 16k\n"+
+			"*Resolusi foto:* %shd 4k\n"+
 			"🎬 Video otomatis di-upscale ke HD\n\n"+
 			"✨ Upscale memakai AI, bukan sekadar diperbesar.\n"+
-			"💎 Resolusi 8K & 16K khusus Premium.",
+			"✨ Foto diproses dengan iLoveIMG Upscale.",
 		prefix, prefix, prefix,
 	)
 }
@@ -152,11 +153,11 @@ func hdHandler(ctx context.Context, c *command.Ctx) error {
 	}
 
 	prem := premium.IsPremium(c.Evt)
-	level := 2
+	level := 4
 	if len(c.Args) > 0 {
 		parsed, ok := hdLevel(c.Args[0])
 		if !ok {
-			_, err := c.Reply(ctx, fmt.Sprintf("❌ Resolusi %q tidak dikenal.\n\nTersedia: 2K • 4K • 8K • 16K\nContoh: *%shd 4k*", c.Args[0], config.MainPrefix()))
+			_, err := c.Reply(ctx, fmt.Sprintf("❌ Resolusi %q tidak dikenal.\n\nTersedia: 4K\nContoh: *%shd 4k*", c.Args[0], config.MainPrefix()))
 			return err
 		}
 		if !media.image {
@@ -165,11 +166,6 @@ func hdHandler(ctx context.Context, c *command.Ctx) error {
 		}
 		level = parsed
 	}
-	if (level == 8 || level == 16) && !prem {
-		_, err := c.Reply(ctx, fmt.Sprintf("❌ Resolusi %dK hanya untuk pengguna *Premium*.\n\nGunakan *%shd 2k* atau *%shd 4k* untuk akses gratis.", level, config.MainPrefix(), config.MainPrefix()))
-		return err
-	}
-
 	caption := "⏳ Upscale foto ke " + upscaler.ImageLevels[level]
 	if !media.image {
 		caption = "⏳ Upscale video ke HD, bisa beberapa menit..."
@@ -228,7 +224,11 @@ func hdHandler(ctx context.Context, c *command.Ctx) error {
 	}
 
 	if media.image {
-		err = c.SendMediaBytes(ctx, output, command.MediaImage, fmt.Sprintf("✨ Foto %s selesai!", upscaler.ImageLevels[level]), "", media.mimeType)
+		outputMIME := http.DetectContentType(output)
+		if !strings.HasPrefix(outputMIME, "image/") {
+			outputMIME = media.mimeType
+		}
+		err = c.SendMediaBytes(ctx, output, command.MediaImage, fmt.Sprintf("✨ Foto %s selesai!", upscaler.ImageLevels[level]), "", outputMIME)
 	} else {
 		metadata := downloadVideoMetadata(ctx, output)
 		err = c.SendMediaBytesWithMetadata(ctx, output, command.MediaVideo, "✨ Video HD selesai!", "", "video/mp4", metadata)

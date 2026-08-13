@@ -59,6 +59,11 @@ type Config struct {
 	LogLevel   string `json:"logLevel"`
 	MaxJadibot int    `json:"maxJadibot"`
 
+	ILovePDF struct {
+		PublicKey string `json:"publicKey"`
+		KeyLove   string `json:"key_love"`
+	} `json:"ilovepdf"`
+
 	AI struct {
 		APIKey       string   `json:"apiKey"`
 		Models       []string `json:"models"`

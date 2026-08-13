@@ -1,13 +1,21 @@
 package cmd
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
+	"io"
+	"log"
+	"mime/multipart"
+	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -187,6 +195,25 @@ func readNonEmptyFile(name string) ([]byte, error) {
 }
 
 func toimgPDF(ctx context.Context, c *command.Ctx, processCtx context.Context, data []byte) error {
+	key := strings.TrimSpace(config.C.ILovePDF.KeyLove)
+	if key == "" {
+		key = strings.TrimSpace(config.C.ILovePDF.PublicKey)
+	}
+	if key != "" {
+		if pages, err := ilovePDFToJPG(processCtx, key, data); err == nil {
+			for i, page := range pages {
+				caption := fmt.Sprintf("📄 Halaman %d/%d", i+1, len(pages))
+				if sendErr := c.SendMediaBytes(ctx, page, command.MediaImage, caption, fmt.Sprintf("page-%d.jpg", i+1), "image/jpeg"); sendErr != nil {
+					return toimgError(ctx, c, sendErr.Error())
+				}
+			}
+			c.React(ctx, "✅")
+			return nil
+		} else {
+			log.Printf("[rbot] iLovePDF PDF->JPG gagal, fallback ke pdftoppm")
+		}
+	}
+
 	dir, err := os.MkdirTemp("", "rbot-toimg-pdf-")
 	if err != nil {
 		return toimgError(ctx, c, err.Error())
@@ -217,6 +244,202 @@ func toimgPDF(ctx context.Context, c *command.Ctx, processCtx context.Context, d
 	}
 	c.React(ctx, "✅")
 	return nil
+}
+
+const (
+	ilovePDFAPIBase       = "https://api.ilovepdf.com/v1"
+	ilovePDFRegion        = "eu"
+	ilovePDFMaxPages      = 5
+	ilovePDFMaxImageBytes = 5 * 1024 * 1024
+	ilovePDFMaxZIPBytes   = 30 * 1024 * 1024
+)
+
+type ilovePDFTask struct {
+	Server string `json:"server"`
+	Task   string `json:"task"`
+}
+
+func ilovePDFToJPG(ctx context.Context, publicKey string, data []byte) ([][]byte, error) {
+	token, err := ilovePDFAuth(ctx, publicKey)
+	if err != nil {
+		return nil, err
+	}
+	task, err := ilovePDFStart(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	serverFilename, err := ilovePDFUpload(ctx, token, task, data)
+	if err != nil {
+		return nil, err
+	}
+	if err := ilovePDFProcess(ctx, token, task, serverFilename); err != nil {
+		return nil, err
+	}
+	archive, err := ilovePDFDownload(ctx, token, task)
+	if err != nil {
+		return nil, err
+	}
+	return ilovePDFExtractImages(archive)
+}
+
+func ilovePDFRequest(ctx context.Context, method, endpoint, token string, body io.Reader, contentType string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, method, endpoint, body)
+	if err != nil {
+		return nil, err
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		_ = resp.Body.Close()
+		return nil, fmt.Errorf("iLovePDF HTTP %d", resp.StatusCode)
+	}
+	return resp, nil
+}
+
+func ilovePDFAuth(ctx context.Context, publicKey string) (string, error) {
+	endpoint := ilovePDFAPIBase + "/auth?public_key=" + url.QueryEscape(publicKey)
+	resp, err := ilovePDFRequest(ctx, http.MethodGet, endpoint, "", nil, "")
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	var result struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil || result.Token == "" {
+		return "", fmt.Errorf("iLovePDF auth tidak mengembalikan token")
+	}
+	return result.Token, nil
+}
+
+func ilovePDFStart(ctx context.Context, token string) (ilovePDFTask, error) {
+	resp, err := ilovePDFRequest(ctx, http.MethodGet, ilovePDFAPIBase+"/start/pdfjpg/"+ilovePDFRegion, token, nil, "")
+	if err != nil && strings.Contains(err.Error(), "HTTP 404") {
+		resp, err = ilovePDFRequest(ctx, http.MethodGet, ilovePDFAPIBase+"/start/pdfjpg", token, nil, "")
+	}
+	if err != nil {
+		return ilovePDFTask{}, err
+	}
+	defer resp.Body.Close()
+	var task ilovePDFTask
+	if err := json.NewDecoder(resp.Body).Decode(&task); err != nil || task.Server == "" || task.Task == "" {
+		return ilovePDFTask{}, fmt.Errorf("iLovePDF start task tidak valid")
+	}
+	return task, nil
+}
+
+func ilovePDFUpload(ctx context.Context, token string, task ilovePDFTask, data []byte) (string, error) {
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	if err := writer.WriteField("task", task.Task); err != nil {
+		return "", err
+	}
+	part, err := writer.CreateFormFile("file", "input.pdf")
+	if err != nil {
+		return "", err
+	}
+	if _, err := part.Write(data); err != nil {
+		return "", err
+	}
+	if err := writer.Close(); err != nil {
+		return "", err
+	}
+	resp, err := ilovePDFRequest(ctx, http.MethodPost, "https://"+task.Server+"/v1/upload", token, &body, writer.FormDataContentType())
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	var result struct {
+		ServerFilename string `json:"server_filename"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil || result.ServerFilename == "" {
+		return "", fmt.Errorf("iLovePDF upload tidak mengembalikan filename")
+	}
+	return result.ServerFilename, nil
+}
+
+func ilovePDFProcess(ctx context.Context, token string, task ilovePDFTask, serverFilename string) error {
+	payload, err := json.Marshal(map[string]any{
+		"task":  task.Task,
+		"tool":  "pdfjpg",
+		"files": []map[string]string{{"server_filename": serverFilename, "filename": "input.pdf"}},
+	})
+	if err != nil {
+		return err
+	}
+	resp, err := ilovePDFRequest(ctx, http.MethodPost, "https://"+task.Server+"/v1/process", token, bytes.NewReader(payload), "application/json")
+	if err != nil {
+		return err
+	}
+	_ = resp.Body.Close()
+	return nil
+}
+
+func ilovePDFDownload(ctx context.Context, token string, task ilovePDFTask) ([]byte, error) {
+	resp, err := ilovePDFRequest(ctx, http.MethodGet, "https://"+task.Server+"/v1/download/"+url.PathEscape(task.Task), token, nil, "")
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	return io.ReadAll(io.LimitReader(resp.Body, ilovePDFMaxZIPBytes+1))
+}
+
+func ilovePDFExtractImages(data []byte) ([][]byte, error) {
+	if isJPEGBytes(data) {
+		return [][]byte{data}, nil
+	}
+	if len(data) > ilovePDFMaxZIPBytes {
+		return nil, fmt.Errorf("arsip hasil iLovePDF terlalu besar")
+	}
+	reader, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return nil, fmt.Errorf("hasil iLovePDF bukan ZIP valid")
+	}
+	files := make([]*zip.File, 0, len(reader.File))
+	for _, file := range reader.File {
+		if file.FileInfo().IsDir() || filepath.Base(file.Name) != file.Name {
+			continue
+		}
+		if strings.EqualFold(filepath.Ext(file.Name), ".jpg") || strings.EqualFold(filepath.Ext(file.Name), ".jpeg") {
+			files = append(files, file)
+		}
+	}
+	sort.Slice(files, func(i, j int) bool { return files[i].Name < files[j].Name })
+	if len(files) > ilovePDFMaxPages {
+		files = files[:ilovePDFMaxPages]
+	}
+	pages := make([][]byte, 0, len(files))
+	for _, file := range files {
+		if file.UncompressedSize64 > ilovePDFMaxImageBytes {
+			continue
+		}
+		reader, err := file.Open()
+		if err != nil {
+			continue
+		}
+		page, readErr := io.ReadAll(io.LimitReader(reader, ilovePDFMaxImageBytes+1))
+		_ = reader.Close()
+		if readErr != nil || len(page) == 0 || len(page) > ilovePDFMaxImageBytes || !isJPEGBytes(page) {
+			continue
+		}
+		pages = append(pages, page)
+	}
+	if len(pages) == 0 {
+		return nil, fmt.Errorf("iLovePDF tidak menghasilkan gambar")
+	}
+	return pages, nil
+}
+
+func isJPEGBytes(data []byte) bool {
+	return len(data) >= 3 && data[0] == 0xff && data[1] == 0xd8 && data[2] == 0xff
 }
 
 func toimgError(ctx context.Context, c *command.Ctx, message string) error {

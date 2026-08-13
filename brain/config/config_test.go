@@ -150,6 +150,20 @@ func TestLoadDanMatchPrefix(t *testing.T) {
 	}
 }
 
+func TestLoadILovePDFKey(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	if err := os.WriteFile(path, []byte(`{"ilovepdf":{"key_love":"project_public_test"}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := Load(path); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if C.ILovePDF.KeyLove != "project_public_test" {
+		t.Fatalf("key_love = %q", C.ILovePDF.KeyLove)
+	}
+}
+
 func TestLoadDefaultPrefix(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")

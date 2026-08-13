@@ -48,6 +48,10 @@
   "logLevel": "ERROR",
   "maxJadibot": 5,
 
+  "ilovepdf": {
+    "key_love": ""
+  },
+
   "ai": {
     "apiKey": "",
     "models": [

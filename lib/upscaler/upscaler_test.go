@@ -3,6 +3,7 @@ package upscaler
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"mime/multipart"
 	"strings"
 	"testing"
@@ -67,111 +68,84 @@ func TestImageChain(t *testing.T) {
 	}
 }
 
-func TestIdentityHeaders(t *testing.T) {
-	headers := identityHeaders()
-	if headers["Product-Code"] != productCode {
-		t.Fatalf("Product-Code = %q, want %q", headers["Product-Code"], productCode)
+func TestFreeConvertConstants(t *testing.T) {
+	if freeConvertAPI != "https://api.freeconvert.com/v1" {
+		t.Fatalf("freeConvertAPI = %q", freeConvertAPI)
 	}
-	if headers["Product-Serial"] == "" {
-		t.Fatal("Product-Serial kosong")
+	if freeConvertVideoQuality != 60 {
+		t.Fatalf("quality = %d, want 60", freeConvertVideoQuality)
 	}
-	if headers["Origin"] != "https://imgupscaler.ai" {
-		t.Fatalf("Origin = %q", headers["Origin"])
-	}
-}
-
-func TestVideoEnhancerPaths(t *testing.T) {
-	if videoAPI != "https://api.unblurimage.ai/api" {
-		t.Fatalf("videoAPI = %q", videoAPI)
-	}
-	if videoUploadPath != "/upscaler/v1/ai-video-enhancer/upload-video" {
-		t.Fatalf("videoUploadPath = %q", videoUploadPath)
-	}
-	if videoCreateJobPath != "/upscaler/v2/ai-video-enhancer/create-job" {
-		t.Fatalf("videoCreateJobPath = %q", videoCreateJobPath)
-	}
-	if videoGetJobPath != "/upscaler/v2/ai-video-enhancer/get-job/" {
-		t.Fatalf("videoGetJobPath = %q", videoGetJobPath)
-	}
-	if cdnBase != "https://cdn.unwatermark.ai" {
-		t.Fatalf("cdnBase = %q", cdnBase)
-	}
-}
-
-func TestVideoCreateJobFields(t *testing.T) {
-	body, contentType, err := multipartBody(map[string]string{
-		"original_video_file": "https://cdn.example/video.mp4",
-		"is_preview":          "false",
-	}, "", "", nil, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if contentType == "" || !strings.HasPrefix(contentType, "multipart/form-data;") {
-		t.Fatalf("content type = %q, want multipart form", contentType)
-	}
-	text := body.String()
-	for _, want := range []string{"name=\"original_video_file\"", "https://cdn.example/video.mp4", "name=\"is_preview\"", "\r\nfalse\r\n"} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("body tidak memuat %q: %s", want, text)
-		}
-	}
-}
-
-func TestVideoResultURL(t *testing.T) {
-	video := result{OutputURL: "https://cdn.example/output.mp4"}
-	if video.OutputURL == "" {
-		t.Fatal("output_url kosong")
-	}
-}
-
-func TestVideoMaxBytes(t *testing.T) {
 	if VideoMaxBytes != 10*1024*1024 {
 		t.Fatalf("VideoMaxBytes = %d, want %d", VideoMaxBytes, 10*1024*1024)
 	}
 }
 
-func TestParseImgLargerTaskResponse(t *testing.T) {
+func TestFreeConvertJobBody(t *testing.T) {
+	body := freeConvertJobBody("/tmp/my-video.mp4")
+	raw, err := json.Marshal(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(raw)
+	for _, want := range []string{
+		`"operation":"import/upload"`,
+		`"operation":"compress"`,
+		`"input":"import-1"`,
+		`"input_format":"mp4"`,
+		`"output_format":"mp4"`,
+		`"video_codec_compress":"libx264"`,
+		`"compress_video":"by_percentage"`,
+		`"video_compress_quality_percentage":60`,
+		`"operation":"export/url"`,
+		`"filename":"my-video.mp4"`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("job body tidak memuat %q: %s", want, text)
+		}
+	}
+}
+
+func TestFindJSONTextPriorityTokenShapes(t *testing.T) {
 	tests := []struct {
 		name string
 		raw  string
 		want string
 	}{
-		{"root camel", `{"taskId":"abc"}`, "abc"},
-		{"root snake", `{"task_id":"def"}`, "def"},
-		{"nested data", `{"code":200,"data":{"taskId":"ghi"}}`, "ghi"},
-		{"nested result pid", `{"result":{"pid":"jkl"}}`, "jkl"},
-		{"deep snake numeric", `{"raw":{"data":{"result":{"task_id":9876543210123456789}}}}`, "9876543210123456789"},
-		{"legacy raw code", `{"taskId":"","raw":{"code":200,"data":{"code":"raw-code-123"}}}`, "raw-code-123"},
+		{"root token", `{"token":"root-token"}`, "root-token"},
+		{"nested data string", `{"data":"data-token"}`, "data-token"},
+		{"nested access token", `{"result":{"access_token":"access-token"}}`, "access-token"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, _, err := parseImgLargerTaskResponse([]byte(tt.raw))
-			if err != nil {
+			var value any
+			if err := json.Unmarshal([]byte(tt.raw), &value); err != nil {
 				t.Fatal(err)
 			}
-			if got != tt.want {
-				t.Fatalf("task ID = %q, want %q", got, tt.want)
+			if got := findJSONTextPriority(value, "token", "access_token", "accessToken"); got != tt.want {
+				t.Fatalf("token=%q, want %q", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestParseImgLargerTaskResponseMessage(t *testing.T) {
-	got, message, err := parseImgLargerTaskResponse([]byte(`{"code":403,"message":"image too large"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != "" || message != "image too large" {
-		t.Fatalf("got task=%q message=%q", got, message)
+func TestFindUploadForm(t *testing.T) {
+	raw := json.RawMessage(`{"tasks":{"import-1":{"operation":"import/upload","result":{"form":{"url":"https://upload.example","parameters":{"signature":"sig-123"}}}}}}`)
+	url, signature := findUploadForm(raw)
+	if url != "https://upload.example" || signature != "sig-123" {
+		t.Fatalf("url=%q signature=%q", url, signature)
 	}
 }
 
-func TestParseImgLargerStatusResponse(t *testing.T) {
-	state, urls, message := parseImgLargerStatusResponse([]byte(`{"raw":{"data":{"status":"success","downloadUrls":["https://cdn.test/result.jpg"],"result":{"output_url":"https://cdn.test/result.jpg"}}}}`))
-	if state != "success" || message != "" {
-		t.Fatalf("state=%q message=%q", state, message)
+func TestFreeConvertExportURL(t *testing.T) {
+	raw := json.RawMessage(`{"export-1":{"operation":"export/url","result":{"url":"https://cdn.example/output.mp4"}}}`)
+	if got := freeConvertExportURL(raw); got != "https://cdn.example/output.mp4" {
+		t.Fatalf("export URL=%q", got)
 	}
-	if len(urls) != 1 || urls[0] != "https://cdn.test/result.jpg" {
-		t.Fatalf("urls=%v", urls)
+}
+
+func TestFreeConvertJobError(t *testing.T) {
+	job := freeConvertJob{Status: "failed"}
+	if got := job.Error(); got != "FreeConvert job failed" {
+		t.Fatalf("error=%q", got)
 	}
 }

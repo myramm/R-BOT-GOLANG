@@ -37,7 +37,7 @@ type Model struct {
 
 // Models adalah katalog model (port AVAILABLE_MODELS). Urutannya = nomor pilihan.
 var Models = []Model{
-	{ID: "openrouter/free", Name: "OpenRouter Auto (Free)", Provider: "openrouter"},
+	{ID: "openrouter/free", Name: "Auto", Provider: "openrouter"},
 	{ID: "claude", Name: "Claude AI (Overchat Engine)", Provider: "overchat"},
 	{ID: "google/gemma-4-26b-a4b-it:free", Name: "Google Gemma 4 26B", Provider: "openrouter"},
 	{ID: "nvidia/nemotron-3-super-120b-a12b:free", Name: "Nvidia Nemotron Super 120B", Provider: "openrouter"},

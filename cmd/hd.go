@@ -289,7 +289,7 @@ func hdVideoQualityRegression(ctx context.Context, input, output []byte) (bool, 
 	before, beforeOK := hdVideoInfoFromBytes(ctx, input)
 	after, afterOK := hdVideoInfoFromBytes(ctx, output)
 	if !beforeOK {
-		return false, "metadata video input tidak lengkap"
+		return true, "metadata video input tidak dapat dibaca"
 	}
 	if !afterOK {
 		return true, "metadata video hasil tidak dapat dibaca"

@@ -88,9 +88,29 @@ func TestVideoIdentity(t *testing.T) {
 	}
 }
 
+func TestVideoCreateJobFields(t *testing.T) {
+	body, _, err := multipartBody(map[string]string{
+		"original_video_file": "https://cdn.example/video.mp4",
+		"resolution":          "4k",
+		"is_preview":          "false",
+	}, "", "", nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := body.String()
+	for _, want := range []string{"original_video_file", "https://cdn.example/video.mp4", "resolution", "4k", "is_preview", "false"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("create-job multipart tidak memuat %q: %s", want, text)
+		}
+	}
+}
+
 func TestVideoEnhancerConstants(t *testing.T) {
 	if videoAPI != "https://api.unblurimage.ai/api/upscaler" {
 		t.Fatalf("videoAPI = %q", videoAPI)
+	}
+	if videoCDN != "https://cdn.unblurimage.ai" {
+		t.Fatalf("videoCDN = %q", videoCDN)
 	}
 	if videoPollInterval != 5*time.Second || videoPollMax != 90 {
 		t.Fatalf("poll settings = %v/%d", videoPollInterval, videoPollMax)

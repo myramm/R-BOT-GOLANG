@@ -28,7 +28,7 @@ const (
 	iloveIMGPage        = "https://www.iloveimg.com/upscale-image"
 	iloveIMGAPI         = "https://api29g.iloveimg.com/v1"
 	videoAPI            = "https://api.unblurimage.ai/api/upscaler"
-	videoCDN            = "https://cdn.unwatermark.ai"
+	videoCDN            = "https://cdn.unblurimage.ai"
 	videoPollInterval   = 5 * time.Second
 	videoPollMax        = 90
 	videoUploadTimeout  = 2 * time.Minute
@@ -344,7 +344,11 @@ func uploadVideoSource(ctx context.Context, data []byte, fileName string, identi
 }
 
 func createVideoJob(ctx context.Context, sourceURL string, identity map[string]string) (string, error) {
-	body, contentType, err := multipartBody(map[string]string{"original_video_file": sourceURL}, "", "", nil, "")
+	body, contentType, err := multipartBody(map[string]string{
+		"original_video_file": sourceURL,
+		"resolution":          "4k",
+		"is_preview":          "false",
+	}, "", "", nil, "")
 	if err != nil {
 		return "", err
 	}
@@ -353,8 +357,8 @@ func createVideoJob(ctx context.Context, sourceURL string, identity map[string]s
 		return "", fmt.Errorf("gagal membuat job enhancer video: %w", err)
 	}
 	var created struct {
-		Code    any `json:"code"`
-		Message any `json:"message"`
+		Code    int    `json:"code"`
+		Message string `json:"message"`
 		Result  struct {
 			JobID string `json:"job_id"`
 		} `json:"result"`
@@ -362,14 +366,14 @@ func createVideoJob(ctx context.Context, sourceURL string, identity map[string]s
 	if err := decodeVideoJSON(resp, &created); err != nil {
 		return "", fmt.Errorf("respons create-job video tidak valid: %w", err)
 	}
-	if created.Result.JobID == "" {
-		message := "server AI tidak mengembalikan job video"
-		if created.Message != nil {
-			message = fmt.Sprintf("server AI menolak job video: %v", created.Message)
-		} else if created.Code != nil {
-			message = fmt.Sprintf("server AI menolak job video (code %v)", created.Code)
+	if created.Code != 100000 {
+		if created.Message != "" {
+			return "", fmt.Errorf("server AI menolak job video (code %d): %s", created.Code, created.Message)
 		}
-		return "", fmt.Errorf("%s", message)
+		return "", fmt.Errorf("server AI menolak job video (code %d)", created.Code)
+	}
+	if created.Result.JobID == "" {
+		return "", fmt.Errorf("server AI tidak mengembalikan job video")
 	}
 	return created.Result.JobID, nil
 }
@@ -388,8 +392,8 @@ func pollVideoJob(ctx context.Context, jobID string, identity map[string]string)
 			continue
 		}
 		var status struct {
-			Code    int `json:"code"`
-			Message any `json:"message"`
+			Code    int    `json:"code"`
+			Message string `json:"message"`
 			Result  struct {
 				OutputURL string `json:"output_url"`
 			} `json:"result"`
@@ -401,26 +405,17 @@ func pollVideoJob(ctx context.Context, jobID string, identity map[string]string)
 			}
 			continue
 		}
-		if status.Result.OutputURL != "" {
+		if status.Code == 100000 && status.Result.OutputURL != "" {
 			return status.Result.OutputURL, nil
 		}
-		switch status.Code {
-		case 0, 100000, 300006, 300010:
-			// Status normal/processing; lanjut polling.
-		case 300007:
-			return "", fmt.Errorf("server AI menyelesaikan job tanpa URL video")
-		case 300015:
-			return "", fmt.Errorf("video terlalu besar atau resolusinya terlalu tinggi untuk server AI")
-		case 300019:
-			return "", fmt.Errorf("kuota video gratis di server AI sedang habis")
-		default:
-			if status.Code != 0 {
-				if status.Message != nil {
-					return "", fmt.Errorf("server AI gagal memproses video (code %d): %v", status.Code, status.Message)
-				}
-				return "", fmt.Errorf("server AI gagal memproses video (code %d)", status.Code)
-			}
+		if status.Code == 300010 {
+			// Job masih diproses.
+			continue
 		}
+		if status.Message != "" {
+			return "", fmt.Errorf("server AI gagal memproses video (code %d): %s", status.Code, status.Message)
+		}
+		return "", fmt.Errorf("server AI gagal memproses video (code %d)", status.Code)
 	}
 	return "", fmt.Errorf("server AI kelamaan memproses video")
 }

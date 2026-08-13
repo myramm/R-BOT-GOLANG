@@ -5,9 +5,9 @@ import (
 	"testing"
 )
 
-func TestHDVideoQualityRegression(t *testing.T) {
+func TestHDVideoQualityRegressionRejectsUnreadableMetadata(t *testing.T) {
 	input := []byte("not-a-video")
-	if worse, _ := hdVideoQualityRegression(context.Background(), input, input); worse {
-		t.Fatal("metadata-unavailable video should not be rejected")
+	if worse, reason := hdVideoQualityRegression(context.Background(), input, input); !worse || reason == "" {
+		t.Fatalf("unreadable metadata should be rejected: worse=%v reason=%q", worse, reason)
 	}
 }

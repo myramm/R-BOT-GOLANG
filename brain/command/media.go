@@ -120,18 +120,27 @@ func (c *Ctx) SendStickerBytes(ctx context.Context, data []byte) error {
 	if err != nil {
 		return err
 	}
-	msg := &waE2E.Message{StickerMessage: &waE2E.StickerMessage{
-		URL:           proto.String(up.URL),
-		DirectPath:    proto.String(up.DirectPath),
-		MediaKey:      up.MediaKey,
-		Mimetype:      proto.String("image/webp"),
-		FileEncSHA256: up.FileEncSHA256,
-		FileSHA256:    up.FileSHA256,
-		FileLength:    proto.Uint64(up.FileLength),
-	}}
+	msg := buildStickerMessage(up)
 	attachQuote(msg, c.Evt)
 	_, err = c.Client.SendMessage(ctx, c.Evt.Info.Chat, msg)
 	return err
+}
+
+func buildStickerMessage(up whatsmeow.UploadResponse) *waE2E.Message {
+	now := time.Now()
+	return &waE2E.Message{StickerMessage: &waE2E.StickerMessage{
+		URL:               proto.String(up.URL),
+		DirectPath:        proto.String(up.DirectPath),
+		MediaKey:          up.MediaKey,
+		Mimetype:          proto.String("image/webp"),
+		FileEncSHA256:     up.FileEncSHA256,
+		FileSHA256:        up.FileSHA256,
+		FileLength:        proto.Uint64(up.FileLength),
+		Width:             proto.Uint32(512),
+		Height:            proto.Uint32(512),
+		MediaKeyTimestamp: proto.Int64(now.Unix()),
+		StickerSentTS:     proto.Int64(now.UnixMilli()),
+	}}
 }
 
 func buildMediaMessage(kind MediaKind, up whatsmeow.UploadResponse, caption, fileName, mimetype string) *waE2E.Message {

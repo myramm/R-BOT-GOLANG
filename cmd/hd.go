@@ -239,25 +239,44 @@ func hdProcess(ctx context.Context, c *command.Ctx, media *hdMedia, prem bool, l
 	}
 
 	var output []byte
+	usedVideoFallback := false
+	var primaryVideoErr error
 	if media.image {
 		output, err = upscaler.UpscaleImage(processCtx, data, level, media.mimeType)
 	} else {
-		output, err = upscaler.UpscaleVideo(processCtx, data, media.fileName)
+		output, usedVideoFallback, primaryVideoErr = hdChooseVideoFallback(
+			func() ([]byte, error) {
+				return upscaler.UpscaleVideo(processCtx, data, media.fileName)
+			},
+			data,
+			func(candidate []byte) error {
+				if worse, reason := hdVideoQualityRegression(processCtx, data, candidate); worse {
+					return fmt.Errorf("hasil AI ditolak karena kualitas turun: %s", reason)
+				}
+				return nil
+			},
+		)
+		if usedVideoFallback {
+			// Fallback hanya mengirim ulang byte sumber yang sudah berhasil
+			// diunduh dari pesan video. Tidak perlu ffprobe lagi di sini:
+			// validasi tambahan bisa gagal hanya karena timeout, padahal byte
+			// sumber tidak mengalami transformasi dan tidak mungkin menjadi lebih
+			// buram dari dirinya sendiri.
+			if len(output) == 0 {
+				err = fmt.Errorf("enhancer utama gagal (%v) dan video fallback kosong", primaryVideoErr)
+			} else {
+				err = nil
+			}
+			if primaryVideoErr != nil {
+				c.ReportError(ctx, fmt.Errorf("HD video memakai fallback: %w", primaryVideoErr))
+			}
+		}
 	}
 	if err != nil {
 		c.React(ctx, "❌")
 		c.ReportError(ctx, err)
 		_, _ = c.Reply(ctx, "❌ Gagal memproses media. Coba lagi beberapa saat.")
 		return
-	}
-	if !media.image {
-		if worse, reason := hdVideoQualityRegression(processCtx, data, output); worse {
-			c.React(ctx, "❌")
-			err := fmt.Errorf("hasil AI ditolak karena kualitas turun: %s", reason)
-			c.ReportError(ctx, err)
-			_, _ = c.Reply(ctx, "❌ Hasil AI ditolak karena kualitas video turun. Coba video lain atau ulangi beberapa saat lagi.")
-			return
-		}
 	}
 
 	if media.image {
@@ -268,7 +287,11 @@ func hdProcess(ctx context.Context, c *command.Ctx, media *hdMedia, prem bool, l
 		err = c.SendMediaBytes(ctx, output, command.MediaImage, fmt.Sprintf("✨ Foto %s selesai!", upscaler.ImageLevels[level]), "", outputMIME)
 	} else {
 		metadata := downloadVideoMetadata(ctx, output)
-		err = c.SendMediaBytesWithMetadata(ctx, output, command.MediaVideo, "✨ Video HD selesai!", "", "video/mp4", metadata)
+		caption := "✨ Video HD selesai!"
+		if usedVideoFallback {
+			caption = "⚠️ AI HD sedang bermasalah, video asli dikirim sebagai fallback."
+		}
+		err = c.SendMediaBytesWithMetadata(ctx, output, command.MediaVideo, caption, "", "video/mp4", metadata)
 	}
 	if err != nil {
 		c.React(ctx, "❌")
@@ -283,6 +306,26 @@ type hdVideoInfo struct {
 	Width   int
 	Height  int
 	Bitrate int64
+}
+
+// hdChooseVideoFallback mencoba enhancer utama. Jika gagal, hasil kosong, atau
+// lolos HTTP tetapi kualitasnya turun, fungsi mengembalikan video asli sebagai
+// fallback. Error utama tetap dikembalikan agar bisa dilaporkan ke owner.
+func hdChooseVideoFallback(primary func() ([]byte, error), fallback []byte, validate func([]byte) error) ([]byte, bool, error) {
+	output, err := primary()
+	if err == nil && len(output) > 0 && validate != nil {
+		err = validate(output)
+	}
+	if err == nil && len(output) > 0 {
+		return output, false, nil
+	}
+	if err == nil {
+		err = fmt.Errorf("enhancer utama mengembalikan video kosong")
+	}
+	if len(fallback) == 0 {
+		return nil, true, err
+	}
+	return fallback, true, err
 }
 
 func hdVideoQualityRegression(ctx context.Context, input, output []byte) (bool, string) {

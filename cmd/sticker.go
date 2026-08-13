@@ -71,7 +71,7 @@ func stickerHandler(ctx context.Context, c *command.Ctx) error {
 	if err != nil {
 		return stickerError(ctx, c, "Gagal membuat WebP: "+err.Error())
 	}
-	webp, err = stickerAddExif(webp, config.C.Sticker.Packname, config.C.Sticker.Author)
+	webp, err = stickerAddExifContext(processCtx, webp, config.C.Sticker.Packname, config.C.Sticker.Author)
 	if err != nil {
 		return stickerError(ctx, c, "Gagal memasang metadata sticker: "+err.Error())
 	}
@@ -111,10 +111,121 @@ func stickerVideoOrImage(m *waE2E.Message) *stickerSource {
 
 const stickerPackID = "com.rbot.sticker"
 
-// stickerAddExif menambahkan metadata pack/author WhatsApp ke WebP tanpa
-// mengubah gambar. WebP dengan metadata wajib memakai VP8X sebagai chunk
-// pertama; EXIF diletakkan setelah bitstream/animasi dan sebelum XMP.
+var errWebpmuxUnavailable = errors.New("webpmux tidak tersedia")
+
+func stickerExifPayload(packname, author string) ([]byte, error) {
+	packname = strings.TrimSpace(packname)
+	author = strings.TrimSpace(author)
+	if packname == "" {
+		packname = "R-BOT"
+	}
+	if author == "" {
+		author = packname
+	}
+	metadata, err := json.Marshal(map[string]any{
+		"sticker-pack-id":        stickerPackID,
+		"sticker-pack-name":      packname,
+		"sticker-pack-publisher": author,
+		"emojis":                 []string{"😀"},
+	})
+	if err != nil {
+		return nil, err
+	}
+	// Format yang dipakai referensi watgbridge: header khusus WhatsApp,
+	// panjang JSON little-endian, lalu marker offset 0x16.
+	payload := []byte{
+		0x49, 0x49, 0x2a, 0x00, 0x08, 0x00, 0x00, 0x00,
+		0x01, 0x00, 0x41, 0x57, 0x07, 0x00,
+	}
+	var length [4]byte
+	binary.LittleEndian.PutUint32(length[:], uint32(len(metadata)))
+	payload = append(payload, length[:]...)
+	payload = append(payload, 0x16, 0x00, 0x00, 0x00)
+	payload = append(payload, metadata...)
+	return payload, nil
+}
+
+func stickerAddExifWithWebpmux(ctx context.Context, webp []byte, packname, author string) ([]byte, error) {
+	if _, err := exec.LookPath("webpmux"); err != nil {
+		return nil, fmt.Errorf("%w: %v", errWebpmuxUnavailable, err)
+	}
+	payload, err := stickerExifPayload(packname, author)
+	if err != nil {
+		return nil, err
+	}
+	exifFile, err := os.CreateTemp("", "rbot-sticker-*.exif")
+	if err != nil {
+		return nil, err
+	}
+	exifName := exifFile.Name()
+	defer os.Remove(exifName)
+	if _, err := exifFile.Write(payload); err != nil {
+		_ = exifFile.Close()
+		return nil, err
+	}
+	if err := exifFile.Close(); err != nil {
+		return nil, err
+	}
+	inputFile, err := os.CreateTemp("", "rbot-sticker-*.webp")
+	if err != nil {
+		return nil, err
+	}
+	inputName := inputFile.Name()
+	defer os.Remove(inputName)
+	if _, err := inputFile.Write(webp); err != nil {
+		_ = inputFile.Close()
+		return nil, err
+	}
+	if err := inputFile.Close(); err != nil {
+		return nil, err
+	}
+	outputFile, err := os.CreateTemp("", "rbot-sticker-*.out.webp")
+	if err != nil {
+		return nil, err
+	}
+	outputName := outputFile.Name()
+	if err := outputFile.Close(); err != nil {
+		_ = os.Remove(outputName)
+		return nil, err
+	}
+	defer os.Remove(outputName)
+	cmd := exec.CommandContext(ctx, "webpmux", "-set", "exif", exifName, inputName, "-o", outputName)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("webpmux gagal: %w: %s", err, tailText(string(output), 240))
+	}
+	result, err := os.ReadFile(outputName)
+	if err != nil {
+		return nil, err
+	}
+	if len(result) < 12 || string(result[:4]) != "RIFF" || string(result[8:12]) != "WEBP" {
+		return nil, errors.New("webpmux menghasilkan WebP yang tidak valid")
+	}
+	chunks, err := parseWebPChunks(result)
+	if err != nil {
+		return nil, fmt.Errorf("webpmux menghasilkan chunk WebP tidak valid: %w", err)
+	}
+	for _, chunk := range chunks {
+		if chunk.kind == "EXIF" {
+			return result, nil
+		}
+	}
+	return nil, errors.New("webpmux tidak menghasilkan chunk EXIF")
+}
+
+// stickerAddExif mempertahankan helper lama untuk test/internal caller.
 func stickerAddExif(webp []byte, packname, author string) ([]byte, error) {
+	return stickerAddExifContext(context.Background(), webp, packname, author)
+}
+
+// stickerAddExif memakai webpmux dengan context agar proses mengikuti timeout.
+// Fallback manual hanya digunakan bila binary webpmux belum tersedia.
+func stickerAddExifContext(ctx context.Context, webp []byte, packname, author string) ([]byte, error) {
+	if result, err := stickerAddExifWithWebpmux(ctx, webp, packname, author); err == nil {
+		return result, nil
+	} else if !errors.Is(err, errWebpmuxUnavailable) {
+		return nil, err
+	}
+
 	chunks, err := parseWebPChunks(webp)
 	if err != nil {
 		return nil, err
@@ -128,24 +239,10 @@ func stickerAddExif(webp []byte, packname, author string) ([]byte, error) {
 	if author == "" {
 		author = packname
 	}
-	metadata, err := json.Marshal(map[string]any{
-		"sticker-pack-id":        stickerPackID,
-		"sticker-pack-name":      packname,
-		"sticker-pack-publisher": author,
-		"emojis":                 []string{},
-	})
+	exif, err := stickerExifPayload(packname, author)
 	if err != nil {
 		return nil, err
 	}
-	// Header 22-byte ini adalah format `exifAttr` de facto yang dipakai
-	// Baileys dan banyak bot WhatsApp. Nilai 0x16 (22) menunjuk tepat ke
-	// byte pertama JSON; jangan diganti menjadi TIFF EXIF kamera standar.
-	exif := []byte{
-		0x49, 0x49, 0x2a, 0x00, 0x08, 0x00, 0x00, 0x00,
-		0x01, 0x00, 0x41, 0x57, 0x07, 0x00, 0x00, 0x00,
-		0x16, 0x00, 0x00, 0x00, 0x00, 0x00,
-	}
-	exif = append(exif, metadata...)
 
 	// Hapus EXIF lama agar file tidak memiliki metadata ganda.
 	cleanChunks := make([]webpChunk, 0, len(chunks))

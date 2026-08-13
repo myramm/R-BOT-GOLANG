@@ -42,8 +42,12 @@ func TestStickerAddExif(t *testing.T) {
 	if len(payload) < 22 || !bytes.Equal(payload[:8], []byte{0x49, 0x49, 0x2a, 0x00, 0x08, 0x00, 0x00, 0x00}) {
 		t.Fatal("header EXIF WhatsApp tidak valid")
 	}
-	if want := uint32(0x16); binary.LittleEndian.Uint32(payload[16:20]) != want {
-		t.Fatalf("offset header EXIF = %d, want %d", binary.LittleEndian.Uint32(payload[16:20]), want)
+	metadataLength := int(binary.LittleEndian.Uint32(payload[14:18]))
+	if metadataLength != len(payload)-22 {
+		t.Fatalf("panjang metadata = %d, want %d", metadataLength, len(payload)-22)
+	}
+	if want := uint32(0x16); binary.LittleEndian.Uint32(payload[18:22]) != want {
+		t.Fatalf("offset header EXIF = %d, want %d", binary.LittleEndian.Uint32(payload[18:22]), want)
 	}
 	var fields map[string]any
 	if err := json.Unmarshal(payload[22:], &fields); err != nil {

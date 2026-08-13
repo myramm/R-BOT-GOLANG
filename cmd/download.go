@@ -192,9 +192,8 @@ func downloadVideoMetadata(ctx context.Context, data []byte) *command.VideoMetad
 		}
 	}
 
-	// Ambil frame pertama sebagai JPEG thumbnail. Gagal membuat thumbnail tidak
-	// menggagalkan pengiriman video karena field ini hanya metadata opsional.
-	if err := exec.CommandContext(processCtx, "ffmpeg", "-y", "-v", "error", "-i", videoPath, "-frames:v", "1", "-vf", "scale=640:-2", "-q:v", "5", thumbPath).Run(); err == nil {
+	// Ambil frame pertama sebagai JPEG thumbnail 72px sesuai WhatsMeow issue #204.
+	if err := exec.CommandContext(processCtx, "ffmpeg", "-y", "-v", "error", "-i", videoPath, "-frames:v", "1", "-vf", "scale=72:72:force_original_aspect_ratio=decrease", "-q:v", "8", thumbPath).Run(); err == nil {
 		if thumb, readErr := os.ReadFile(thumbPath); readErr == nil && len(thumb) <= 256*1024 {
 			metadata.JPEGThumbnail = thumb
 		}

@@ -5,7 +5,10 @@
 package command
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"os/exec"
 	"time"
 
 	"google.golang.org/protobuf/proto"
@@ -88,12 +91,79 @@ func (c *Ctx) sendMediaBytes(ctx context.Context, data []byte, kind MediaKind, c
 
 	msg := buildMediaMessage(kind, up, caption, fileName, mimetype)
 	applyVideoMetadata(msg, video)
+	if kind == MediaImage || kind == MediaVideo {
+		thumbnail := videoThumbnail(video)
+		if len(thumbnail) == 0 {
+			thumbnail, _ = generateJPEGThumbnail(ctx, data)
+		}
+		if len(thumbnail) > 0 {
+			applyInlineJPEGThumbnail(msg, thumbnail)
+			// Issue #204: upload thumbnail separately so clients that do not have
+			// the sender saved can fetch a preview from its direct path.
+			if thumb, uploadErr := c.Client.Upload(ctx, thumbnail, whatsmeow.MediaImage); uploadErr == nil {
+				applyUploadedThumbnail(msg, thumb)
+			}
+		}
+	}
 	if quoted {
 		// Sematkan quote ke pesan pemicu lewat ContextInfo tiap tipe.
 		attachQuote(msg, c.Evt)
 	}
 	_, err = c.Client.SendMessage(ctx, c.Evt.Info.Chat, msg)
 	return err
+}
+
+func videoThumbnail(video *VideoMetadata) []byte {
+	if video == nil {
+		return nil
+	}
+	return video.JPEGThumbnail
+}
+
+func applyInlineJPEGThumbnail(msg *waE2E.Message, thumbnail []byte) {
+	if msg == nil || len(thumbnail) == 0 {
+		return
+	}
+	switch {
+	case msg.ImageMessage != nil:
+		msg.ImageMessage.JPEGThumbnail = thumbnail
+	case msg.VideoMessage != nil:
+		msg.VideoMessage.JPEGThumbnail = thumbnail
+	}
+}
+
+func applyUploadedThumbnail(msg *waE2E.Message, up whatsmeow.UploadResponse) {
+	if msg == nil {
+		return
+	}
+	switch {
+	case msg.ImageMessage != nil:
+		msg.ImageMessage.ThumbnailDirectPath = proto.String(up.DirectPath)
+		msg.ImageMessage.ThumbnailSHA256 = up.FileSHA256
+		msg.ImageMessage.ThumbnailEncSHA256 = up.FileEncSHA256
+	case msg.VideoMessage != nil:
+		msg.VideoMessage.ThumbnailDirectPath = proto.String(up.DirectPath)
+		msg.VideoMessage.ThumbnailSHA256 = up.FileSHA256
+		msg.VideoMessage.ThumbnailEncSHA256 = up.FileEncSHA256
+	}
+}
+
+func generateJPEGThumbnail(ctx context.Context, data []byte) ([]byte, error) {
+	thumbCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(thumbCtx, "ffmpeg", "-v", "error", "-i", "pipe:0", "-frames:v", "1", "-vf", "scale=72:72:force_original_aspect_ratio=decrease", "-f", "image2pipe", "-c:v", "mjpeg", "-q:v", "8", "pipe:1")
+	cmd.Stdin = bytes.NewReader(data)
+	thumbnail, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	if len(thumbnail) == 0 {
+		return nil, fmt.Errorf("thumbnail kosong")
+	}
+	if len(thumbnail) > 64*1024 {
+		return nil, fmt.Errorf("thumbnail terlalu besar: %d bytes", len(thumbnail))
+	}
+	return thumbnail, nil
 }
 
 func applyVideoMetadata(msg *waE2E.Message, video *VideoMetadata) {
@@ -116,19 +186,26 @@ func applyVideoMetadata(msg *waE2E.Message, video *VideoMetadata) {
 
 // SendStickerBytes mengunggah WebP lalu mengirimnya sebagai sticker WhatsApp.
 func (c *Ctx) SendStickerBytes(ctx context.Context, data []byte) error {
+	return c.SendStickerBytesWithThumbnail(ctx, data, nil)
+}
+
+// SendStickerBytesWithThumbnail mengirim sticker dengan thumbnail PNG inline
+// opsional. Thumbnail tidak di-upload terpisah karena StickerMessage memakai
+// field PngThumbnail untuk preview kecil.
+func (c *Ctx) SendStickerBytesWithThumbnail(ctx context.Context, data, thumbnail []byte) error {
 	up, err := c.Client.Upload(ctx, data, whatsmeow.MediaImage)
 	if err != nil {
 		return err
 	}
-	msg := buildStickerMessage(up)
+	msg := buildStickerMessage(up, thumbnail)
 	attachQuote(msg, c.Evt)
 	_, err = c.Client.SendMessage(ctx, c.Evt.Info.Chat, msg)
 	return err
 }
 
-func buildStickerMessage(up whatsmeow.UploadResponse) *waE2E.Message {
+func buildStickerMessage(up whatsmeow.UploadResponse, thumbnail []byte) *waE2E.Message {
 	now := time.Now()
-	return &waE2E.Message{StickerMessage: &waE2E.StickerMessage{
+	sticker := &waE2E.StickerMessage{
 		URL:               proto.String(up.URL),
 		DirectPath:        proto.String(up.DirectPath),
 		MediaKey:          up.MediaKey,
@@ -140,7 +217,12 @@ func buildStickerMessage(up whatsmeow.UploadResponse) *waE2E.Message {
 		Height:            proto.Uint32(512),
 		MediaKeyTimestamp: proto.Int64(now.Unix()),
 		StickerSentTS:     proto.Int64(now.UnixMilli()),
-	}}
+	}
+	if len(thumbnail) > 0 && len(thumbnail) <= 64*1024 && len(thumbnail) >= 8 &&
+		thumbnail[0] == 0x89 && thumbnail[1] == 'P' && thumbnail[2] == 'N' && thumbnail[3] == 'G' {
+		sticker.PngThumbnail = thumbnail
+	}
+	return &waE2E.Message{StickerMessage: sticker}
 }
 
 func buildMediaMessage(kind MediaKind, up whatsmeow.UploadResponse, caption, fileName, mimetype string) *waE2E.Message {

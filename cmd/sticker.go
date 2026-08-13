@@ -71,6 +71,10 @@ func stickerHandler(ctx context.Context, c *command.Ctx) error {
 	if err != nil {
 		return stickerError(ctx, c, "Gagal membuat WebP: "+err.Error())
 	}
+	thumbnail, thumbnailErr := stickerThumbnail(processCtx, webp)
+	if thumbnailErr != nil {
+		return stickerError(ctx, c, "Gagal membuat thumbnail sticker: "+thumbnailErr.Error())
+	}
 	webp, err = stickerAddExifContext(processCtx, webp, config.C.Sticker.Packname, config.C.Sticker.Author)
 	if err != nil {
 		return stickerError(ctx, c, "Gagal memasang metadata sticker: "+err.Error())
@@ -78,7 +82,7 @@ func stickerHandler(ctx context.Context, c *command.Ctx) error {
 	if len(webp) > stickerMaxOutput {
 		return stickerError(ctx, c, "Sticker lebih besar dari batas 1MB. Coba media yang lebih sederhana.")
 	}
-	if err := c.SendStickerBytes(ctx, webp); err != nil {
+	if err := c.SendStickerBytesWithThumbnail(ctx, webp, thumbnail); err != nil {
 		return stickerError(ctx, c, "Gagal mengirim sticker: "+err.Error())
 	}
 	c.React(ctx, "✅")
@@ -213,8 +217,9 @@ func stickerAddExifWithWebpmux(ctx context.Context, webp []byte, packname, autho
 }
 
 // stickerAddExif mempertahankan helper lama untuk test/internal caller.
+// Test memakai fallback manual agar tidak bergantung pada webpmux di PATH.
 func stickerAddExif(webp []byte, packname, author string) ([]byte, error) {
-	return stickerAddExifContext(context.Background(), webp, packname, author)
+	return stickerAddExifManual(webp, packname, author)
 }
 
 // stickerAddExif memakai webpmux dengan context agar proses mengikuti timeout.
@@ -226,6 +231,10 @@ func stickerAddExifContext(ctx context.Context, webp []byte, packname, author st
 		return nil, err
 	}
 
+	return stickerAddExifManual(webp, packname, author)
+}
+
+func stickerAddExifManual(webp []byte, packname, author string) ([]byte, error) {
 	chunks, err := parseWebPChunks(webp)
 	if err != nil {
 		return nil, err
@@ -404,6 +413,24 @@ func writeWebPChunk(out *bytes.Buffer, name string, payload []byte) {
 	if len(payload)%2 != 0 {
 		out.WriteByte(0)
 	}
+}
+
+func stickerThumbnail(ctx context.Context, webp []byte) ([]byte, error) {
+	thumbCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(thumbCtx, "ffmpeg", "-v", "error", "-i", "pipe:0", "-frames:v", "1", "-vf", "scale=72:72:force_original_aspect_ratio=decrease", "-f", "image2pipe", "-c:v", "png", "pipe:1")
+	cmd.Stdin = bytes.NewReader(webp)
+	thumbnail, err := cmd.Output()
+	if err != nil || len(thumbnail) == 0 {
+		if err == nil {
+			err = fmt.Errorf("thumbnail kosong")
+		}
+		return nil, err
+	}
+	if len(thumbnail) > 64*1024 {
+		return nil, fmt.Errorf("thumbnail terlalu besar: %d bytes", len(thumbnail))
+	}
+	return thumbnail, nil
 }
 
 func stickerEncode(ctx context.Context, data []byte, video bool) ([]byte, error) {

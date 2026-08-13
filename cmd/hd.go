@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -170,11 +171,38 @@ func hdHandler(ctx context.Context, c *command.Ctx) error {
 	if !media.image {
 		caption = "⏳ Upscale video ke HD, bisa beberapa menit..."
 	}
-	if _, err := c.Reply(ctx, caption); err != nil {
-		return err
-	}
-	c.React(ctx, "⏳")
+	// Seluruh operasi jaringan HD, termasuk status awal, berjalan di background
+	// agar event loop WhatsApp segera kembali menerima command lain. Validasi
+	// lokal sudah selesai sebelum goroutine dibuat; Dispatch tetap melakukan
+	// charge energi secara sinkron setelah handler mengembalikan kontrol.
+	go func() {
+		if _, replyErr := c.Reply(ctx, caption); replyErr != nil {
+			c.ReportError(ctx, replyErr)
+		}
+		c.React(ctx, "⏳")
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				err := fmt.Errorf("panic saat memproses HD: %v", recovered)
+				hdNotifyFailure(ctx, c, err)
+			}
+		}()
+		hdProcess(ctx, c, media, prem, level)
+	}()
+	return nil
+}
 
+func hdNotifyFailure(ctx context.Context, c *command.Ctx, err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			log.Printf("[rbot] gagal mengirim notifikasi panic HD: %v", recovered)
+		}
+	}()
+	c.React(ctx, "❌")
+	c.ReportError(ctx, err)
+	_, _ = c.Reply(ctx, "❌ Gagal memproses media. Coba lagi beberapa saat.")
+}
+
+func hdProcess(ctx context.Context, c *command.Ctx, media *hdMedia, prem bool, level int) {
 	processCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 	data, err := c.Client.DownloadAny(processCtx, media.message)
@@ -184,29 +212,29 @@ func hdHandler(ctx context.Context, c *command.Ctx) error {
 			err = fmt.Errorf("media kosong")
 		}
 		c.ReportError(ctx, err)
-		_, replyErr := c.Reply(ctx, "❌ Gagal mengunduh media: "+err.Error())
-		return replyErr
+		_, _ = c.Reply(ctx, "❌ Gagal mengunduh media: "+err.Error())
+		return
 	}
 
 	maxSize := hdMaxFileSize(prem)
 	if !media.image {
 		if int64(len(data)) > upscaler.VideoMaxBytes {
 			c.React(ctx, "❌")
-			_, replyErr := c.Reply(ctx, fmt.Sprintf("❌ Video terlalu besar (%s). Server AI menerima maksimal %dMB.", formatMB(len(data)), upscaler.VideoMaxBytes/(1024*1024)))
-			return replyErr
+			_, _ = c.Reply(ctx, fmt.Sprintf("❌ Video terlalu besar (%s). Server AI menerima maksimal %dMB.", formatMB(len(data)), upscaler.VideoMaxBytes/(1024*1024)))
+			return
 		}
 		maxSize = minInt64(maxSize, upscaler.VideoMaxBytes)
 	}
 	if int64(len(data)) > maxSize {
 		c.React(ctx, "❌")
-		_, replyErr := c.Reply(ctx, fmt.Sprintf("❌ File terlalu besar. Maksimal %dMB.", maxSize/(1024*1024)))
-		return replyErr
+		_, _ = c.Reply(ctx, fmt.Sprintf("❌ File terlalu besar. Maksimal %dMB.", maxSize/(1024*1024)))
+		return
 	}
 	if !media.image {
 		if duration, ok := hdVideoDuration(processCtx, data); ok && duration > float64(hdMaxDuration(prem)) {
 			c.React(ctx, "❌")
-			_, replyErr := c.Reply(ctx, fmt.Sprintf("❌ Video terlalu panjang. Maksimal %d detik.", hdMaxDuration(prem)))
-			return replyErr
+			_, _ = c.Reply(ctx, fmt.Sprintf("❌ Video terlalu panjang. Maksimal %d detik.", hdMaxDuration(prem)))
+			return
 		}
 	}
 
@@ -219,8 +247,8 @@ func hdHandler(ctx context.Context, c *command.Ctx) error {
 	if err != nil {
 		c.React(ctx, "❌")
 		c.ReportError(ctx, err)
-		_, replyErr := c.Reply(ctx, "❌ Gagal memproses media. Coba lagi beberapa saat.")
-		return replyErr
+		_, _ = c.Reply(ctx, "❌ Gagal memproses media. Coba lagi beberapa saat.")
+		return
 	}
 
 	if media.image {
@@ -236,11 +264,10 @@ func hdHandler(ctx context.Context, c *command.Ctx) error {
 	if err != nil {
 		c.React(ctx, "❌")
 		c.ReportError(ctx, err)
-		_, replyErr := c.Reply(ctx, "❌ Gagal mengirim hasil: "+err.Error())
-		return replyErr
+		_, _ = c.Reply(ctx, "❌ Gagal mengirim hasil: "+err.Error())
+		return
 	}
 	c.React(ctx, "✅")
-	return nil
 }
 
 func hdVideoDuration(ctx context.Context, data []byte) (float64, bool) {

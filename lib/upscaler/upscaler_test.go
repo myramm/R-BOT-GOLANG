@@ -79,6 +79,50 @@ func TestILoveIMGUploadFields(t *testing.T) {
 	}
 }
 
+func TestParseFreeConvertTokenResponse(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{"json object", `{"token":"eyJjson.header.signature"}`, "eyJjson.header.signature"},
+		{"json data", `{"data":{"access_token":"eyJdata.header.signature"}}`, "eyJdata.header.signature"},
+		{"json string", `"eyJstring.header.signature"`, "eyJstring.header.signature"},
+		{"plain jwt", "eyJplain.header.signature", "eyJplain.header.signature"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseFreeConvertTokenResponse([]byte(tt.body))
+			if err != nil || got != tt.want {
+				t.Fatalf("token=%q err=%v, want %q", got, err, tt.want)
+			}
+		})
+	}
+	for _, body := range []string{"", "error: unavailable", "eyJerror-token", "eyJ..signature", "eyJheader.payload.", "<html>blocked</html>"} {
+		if got, err := parseFreeConvertTokenResponse([]byte(body)); err == nil || got != "" {
+			t.Fatalf("invalid body %q returned token=%q err=%v", body, got, err)
+		}
+	}
+}
+
+func TestParseFreeConvertTokenResponseRejectsOversizedBody(t *testing.T) {
+	body := bytes.Repeat([]byte("a"), freeConvertTokenMaxBodyBytes+1)
+	if got, err := parseFreeConvertTokenResponse(body); err == nil || got != "" {
+		t.Fatalf("oversized body returned token=%q err=%v", got, err)
+	}
+}
+
+func TestValidFreeConvertToken(t *testing.T) {
+	if !validFreeConvertToken("eyJheader.payload.signature") {
+		t.Fatal("valid JWT was rejected")
+	}
+	for _, token := range []string{"eyJonly-two.parts", "eyJ..signature", "eyJheader.payload.", "error.token.value", "eyJheader.payload.signature ", "eyJheader.payload.signature\n"} {
+		if validFreeConvertToken(token) {
+			t.Fatalf("invalid token accepted: %q", token)
+		}
+	}
+}
+
 func TestFreeConvertConstants(t *testing.T) {
 	if freeConvertAPI != "https://api.freeconvert.com/v1" {
 		t.Fatalf("freeConvertAPI = %q", freeConvertAPI)

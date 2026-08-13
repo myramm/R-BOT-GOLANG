@@ -21,12 +21,13 @@ import (
 )
 
 const (
-	VideoMaxBytes           = 10 * 1024 * 1024
-	iloveIMGPage            = "https://www.iloveimg.com/upscale-image"
-	iloveIMGAPI             = "https://api29g.iloveimg.com/v1"
-	freeConvertAPI          = "https://api.freeconvert.com/v1"
-	freeConvertVideoQuality = 60
-	userAgent               = "Gienetic/1.2.0 Mobile"
+	VideoMaxBytes                = 10 * 1024 * 1024
+	iloveIMGPage                 = "https://www.iloveimg.com/upscale-image"
+	iloveIMGAPI                  = "https://api29g.iloveimg.com/v1"
+	freeConvertAPI               = "https://api.freeconvert.com/v1"
+	freeConvertVideoQuality      = 60
+	freeConvertTokenMaxBodyBytes = 64 * 1024
+	userAgent                    = "Gienetic/1.2.0 Mobile"
 )
 
 var (
@@ -311,21 +312,62 @@ func freeConvertToken(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	var raw json.RawMessage
-	if err := decodeResponse(resp, &raw); err != nil {
-		return "", fmt.Errorf("gagal mendapatkan token FreeConvert: %w", err)
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024+1))
+	if err != nil {
+		return "", fmt.Errorf("gagal membaca respons guest FreeConvert")
 	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("FreeConvert guest HTTP %d", resp.StatusCode)
+	}
+	if len(body) > freeConvertTokenMaxBodyBytes {
+		return "", fmt.Errorf("respons guest FreeConvert terlalu besar")
+	}
+	return parseFreeConvertTokenResponse(body)
+}
+
+func parseFreeConvertTokenResponse(body []byte) (string, error) {
+	if len(body) > freeConvertTokenMaxBodyBytes {
+		return "", fmt.Errorf("respons guest FreeConvert terlalu besar")
+	}
+	text := strings.TrimSpace(string(body))
+	if text == "" {
+		return "", fmt.Errorf("FreeConvert tidak mengembalikan guest token")
+	}
+
+	var token string
 	var value any
-	if err := json.Unmarshal(raw, &value); err != nil {
-		return "", fmt.Errorf("decode guest token FreeConvert: %w", err)
+	if json.Unmarshal([]byte(text), &value) == nil {
+		token = findJSONTextPriority(value, "token", "access_token", "accessToken")
+		if token == "" {
+			token = jsonText(value)
+		}
 	}
-	if token := findJSONTextPriority(value, "token", "access_token", "accessToken"); token != "" {
+	if token == "" {
+		// Endpoint guest pada beberapa deployment mengembalikan JWT mentah
+		// (`eyJ...`) dengan content-type text/plain, bukan JSON.
+		token = text
+	}
+	if validFreeConvertToken(token) {
 		return token, nil
 	}
-	if token := jsonText(value); token != "" {
-		return token, nil
+	return "", fmt.Errorf("FreeConvert mengembalikan respons guest yang tidak valid")
+}
+
+func validFreeConvertToken(token string) bool {
+	if !strings.HasPrefix(token, "eyJ") || strings.ContainsAny(token, "<>\r\n \t") {
+		return false
 	}
-	return "", fmt.Errorf("FreeConvert tidak mengembalikan guest token")
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return false
+	}
+	for _, part := range parts {
+		if part == "" {
+			return false
+		}
+	}
+	return true
 }
 
 func freeConvertJSON(ctx context.Context, method, endpoint, token string, payload any, timeout time.Duration) (json.RawMessage, error) {

@@ -5,12 +5,15 @@ package upscaler
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
+	"net/url"
 	"path"
 	"regexp"
 	"strconv"
@@ -21,13 +24,17 @@ import (
 )
 
 const (
-	VideoMaxBytes                = 10 * 1024 * 1024
-	iloveIMGPage                 = "https://www.iloveimg.com/upscale-image"
-	iloveIMGAPI                  = "https://api29g.iloveimg.com/v1"
-	freeConvertAPI               = "https://api.freeconvert.com/v1"
-	freeConvertVideoQuality      = 60
-	freeConvertTokenMaxBodyBytes = 64 * 1024
-	userAgent                    = "Gienetic/1.2.0 Mobile"
+	VideoMaxBytes       = 10 * 1024 * 1024
+	iloveIMGPage        = "https://www.iloveimg.com/upscale-image"
+	iloveIMGAPI         = "https://api29g.iloveimg.com/v1"
+	videoAPI            = "https://api.unblurimage.ai/api/upscaler"
+	videoCDN            = "https://cdn.unwatermark.ai"
+	videoPollInterval   = 5 * time.Second
+	videoPollMax        = 90
+	videoUploadTimeout  = 2 * time.Minute
+	videoJobTimeout     = 3 * time.Minute
+	videoOutputMaxBytes = 64 * 1024 * 1024
+	userAgent           = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
 
 var (
@@ -67,17 +74,6 @@ func (b *cancelBody) Close() error {
 	return err
 }
 
-func decodeResponse(resp *http.Response, out any) error {
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("server AI HTTP %d", resp.StatusCode)
-	}
-	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
-		return fmt.Errorf("decode respons server AI: %w", err)
-	}
-	return nil
-}
-
 func multipartBody(fields map[string]string, fileField, fileName string, data []byte, contentType string) (*bytes.Buffer, string, error) {
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
@@ -110,41 +106,6 @@ func multipartBody(fields map[string]string, fileField, fileName string, data []
 
 func download(ctx context.Context, url string) ([]byte, error) {
 	return httpx.GetBytes(ctx, url, 2*time.Minute, 0)
-}
-
-func findJSONTextPriority(value any, keys ...string) string {
-	if object, ok := value.(map[string]any); ok {
-		for _, key := range keys {
-			if text, ok := object[key].(string); ok && strings.TrimSpace(text) != "" {
-				return strings.TrimSpace(text)
-			}
-		}
-		for _, nestedKey := range []string{"data", "result", "raw", "response", "payload"} {
-			if nested, ok := object[nestedKey]; ok {
-				if text := findJSONTextPriority(nested, keys...); text != "" {
-					return text
-				}
-			}
-		}
-	}
-	if list, ok := value.([]any); ok {
-		for _, nested := range list {
-			if text := findJSONTextPriority(nested, keys...); text != "" {
-				return text
-			}
-		}
-	}
-	if text, ok := value.(string); ok {
-		return strings.TrimSpace(text)
-	}
-	return ""
-}
-
-func jsonText(value any) string {
-	if text, ok := value.(string); ok {
-		return strings.TrimSpace(text)
-	}
-	return ""
 }
 
 func iloveIMGSession(ctx context.Context) (token, task string, err error) {
@@ -272,288 +233,250 @@ func UpscaleImage(ctx context.Context, data []byte, level int, mimeType string) 
 	return iloveIMGUpscale(ctx, serverFilename, token, task, level)
 }
 
-type freeConvertJob struct {
-	ID     string          `json:"id"`
-	Status string          `json:"status"`
-	Tasks  json.RawMessage `json:"tasks"`
-}
-
-func freeConvertJobBody(fileName string) map[string]any {
-	if fileName == "" {
-		fileName = "video.mp4"
-	}
-	return map[string]any{
-		"tasks": map[string]any{
-			"import-1": map[string]string{
-				"operation": "import/upload",
-			},
-			"compress-1": map[string]any{
-				"operation":     "compress",
-				"input":         "import-1",
-				"input_format":  "mp4",
-				"output_format": "mp4",
-				"options": map[string]any{
-					"video_codec_compress":              "libx264",
-					"compress_video":                    "by_percentage",
-					"video_compress_quality_percentage": freeConvertVideoQuality,
-				},
-			},
-			"export-1": map[string]string{
-				"operation": "export/url",
-				"input":     "compress-1",
-				"filename":  path.Base(fileName),
-			},
-		},
-	}
-}
-
-func freeConvertToken(ctx context.Context) (string, error) {
-	resp, err := request(ctx, http.MethodGet, freeConvertAPI+"/account/guest", nil, time.Minute, nil)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024+1))
-	if err != nil {
-		return "", fmt.Errorf("gagal membaca respons guest FreeConvert")
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("FreeConvert guest HTTP %d", resp.StatusCode)
-	}
-	if len(body) > freeConvertTokenMaxBodyBytes {
-		return "", fmt.Errorf("respons guest FreeConvert terlalu besar")
-	}
-	return parseFreeConvertTokenResponse(body)
-}
-
-func parseFreeConvertTokenResponse(body []byte) (string, error) {
-	if len(body) > freeConvertTokenMaxBodyBytes {
-		return "", fmt.Errorf("respons guest FreeConvert terlalu besar")
-	}
-	text := strings.TrimSpace(string(body))
-	if text == "" {
-		return "", fmt.Errorf("FreeConvert tidak mengembalikan guest token")
-	}
-
-	var token string
-	var value any
-	if json.Unmarshal([]byte(text), &value) == nil {
-		token = findJSONTextPriority(value, "token", "access_token", "accessToken")
-		if token == "" {
-			token = jsonText(value)
-		}
-	}
-	if token == "" {
-		// Endpoint guest pada beberapa deployment mengembalikan JWT mentah
-		// (`eyJ...`) dengan content-type text/plain, bukan JSON.
-		token = text
-	}
-	if validFreeConvertToken(token) {
-		return token, nil
-	}
-	return "", fmt.Errorf("FreeConvert mengembalikan respons guest yang tidak valid")
-}
-
-func validFreeConvertToken(token string) bool {
-	if !strings.HasPrefix(token, "eyJ") || strings.ContainsAny(token, "<>\r\n \t") {
-		return false
-	}
-	parts := strings.Split(token, ".")
-	if len(parts) != 3 {
-		return false
-	}
-	for _, part := range parts {
-		if part == "" {
-			return false
-		}
-	}
-	return true
-}
-
-func freeConvertJSON(ctx context.Context, method, endpoint, token string, payload any, timeout time.Duration) (json.RawMessage, error) {
-	var bodyReader io.Reader
-	headers := map[string]string{
-		"Authorization": "Bearer " + token,
-		"Accept":        "application/json",
-	}
-	if payload != nil {
-		body, err := json.Marshal(payload)
-		if err != nil {
-			return nil, err
-		}
-		bodyReader = bytes.NewReader(body)
-		headers["Content-Type"] = "application/json"
-	}
-	resp, err := request(ctx, method, freeConvertAPI+endpoint, bodyReader, timeout, headers)
-	if err != nil {
-		return nil, err
-	}
-	var raw json.RawMessage
-	if err := decodeResponse(resp, &raw); err != nil {
-		return nil, err
-	}
-	return raw, nil
-}
-
-func freeConvertUpload(ctx context.Context, token string, job freeConvertJob, data []byte, fileName string) error {
-	formURL, signature := findUploadForm(job.Tasks)
-	if formURL == "" || signature == "" {
-		return fmt.Errorf("FreeConvert tidak mengembalikan form upload")
-	}
-	body, contentType, err := multipartBody(map[string]string{"signature": signature}, "file", path.Base(fileName), data, "video/mp4")
-	if err != nil {
-		return err
-	}
-	resp, err := request(ctx, http.MethodPost, formURL, body, 5*time.Minute, map[string]string{
-		"Authorization": "Bearer " + token,
-		"Content-Type":  contentType,
-	})
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("upload video ke FreeConvert HTTP %d", resp.StatusCode)
-	}
-	return nil
-}
-
-func findUploadForm(value json.RawMessage) (url, signature string) {
-	var root any
-	if json.Unmarshal(value, &root) != nil {
-		return "", ""
-	}
-	var visit func(any)
-	visit = func(current any) {
-		if url != "" && signature != "" {
-			return
-		}
-		if object, ok := current.(map[string]any); ok {
-			if operation, _ := object["operation"].(string); operation == "import/upload" {
-				if result, ok := object["result"].(map[string]any); ok {
-					if form, ok := result["form"].(map[string]any); ok {
-						url, _ = form["url"].(string)
-						if parameters, ok := form["parameters"].(map[string]any); ok {
-							signature, _ = parameters["signature"].(string)
-						}
-					}
-				}
-			}
-			for _, nested := range object {
-				visit(nested)
-			}
-		} else if list, ok := current.([]any); ok {
-			for _, nested := range list {
-				visit(nested)
-			}
-		}
-	}
-	visit(root)
-	return url, signature
-}
-
-func freeConvertExportURL(tasks json.RawMessage) string {
-	var root any
-	if json.Unmarshal(tasks, &root) != nil {
-		return ""
-	}
-	var output string
-	var visit func(any)
-	visit = func(current any) {
-		if output != "" {
-			return
-		}
-		if object, ok := current.(map[string]any); ok {
-			if operation, _ := object["operation"].(string); operation == "export/url" {
-				if result, ok := object["result"].(map[string]any); ok {
-					output, _ = result["url"].(string)
-				}
-			}
-			for _, nested := range object {
-				visit(nested)
-			}
-		} else if list, ok := current.([]any); ok {
-			for _, nested := range list {
-				visit(nested)
-			}
-		}
-	}
-	visit(root)
-	return output
-}
-
-func isPermanentFreeConvertPollError(err error) bool {
-	if err == nil {
-		return false
-	}
-	message := err.Error()
-	return strings.Contains(message, "HTTP 401") || strings.Contains(message, "HTTP 403") || strings.Contains(message, "HTTP 404")
-}
-
-func (j freeConvertJob) Error() string {
-	if j.Status != "" {
-		return "FreeConvert job " + strings.ToLower(j.Status)
-	}
-	return "FreeConvert gagal membuat job"
-}
-
-// UpscaleVideo mengompres video memakai FreeConvert guest API dan menunggu hasilnya.
-// API ini dipakai sebagai pengganti endpoint enhancer lama yang sering membalas
-// "Parameter error". Batas input tetap 10 MB sesuai batas bot.
+// UpscaleVideo memakai AI video enhancer dari bot lama. FreeConvert sengaja
+// tidak dipakai lagi karena operasi compress membuat video lebih buram.
 func UpscaleVideo(ctx context.Context, data []byte, fileName string) ([]byte, error) {
 	if len(data) > VideoMaxBytes {
 		return nil, fmt.Errorf("video terlalu besar: maksimal %d MB", VideoMaxBytes/(1024*1024))
 	}
+	if len(data) == 0 {
+		return nil, fmt.Errorf("video kosong")
+	}
 	if fileName == "" {
 		fileName = "video.mp4"
 	}
-	token, err := freeConvertToken(ctx)
+	identity := newVideoIdentity()
+	sourceURL, err := uploadVideoSource(ctx, data, fileName, identity)
 	if err != nil {
 		return nil, err
 	}
-	createdRaw, err := freeConvertJSON(ctx, http.MethodPost, "/process/jobs", token, freeConvertJobBody(fileName), 2*time.Minute)
+	jobID, err := createVideoJob(ctx, sourceURL, identity)
 	if err != nil {
-		return nil, fmt.Errorf("gagal membuat job FreeConvert: %w", err)
-	}
-	var created freeConvertJob
-	if err := json.Unmarshal(createdRaw, &created); err != nil || created.ID == "" {
-		return nil, fmt.Errorf("FreeConvert tidak mengembalikan job id")
-	}
-	if err := freeConvertUpload(ctx, token, created, data, fileName); err != nil {
 		return nil, err
 	}
+	outputURL, err := pollVideoJob(ctx, jobID, identity)
+	if err != nil {
+		return nil, err
+	}
+	return downloadVideoOutput(ctx, outputURL)
+}
 
-	var lastPollErr error
-	for i := 0; i < 120; i++ {
-		if err := sleepContext(ctx, 5*time.Second); err != nil {
-			return nil, err
+func newVideoIdentity() map[string]string {
+	return map[string]string{
+		"Accept":          "*/*",
+		"Accept-Language": "en-US,en;q=0.9",
+		"Origin":          "https://unblurimage.ai",
+		"Referer":         "https://unblurimage.ai/",
+		"User-Agent":      userAgent,
+		"Product-Serial":  randomVideoID(),
+		"Device-Id":       randomVideoID(),
+	}
+}
+
+func randomVideoID() string {
+	var raw [16]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return "rbot-video"
+	}
+	return hex.EncodeToString(raw[:])
+}
+
+func videoRequest(ctx context.Context, method, endpoint string, body io.Reader, timeout time.Duration, headers map[string]string) (*http.Response, error) {
+	cctx, cancel := context.WithTimeout(ctx, timeout)
+	req, err := http.NewRequestWithContext(cctx, method, endpoint, body)
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	for key, value := range headers {
+		req.Header.Set(key, value)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	resp.Body = &videoCancelBody{ReadCloser: resp.Body, cancel: cancel}
+	return resp, nil
+}
+
+type videoCancelBody struct {
+	io.ReadCloser
+	cancel context.CancelFunc
+}
+
+func (b *videoCancelBody) Close() error {
+	err := b.ReadCloser.Close()
+	b.cancel()
+	return err
+}
+
+func uploadVideoSource(ctx context.Context, data []byte, fileName string, identity map[string]string) (string, error) {
+	body, contentType, err := multipartBody(map[string]string{"video_file_name": path.Base(fileName)}, "", "", nil, "")
+	if err != nil {
+		return "", err
+	}
+	resp, err := videoRequest(ctx, http.MethodPost, videoAPI+"/v1/ai-video-enhancer/upload-video", body, videoUploadTimeout, mergeVideoHeaders(identity, map[string]string{"Content-Type": contentType}))
+	if err != nil {
+		return "", fmt.Errorf("gagal meminta slot upload video: %w", err)
+	}
+	var ticket struct {
+		Result struct {
+			URL        string `json:"url"`
+			ObjectName string `json:"object_name"`
+		} `json:"result"`
+	}
+	if err := decodeVideoJSON(resp, &ticket); err != nil {
+		return "", fmt.Errorf("slot upload video tidak valid: %w", err)
+	}
+	if ticket.Result.URL == "" || ticket.Result.ObjectName == "" {
+		return "", fmt.Errorf("server AI tidak mengembalikan slot upload video")
+	}
+	putResp, err := videoRequest(ctx, http.MethodPut, ticket.Result.URL, bytes.NewReader(data), videoUploadTimeout, map[string]string{"Content-Type": "video/mp4", "Content-Length": strconv.Itoa(len(data))})
+	if err != nil {
+		return "", fmt.Errorf("gagal upload video ke server AI: %w", err)
+	}
+	defer putResp.Body.Close()
+	if putResp.StatusCode < 200 || putResp.StatusCode >= 300 {
+		return "", fmt.Errorf("upload video ke server AI HTTP %d", putResp.StatusCode)
+	}
+	return videoCDN + "/" + strings.TrimLeft(ticket.Result.ObjectName, "/"), nil
+}
+
+func createVideoJob(ctx context.Context, sourceURL string, identity map[string]string) (string, error) {
+	body, contentType, err := multipartBody(map[string]string{"original_video_file": sourceURL}, "", "", nil, "")
+	if err != nil {
+		return "", err
+	}
+	resp, err := videoRequest(ctx, http.MethodPost, videoAPI+"/v2/ai-video-enhancer/create-job", body, videoJobTimeout, mergeVideoHeaders(identity, map[string]string{"Content-Type": contentType}))
+	if err != nil {
+		return "", fmt.Errorf("gagal membuat job enhancer video: %w", err)
+	}
+	var created struct {
+		Code    any `json:"code"`
+		Message any `json:"message"`
+		Result  struct {
+			JobID string `json:"job_id"`
+		} `json:"result"`
+	}
+	if err := decodeVideoJSON(resp, &created); err != nil {
+		return "", fmt.Errorf("respons create-job video tidak valid: %w", err)
+	}
+	if created.Result.JobID == "" {
+		message := "server AI tidak mengembalikan job video"
+		if created.Message != nil {
+			message = fmt.Sprintf("server AI menolak job video: %v", created.Message)
+		} else if created.Code != nil {
+			message = fmt.Sprintf("server AI menolak job video (code %v)", created.Code)
 		}
-		statusRaw, err := freeConvertJSON(ctx, http.MethodGet, "/process/jobs/"+created.ID, token, nil, time.Minute)
+		return "", fmt.Errorf("%s", message)
+	}
+	return created.Result.JobID, nil
+}
+
+func pollVideoJob(ctx context.Context, jobID string, identity map[string]string) (string, error) {
+	endpoint := videoAPI + "/v2/ai-video-enhancer/get-job/" + url.PathEscape(jobID)
+	for attempt := 0; attempt < videoPollMax; attempt++ {
+		if err := sleepContext(ctx, videoPollInterval); err != nil {
+			return "", err
+		}
+		resp, err := videoRequest(ctx, http.MethodGet, endpoint, nil, videoJobTimeout, identity)
 		if err != nil {
-			if isPermanentFreeConvertPollError(err) {
-				return nil, fmt.Errorf("gagal polling job FreeConvert: %w", err)
+			if isPermanentVideoError(err) {
+				return "", err
 			}
-			lastPollErr = err
 			continue
 		}
-		var status freeConvertJob
-		if err := json.Unmarshal(statusRaw, &status); err != nil {
-			return nil, fmt.Errorf("decode status FreeConvert: %w", err)
+		var status struct {
+			Code    int `json:"code"`
+			Message any `json:"message"`
+			Result  struct {
+				OutputURL string `json:"output_url"`
+			} `json:"result"`
 		}
-		switch strings.ToLower(status.Status) {
-		case "failed", "error":
-			return nil, status
-		case "completed":
-			if outputURL := freeConvertExportURL(status.Tasks); outputURL != "" {
-				return download(ctx, outputURL)
+		decodeErr := decodeVideoJSON(resp, &status)
+		if decodeErr != nil {
+			if isPermanentVideoError(decodeErr) {
+				return "", decodeErr
 			}
-			return nil, fmt.Errorf("FreeConvert selesai tanpa URL hasil")
+			continue
+		}
+		if status.Result.OutputURL != "" {
+			return status.Result.OutputURL, nil
+		}
+		switch status.Code {
+		case 0, 100000, 300006, 300010:
+			// Status normal/processing; lanjut polling.
+		case 300007:
+			return "", fmt.Errorf("server AI menyelesaikan job tanpa URL video")
+		case 300015:
+			return "", fmt.Errorf("video terlalu besar atau resolusinya terlalu tinggi untuk server AI")
+		case 300019:
+			return "", fmt.Errorf("kuota video gratis di server AI sedang habis")
+		default:
+			if status.Code != 0 {
+				if status.Message != nil {
+					return "", fmt.Errorf("server AI gagal memproses video (code %d): %v", status.Code, status.Message)
+				}
+				return "", fmt.Errorf("server AI gagal memproses video (code %d)", status.Code)
+			}
 		}
 	}
-	if lastPollErr != nil {
-		return nil, fmt.Errorf("gagal polling job FreeConvert: %w", lastPollErr)
+	return "", fmt.Errorf("server AI kelamaan memproses video")
+}
+
+func downloadVideoOutput(ctx context.Context, outputURL string) ([]byte, error) {
+	parsed, err := url.Parse(outputURL)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Hostname() == "" {
+		return nil, fmt.Errorf("URL hasil video AI tidak valid")
 	}
-	return nil, fmt.Errorf("FreeConvert timeout menunggu hasil video")
+	data, err := httpx.GetBytes(ctx, outputURL, videoUploadTimeout, videoOutputMaxBytes)
+	if err != nil {
+		return nil, fmt.Errorf("gagal mengunduh hasil video AI: %w", err)
+	}
+	if len(data) == 0 {
+		return nil, fmt.Errorf("hasil video AI kosong")
+	}
+	if !looksLikeVideo(data) {
+		return nil, fmt.Errorf("server AI mengembalikan file hasil yang bukan video")
+	}
+	return data, nil
+}
+
+func looksLikeVideo(data []byte) bool {
+	// Jalur HD meminta MP4. Jangan menerima HTML, WebP, atau file acak yang
+	// kebetulan diawali byte tertentu dari endpoint hasil AI.
+	return len(data) >= 12 && string(data[4:8]) == "ftyp"
+}
+
+func isPermanentVideoError(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := err.Error()
+	return strings.Contains(message, "HTTP 400") || strings.Contains(message, "HTTP 401") || strings.Contains(message, "HTTP 403") || strings.Contains(message, "HTTP 404")
+}
+
+func mergeVideoHeaders(base, extra map[string]string) map[string]string {
+	out := make(map[string]string, len(base)+len(extra))
+	for key, value := range base {
+		out[key] = value
+	}
+	for key, value := range extra {
+		out[key] = value
+	}
+	return out
+}
+
+func decodeVideoJSON(resp *http.Response, out any) error {
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("server AI HTTP %d", resp.StatusCode)
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(out); err != nil {
+		return err
+	}
+	return nil
 }
 
 func sleepContext(ctx context.Context, d time.Duration) error {

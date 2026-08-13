@@ -250,6 +250,15 @@ func hdProcess(ctx context.Context, c *command.Ctx, media *hdMedia, prem bool, l
 		_, _ = c.Reply(ctx, "❌ Gagal memproses media. Coba lagi beberapa saat.")
 		return
 	}
+	if !media.image {
+		if worse, reason := hdVideoQualityRegression(processCtx, data, output); worse {
+			c.React(ctx, "❌")
+			err := fmt.Errorf("hasil AI ditolak karena kualitas turun: %s", reason)
+			c.ReportError(ctx, err)
+			_, _ = c.Reply(ctx, "❌ Hasil AI ditolak karena kualitas video turun. Coba video lain atau ulangi beberapa saat lagi.")
+			return
+		}
+	}
 
 	if media.image {
 		outputMIME := http.DetectContentType(output)
@@ -268,6 +277,71 @@ func hdProcess(ctx context.Context, c *command.Ctx, media *hdMedia, prem bool, l
 		return
 	}
 	c.React(ctx, "✅")
+}
+
+type hdVideoInfo struct {
+	Width   int
+	Height  int
+	Bitrate int64
+}
+
+func hdVideoQualityRegression(ctx context.Context, input, output []byte) (bool, string) {
+	before, beforeOK := hdVideoInfoFromBytes(ctx, input)
+	after, afterOK := hdVideoInfoFromBytes(ctx, output)
+	if !beforeOK {
+		return false, "metadata video input tidak lengkap"
+	}
+	if !afterOK {
+		return true, "metadata video hasil tidak dapat dibaca"
+	}
+	if after.Width > 0 && before.Width > 0 && after.Width < before.Width {
+		return true, fmt.Sprintf("resolusi turun %dx%d menjadi %dx%d", before.Width, before.Height, after.Width, after.Height)
+	}
+	if after.Height > 0 && before.Height > 0 && after.Height < before.Height {
+		return true, fmt.Sprintf("resolusi turun %dx%d menjadi %dx%d", before.Width, before.Height, after.Width, after.Height)
+	}
+	if after.Width < 720 && after.Height < 720 {
+		return true, fmt.Sprintf("hasil belum mencapai minimal HD (%dx%d)", after.Width, after.Height)
+	}
+	if before.Bitrate > 0 && after.Bitrate > 0 && after.Bitrate < before.Bitrate/3 {
+		return true, fmt.Sprintf("bitrate turun terlalu jauh (%d menjadi %d bps)", before.Bitrate, after.Bitrate)
+	}
+	return false, ""
+}
+
+func hdVideoInfoFromBytes(ctx context.Context, data []byte) (hdVideoInfo, bool) {
+	file, err := os.CreateTemp("", "rbot-hd-info-*.mp4")
+	if err != nil {
+		return hdVideoInfo{}, false
+	}
+	name := file.Name()
+	defer os.Remove(name)
+	if _, err := file.Write(data); err != nil {
+		_ = file.Close()
+		return hdVideoInfo{}, false
+	}
+	if err := file.Close(); err != nil {
+		return hdVideoInfo{}, false
+	}
+	cmd := exec.CommandContext(ctx, "ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height,bit_rate", "-of", "csv=p=0", name)
+	out, err := cmd.Output()
+	if err != nil {
+		return hdVideoInfo{}, false
+	}
+	fields := strings.Split(strings.TrimSpace(string(out)), ",")
+	if len(fields) < 2 {
+		return hdVideoInfo{}, false
+	}
+	width, widthErr := strconv.Atoi(strings.TrimSpace(fields[0]))
+	height, heightErr := strconv.Atoi(strings.TrimSpace(fields[1]))
+	if widthErr != nil || heightErr != nil || width <= 0 || height <= 0 {
+		return hdVideoInfo{}, false
+	}
+	info := hdVideoInfo{Width: width, Height: height}
+	if len(fields) > 2 {
+		info.Bitrate, _ = strconv.ParseInt(strings.TrimSpace(fields[2]), 10, 64)
+	}
+	return info, true
 }
 
 func hdVideoDuration(ctx context.Context, data []byte) (float64, bool) {

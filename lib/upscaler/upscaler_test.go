@@ -3,10 +3,10 @@ package upscaler
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"mime/multipart"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestMultipartBodySetsImageContentType(t *testing.T) {
@@ -79,100 +79,32 @@ func TestILoveIMGUploadFields(t *testing.T) {
 	}
 }
 
-func TestParseFreeConvertTokenResponse(t *testing.T) {
-	tests := []struct {
-		name string
-		body string
-		want string
-	}{
-		{"json object", `{"token":"eyJjson.header.signature"}`, "eyJjson.header.signature"},
-		{"json data", `{"data":{"access_token":"eyJdata.header.signature"}}`, "eyJdata.header.signature"},
-		{"json string", `"eyJstring.header.signature"`, "eyJstring.header.signature"},
-		{"plain jwt", "eyJplain.header.signature", "eyJplain.header.signature"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseFreeConvertTokenResponse([]byte(tt.body))
-			if err != nil || got != tt.want {
-				t.Fatalf("token=%q err=%v, want %q", got, err, tt.want)
-			}
-		})
-	}
-	for _, body := range []string{"", "error: unavailable", "eyJerror-token", "eyJ..signature", "eyJheader.payload.", "<html>blocked</html>"} {
-		if got, err := parseFreeConvertTokenResponse([]byte(body)); err == nil || got != "" {
-			t.Fatalf("invalid body %q returned token=%q err=%v", body, got, err)
+func TestVideoIdentity(t *testing.T) {
+	identity := newVideoIdentity()
+	for _, key := range []string{"Accept", "Origin", "Referer", "User-Agent", "Product-Serial", "Device-Id"} {
+		if identity[key] == "" {
+			t.Fatalf("identity missing %q", key)
 		}
 	}
 }
 
-func TestParseFreeConvertTokenResponseRejectsOversizedBody(t *testing.T) {
-	body := bytes.Repeat([]byte("a"), freeConvertTokenMaxBodyBytes+1)
-	if got, err := parseFreeConvertTokenResponse(body); err == nil || got != "" {
-		t.Fatalf("oversized body returned token=%q err=%v", got, err)
+func TestVideoEnhancerConstants(t *testing.T) {
+	if videoAPI != "https://api.unblurimage.ai/api/upscaler" {
+		t.Fatalf("videoAPI = %q", videoAPI)
+	}
+	if videoPollInterval != 5*time.Second || videoPollMax != 90 {
+		t.Fatalf("poll settings = %v/%d", videoPollInterval, videoPollMax)
 	}
 }
 
-func TestValidFreeConvertToken(t *testing.T) {
-	if !validFreeConvertToken("eyJheader.payload.signature") {
-		t.Fatal("valid JWT was rejected")
+func TestVideoOutputSignature(t *testing.T) {
+	if !looksLikeVideo([]byte("....ftypisom")) {
+		t.Fatal("MP4 signature rejected")
 	}
-	for _, token := range []string{"eyJonly-two.parts", "eyJ..signature", "eyJheader.payload.", "error.token.value", "eyJheader.payload.signature ", "eyJheader.payload.signature\n"} {
-		if validFreeConvertToken(token) {
-			t.Fatalf("invalid token accepted: %q", token)
+	for _, data := range [][]byte{[]byte("<html>error</html>"), []byte("plain text")} {
+		if looksLikeVideo(data) {
+			t.Fatalf("non-video signature accepted: %q", data)
 		}
-	}
-}
-
-func TestFreeConvertConstants(t *testing.T) {
-	if freeConvertAPI != "https://api.freeconvert.com/v1" {
-		t.Fatalf("freeConvertAPI = %q", freeConvertAPI)
-	}
-	if freeConvertVideoQuality != 60 {
-		t.Fatalf("quality = %d, want 60", freeConvertVideoQuality)
-	}
-	if VideoMaxBytes != 10*1024*1024 {
-		t.Fatalf("VideoMaxBytes = %d, want %d", VideoMaxBytes, 10*1024*1024)
-	}
-}
-
-func TestFreeConvertJobBody(t *testing.T) {
-	body := freeConvertJobBody("/tmp/my-video.mp4")
-	raw, err := json.Marshal(body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	text := string(raw)
-	for _, want := range []string{
-		`"operation":"import/upload"`, `"operation":"compress"`, `"input":"import-1"`,
-		`"input_format":"mp4"`, `"output_format":"mp4"`, `"video_codec_compress":"libx264"`,
-		`"compress_video":"by_percentage"`, `"video_compress_quality_percentage":60`,
-		`"operation":"export/url"`, `"filename":"my-video.mp4"`,
-	} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("job body tidak memuat %q: %s", want, text)
-		}
-	}
-}
-
-func TestFindUploadForm(t *testing.T) {
-	raw := json.RawMessage(`{"tasks":{"import-1":{"operation":"import/upload","result":{"form":{"url":"https://upload.example","parameters":{"signature":"sig-123"}}}}}}`)
-	url, signature := findUploadForm(raw)
-	if url != "https://upload.example" || signature != "sig-123" {
-		t.Fatalf("url=%q signature=%q", url, signature)
-	}
-}
-
-func TestFreeConvertExportURL(t *testing.T) {
-	raw := json.RawMessage(`{"export-1":{"operation":"export/url","result":{"url":"https://cdn.example/output.mp4"}}}`)
-	if got := freeConvertExportURL(raw); got != "https://cdn.example/output.mp4" {
-		t.Fatalf("export URL=%q", got)
-	}
-}
-
-func TestFreeConvertJobError(t *testing.T) {
-	job := freeConvertJob{Status: "failed"}
-	if got := job.Error(); got != "FreeConvert job failed" {
-		t.Fatalf("error=%q", got)
 	}
 }
 

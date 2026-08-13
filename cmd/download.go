@@ -135,7 +135,7 @@ func sendOneMedia(ctx context.Context, c *command.Ctx, m kamino.Media, title, ca
 		data, downloadErr := httpx.GetBytes(ctx, m.URL, 5*time.Minute, maxUploadBytes)
 		if downloadErr == nil {
 			metadata := downloadVideoMetadata(ctx, data)
-			err = c.SendMediaBytesStandalone(ctx, data, command.MediaVideo, caption, "", "video/mp4", metadata)
+			err = c.SendMediaBytesWithMetadata(ctx, data, command.MediaVideo, caption, "", "video/mp4", metadata)
 		} else {
 			err = downloadErr
 		}

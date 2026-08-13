@@ -45,9 +45,6 @@ func stickerHandler(ctx context.Context, c *command.Ctx) error {
 		_, err := c.Reply(ctx, "Kirim gambar/video dengan caption *"+config.MainPrefix()+"sticker*, atau reply medianya.")
 		return err
 	}
-	if _, err := c.Reply(ctx, "⏳ Membuat sticker..."); err != nil {
-		return err
-	}
 	c.React(ctx, "⏳")
 	processCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()

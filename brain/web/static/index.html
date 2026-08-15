@@ -3,39 +3,41 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>R-BOT | Command & Control Dashboard</title>
+  <title>R-BOT Control Center</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css" />
   <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
 
   <style>
     :root {
-      --bg-canvas: #090d16;
-      --bg-surface: #0f172a;
-      --bg-card: rgba(18, 24, 38, 0.75);
-      --bg-card-hover: rgba(26, 35, 54, 0.85);
-      --border-subtle: rgba(255, 255, 255, 0.07);
-      --border-glow: rgba(99, 102, 241, 0.25);
+      --bg-app: #0b0f17;
+      --bg-sidebar: #0f1420;
+      --bg-card: #151b28;
+      --bg-card-hover: #1a2233;
+      --bg-input: #121824;
       
-      --text-primary: #f8fafc;
-      --text-secondary: #94a3b8;
-      --text-muted: #64748b;
+      --border-color: rgba(255, 255, 255, 0.06);
+      --border-color-hover: rgba(255, 255, 255, 0.12);
 
-      --accent-500: #6366f1;
-      --accent-600: #4f46e5;
-      --accent-glow: rgba(99, 102, 241, 0.2);
+      --text-main: #f3f4f6;
+      --text-sub: #9ca3af;
+      --text-muted: #6b7280;
 
-      --success-500: #10b981;
-      --success-glow: rgba(16, 185, 129, 0.2);
+      --accent: #6366f1;
+      --accent-hover: #4f46e5;
+      --accent-subtle: rgba(99, 102, 241, 0.12);
+
+      --success: #10b981;
+      --success-subtle: rgba(16, 185, 129, 0.12);
       
-      --warning-500: #f59e0b;
-      --warning-glow: rgba(245, 158, 11, 0.2);
+      --warning: #f59e0b;
+      --warning-subtle: rgba(245, 158, 11, 0.12);
 
-      --danger-500: #ef4444;
-      --danger-glow: rgba(239, 68, 68, 0.2);
+      --danger: #ef4444;
+      --danger-subtle: rgba(239, 68, 68, 0.12);
 
       --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
       --font-mono: 'JetBrains Mono', monospace;
@@ -48,581 +50,363 @@
     }
 
     body {
-      background-color: var(--bg-canvas);
-      background-image: 
-        radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.08) 0px, transparent 50%),
-        radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.05) 0px, transparent 50%);
-      background-attachment: fixed;
-      color: var(--text-primary);
+      background-color: var(--bg-app);
+      color: var(--text-main);
       font-family: var(--font-sans);
       min-height: 100vh;
       display: flex;
-      flex-direction: column;
       overflow-x: hidden;
       -webkit-font-smoothing: antialiased;
     }
 
-    /* Scrollbar Customization */
-    ::-webkit-scrollbar {
-      width: 6px;
-      height: 6px;
-    }
-    ::-webkit-scrollbar-track {
-      background: rgba(0, 0, 0, 0.2);
-    }
-    ::-webkit-scrollbar-thumb {
-      background: rgba(255, 255, 255, 0.15);
-      border-radius: 4px;
-    }
-    ::-webkit-scrollbar-thumb:hover {
-      background: rgba(255, 255, 255, 0.25);
-    }
+    /* Scrollbars */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
 
-    /* Toast Notification Container */
-    #toastContainer {
-      position: fixed;
-      bottom: 1.5rem;
-      right: 1.5rem;
-      z-index: 10000;
+    /* Layout Skeleton */
+    #sidebar {
+      width: 240px;
+      background: var(--bg-sidebar);
+      border-right: 1px solid var(--border-color);
       display: flex;
       flex-direction: column;
-      gap: 0.75rem;
-      pointer-events: none;
+      height: 100vh;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      transition: width 0.25s ease;
     }
 
-    .toast {
-      background: var(--bg-surface);
-      border: 1px solid var(--border-subtle);
-      border-left: 4px solid var(--accent-500);
-      border-radius: 10px;
-      padding: 0.875rem 1.25rem;
-      color: var(--text-primary);
-      font-size: 0.875rem;
-      font-weight: 500;
-      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+    #mainContent {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    /* Sidebar Content */
+    .sidebar-header {
+      padding: 1.5rem 1.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .brand {
       display: flex;
       align-items: center;
       gap: 0.75rem;
-      pointer-events: auto;
-      animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-      max-width: 380px;
+      text-decoration: none;
     }
 
-    .toast-success { border-left-color: var(--success-500); }
-    .toast-error { border-left-color: var(--danger-500); }
-    .toast-warning { border-left-color: var(--warning-500); }
-
-    @keyframes slideInRight {
-      from { transform: translateX(100%); opacity: 0; }
-      to { transform: translateX(0); opacity: 1; }
-    }
-    @keyframes fadeOut {
-      to { opacity: 0; transform: translateY(10px); }
-    }
-
-    /* Modal Overlay Base */
-    .modal-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(9, 13, 22, 0.85);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      z-index: 9999;
+    .brand-logo {
+      width: 32px;
+      height: 32px;
+      background: var(--accent);
+      border-radius: 8px;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 1.5rem;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.25s ease;
-    }
-
-    .modal-overlay.active {
-      opacity: 1;
-      pointer-events: auto;
-    }
-
-    .modal-box {
-      background: rgba(15, 23, 42, 0.95);
-      border: 1px solid var(--border-glow);
-      border-radius: 20px;
-      padding: 2.25rem;
-      width: 100%;
-      max-width: 420px;
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 40px var(--accent-glow);
-      transform: scale(0.95);
-      transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-    }
-
-    .modal-overlay.active .modal-box {
-      transform: scale(1);
-    }
-
-    /* Login Modal Specifics */
-    .login-header {
-      text-align: center;
-      margin-bottom: 1.75rem;
-    }
-
-    .login-icon-box {
-      width: 56px;
-      height: 56px;
-      background: linear-gradient(135deg, var(--accent-500) 0%, #8b5cf6 100%);
-      border-radius: 16px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 0 10px 20px -5px rgba(99, 102, 241, 0.5);
-      margin-bottom: 1rem;
-    }
-
-    .login-header h2 {
-      font-size: 1.5rem;
+      color: #fff;
       font-weight: 800;
-      letter-spacing: -0.02em;
-      background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
+      font-size: 1rem;
     }
 
-    .login-header p {
-      color: var(--text-secondary);
+    .brand-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text-main);
+      letter-spacing: -0.01em;
+    }
+
+    .sidebar-nav {
+      flex: 1;
+      padding: 0.5rem 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.65rem 0.85rem;
+      color: var(--text-sub);
+      border-radius: 8px;
+      font-weight: 500;
       font-size: 0.875rem;
-      margin-top: 0.35rem;
+      background: transparent;
+      border: none;
+      width: 100%;
+      text-align: left;
+      cursor: pointer;
+      transition: all 0.15s ease;
     }
 
-    /* Form Controls */
-    .form-group {
-      margin-bottom: 1.25rem;
+    .nav-item:hover {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.03);
     }
 
-    .form-label {
-      display: block;
+    .nav-item.active {
+      color: #ffffff;
+      background: var(--accent);
+      font-weight: 600;
+    }
+
+    .nav-icon {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+    }
+
+    .sidebar-footer {
+      padding: 1rem 1.25rem;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .user-info {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    .user-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--bg-card-hover);
+      display: flex;
+      align-items: center;
+      justify-content: center;
       font-size: 0.75rem;
       font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--text-secondary);
-      margin-bottom: 0.5rem;
+      color: var(--text-sub);
     }
 
-    .form-input {
-      width: 100%;
-      padding: 0.85rem 1.1rem;
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid var(--border-subtle);
-      border-radius: 10px;
-      color: var(--text-primary);
-      font-family: var(--font-sans);
-      font-size: 0.95rem;
-      outline: none;
-      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    /* Top Navbar */
+    .topbar {
+      height: 64px;
+      padding: 0 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-color);
+      background: rgba(11, 15, 23, 0.8);
+      backdrop-filter: blur(8px);
+      position: sticky;
+      top: 0;
+      z-index: 40;
     }
 
-    .form-input:focus {
-      border-color: var(--accent-500);
-      background: rgba(99, 102, 241, 0.06);
-      box-shadow: 0 0 0 4px var(--accent-glow);
+    .topbar-status {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.825rem;
+      font-weight: 600;
+      padding: 0.35rem 0.75rem;
+      border-radius: 9999px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
     }
 
-    /* Buttons */
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--text-muted);
+    }
+    .status-dot.online { background: var(--success); box-shadow: 0 0 8px var(--success); }
+    .status-dot.offline { background: var(--danger); }
+
+    .topbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    /* Buttons & Controls */
     .btn {
       display: inline-flex;
       align-items: center;
       justify-content: center;
       gap: 0.5rem;
-      padding: 0.75rem 1.35rem;
-      border-radius: 10px;
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
       font-weight: 600;
-      font-size: 0.875rem;
+      font-size: 0.825rem;
       cursor: pointer;
       border: 1px solid transparent;
-      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      transition: all 0.15s ease;
       user-select: none;
     }
 
-    .btn-primary {
-      background: linear-gradient(135deg, var(--accent-500) 0%, var(--accent-600) 100%);
-      color: #ffffff;
-      box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
-    }
-    .btn-primary:hover {
-      transform: translateY(-1.5px);
-      box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5);
-    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent-hover); }
 
-    .btn-secondary {
-      background: rgba(255, 255, 255, 0.05);
-      color: var(--text-primary);
-      border-color: var(--border-subtle);
-    }
-    .btn-secondary:hover {
-      background: rgba(255, 255, 255, 0.09);
-      border-color: rgba(255, 255, 255, 0.15);
-    }
+    .btn-secondary { background: var(--bg-card); color: var(--text-main); border-color: var(--border-color); }
+    .btn-secondary:hover { background: var(--bg-card-hover); border-color: var(--border-color-hover); }
 
-    .btn-warning {
-      background: rgba(245, 158, 11, 0.12);
-      color: #fbbf24;
-      border-color: rgba(245, 158, 11, 0.25);
-    }
-    .btn-warning:hover {
-      background: rgba(245, 158, 11, 0.22);
-      border-color: rgba(245, 158, 11, 0.4);
-    }
+    .btn-danger { background: var(--danger-subtle); color: var(--danger); border-color: rgba(239, 68, 68, 0.2); }
+    .btn-danger:hover { background: rgba(239, 68, 68, 0.2); }
 
-    .btn-danger {
-      background: rgba(239, 68, 68, 0.12);
-      color: #f87171;
-      border-color: rgba(239, 68, 68, 0.25);
-    }
-    .btn-danger:hover {
-      background: rgba(239, 68, 68, 0.22);
-      border-color: rgba(239, 68, 68, 0.4);
-    }
+    .btn-warning { background: var(--warning-subtle); color: var(--warning); border-color: rgba(245, 158, 11, 0.2); }
+    .btn-warning:hover { background: rgba(245, 158, 11, 0.2); }
 
-    .btn-sm {
-      padding: 0.45rem 0.85rem;
-      font-size: 0.8rem;
-      border-radius: 8px;
-    }
+    .btn-sm { padding: 0.35rem 0.75rem; font-size: 0.775rem; }
 
-    .btn-block {
-      width: 100%;
-    }
-
-    .error-alert {
-      background: rgba(239, 68, 68, 0.1);
-      border: 1px solid rgba(239, 68, 68, 0.25);
-      color: #f87171;
-      padding: 0.75rem 1rem;
-      border-radius: 8px;
-      font-size: 0.825rem;
-      margin-top: 1rem;
-      display: none;
-      text-align: center;
-    }
-
-    /* Top Navbar */
-    header {
-      background: rgba(15, 23, 42, 0.8);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      border-bottom: 1px solid var(--border-subtle);
-      padding: 0.9rem 2rem;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      position: sticky;
-      top: 0;
-      z-index: 100;
-    }
-
-    .brand-wrap {
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-    }
-
-    .brand-avatar {
-      width: 42px;
-      height: 42px;
-      background: linear-gradient(135deg, var(--accent-500), #8b5cf6);
-      border-radius: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 0 0 15px var(--accent-glow);
-    }
-
-    .brand-info h1 {
-      font-size: 1.15rem;
-      font-weight: 800;
-      letter-spacing: -0.01em;
-    }
-
-    .brand-info span {
-      font-size: 0.75rem;
-      color: var(--text-secondary);
-      font-weight: 500;
-    }
-
-    .nav-actions {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-    }
-
-    /* Pulse Status Badge */
-    .status-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      padding: 0.4rem 0.85rem;
-      border-radius: 9999px;
-      font-size: 0.75rem;
-      font-weight: 700;
-      letter-spacing: 0.04em;
-    }
-
-    .status-online {
-      background: rgba(16, 185, 129, 0.12);
-      color: #34d399;
-      border: 1px solid rgba(16, 185, 129, 0.3);
-    }
-
-    .status-offline {
-      background: rgba(239, 68, 68, 0.12);
-      color: #f87171;
-      border: 1px solid rgba(239, 68, 68, 0.3);
-    }
-
-    .status-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: currentColor;
-      position: relative;
-    }
-
-    .status-online .status-dot::after {
-      content: '';
-      position: absolute;
-      inset: -3px;
-      border-radius: 50%;
-      background: currentColor;
-      opacity: 0.5;
-      animation: pulseRing 1.8s infinite ease-out;
-    }
-
-    @keyframes pulseRing {
-      0% { transform: scale(1); opacity: 0.8; }
-      100% { transform: scale(2.4); opacity: 0; }
-    }
-
-    /* Navigation Bar */
-    nav {
-      background: rgba(15, 23, 42, 0.5);
-      border-bottom: 1px solid var(--border-subtle);
-      padding: 0 2rem;
-      display: flex;
-      gap: 0.5rem;
-      overflow-x: auto;
-    }
-
-    .nav-tab {
-      padding: 0.9rem 1.25rem;
-      font-size: 0.875rem;
-      font-weight: 600;
-      color: var(--text-secondary);
-      background: none;
-      border: none;
-      border-bottom: 2px solid transparent;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 0.6rem;
-      white-space: nowrap;
-      transition: all 0.2s;
-    }
-
-    .nav-tab:hover {
-      color: var(--text-primary);
-      background: rgba(255, 255, 255, 0.02);
-    }
-
-    .nav-tab.active {
-      color: var(--accent-500);
-      border-bottom-color: var(--accent-500);
-      background: rgba(99, 102, 241, 0.05);
-    }
-
-    .tab-badge {
-      background: rgba(255, 255, 255, 0.1);
-      color: var(--text-secondary);
-      font-size: 0.7rem;
-      padding: 0.15rem 0.5rem;
-      border-radius: 6px;
-    }
-
-    .nav-tab.active .tab-badge {
-      background: rgba(99, 102, 241, 0.2);
-      color: #a5b4fc;
-    }
-
-    /* Main Content Wrapper */
-    main {
-      flex: 1;
+    /* Page Views */
+    .view-container {
       padding: 2rem;
-      max-width: 1440px;
+      max-width: 1300px;
       width: 100%;
       margin: 0 auto;
-    }
-
-    .tab-content {
       display: none;
-      animation: fadeIn 0.25s ease forwards;
+      animation: fadeIn 0.2s ease forwards;
     }
-
-    .tab-content.active {
-      display: block;
-    }
+    .view-container.active { display: block; }
 
     @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(6px); }
+      from { opacity: 0; transform: translateY(4px); }
       to { opacity: 1; transform: translateY(0); }
     }
 
-    /* Card Grid */
-    .stats-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 1.25rem;
-      margin-bottom: 1.75rem;
+    /* Greeting Banner */
+    .greeting-header {
+      margin-bottom: 2rem;
     }
-
-    .card {
-      background: var(--bg-card);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      border: 1px solid var(--border-subtle);
-      border-radius: 16px;
-      padding: 1.35rem;
-      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-      position: relative;
-      overflow: hidden;
-    }
-
-    .card:hover {
-      background: var(--bg-card-hover);
-      border-color: rgba(255, 255, 255, 0.12);
-      transform: translateY(-2px);
-      box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.5);
-    }
-
-    .card-top {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 1rem;
-    }
-
-    .card-label {
-      font-size: 0.75rem;
-      font-weight: 700;
-      color: var(--text-secondary);
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-    }
-
-    .card-icon {
-      width: 36px;
-      height: 36px;
-      border-radius: 10px;
-      background: rgba(99, 102, 241, 0.1);
-      color: var(--accent-500);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .stat-main {
-      font-size: 1.85rem;
+    .greeting-header h2 {
+      font-size: 1.5rem;
       font-weight: 800;
       letter-spacing: -0.02em;
-      line-height: 1.2;
+    }
+    .greeting-header p {
+      color: var(--text-sub);
+      font-size: 0.9rem;
+      margin-top: 0.25rem;
     }
 
-    .stat-sub {
-      font-size: 0.8rem;
-      color: var(--text-secondary);
-      margin-top: 0.35rem;
+    /* Metric Cards Grid */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 1.25rem;
+      margin-bottom: 2rem;
     }
 
-    /* Progress bar gauge */
-    .progress-track {
-      height: 6px;
-      width: 100%;
-      background: rgba(255, 255, 255, 0.07);
-      border-radius: 9999px;
-      margin-top: 0.85rem;
-      overflow: hidden;
-    }
-
-    .progress-fill {
-      height: 100%;
-      border-radius: 9999px;
-      background: linear-gradient(90deg, var(--accent-500), #8b5cf6);
-      transition: width 0.5s ease;
-    }
-
-    /* Pairing Code Box */
-    .pairing-card {
-      background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(245, 158, 11, 0.03) 100%);
-      border: 1px dashed rgba(245, 158, 11, 0.35);
+    .metric-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
       border-radius: 12px;
-      padding: 1.1rem;
-      margin-top: 1rem;
-      text-align: center;
-      position: relative;
+      padding: 1.25rem;
+      transition: all 0.2s ease;
+    }
+    .metric-card:hover {
+      border-color: var(--border-color-hover);
     }
 
-    .pairing-code-text {
-      font-family: var(--font-mono);
-      font-size: 1.6rem;
+    .metric-title {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-sub);
+    }
+
+    .metric-value {
+      font-size: 1.75rem;
       font-weight: 800;
-      color: #fcd34d;
-      letter-spacing: 0.25em;
-      margin: 0.5rem 0;
-      text-shadow: 0 0 12px rgba(245, 158, 11, 0.3);
+      letter-spacing: -0.02em;
+      margin: 0.35rem 0;
     }
 
-    .copy-btn {
-      background: rgba(245, 158, 11, 0.2);
-      border: 1px solid rgba(245, 158, 11, 0.3);
-      color: #fcd34d;
-      padding: 0.3rem 0.75rem;
-      border-radius: 6px;
+    .metric-change {
       font-size: 0.75rem;
       font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-    .copy-btn:hover {
-      background: rgba(245, 158, 11, 0.35);
+      color: var(--success);
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
     }
 
-    /* Tables */
-    .tables-grid {
+    /* Activity Feed Section */
+    .two-column-layout {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+      grid-template-columns: 2fr 1fr;
       gap: 1.5rem;
     }
 
-    .table-panel {
-      background: var(--bg-card);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      border: 1px solid var(--border-subtle);
-      border-radius: 16px;
-      overflow: hidden;
+    @media (max-width: 1024px) {
+      .two-column-layout { grid-template-columns: 1fr; }
     }
 
-    .table-panel-header {
-      padding: 1.1rem 1.5rem;
-      background: rgba(255, 255, 255, 0.02);
-      border-bottom: 1px solid var(--border-subtle);
+    .panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 1.25rem;
+    }
+
+    .panel-title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      margin-bottom: 1.25rem;
       display: flex;
       align-items: center;
       justify-content: space-between;
     }
 
-    .table-panel-title {
-      font-weight: 700;
-      font-size: 0.95rem;
+    .feed-list {
       display: flex;
-      align-items: center;
-      gap: 0.5rem;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .feed-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      font-size: 0.85rem;
+    }
+
+    .feed-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      margin-top: 0.35rem;
+      flex-shrink: 0;
+    }
+
+    .feed-content {
+      flex: 1;
+    }
+
+    .feed-text {
+      color: var(--text-main);
+      font-weight: 500;
+    }
+
+    .feed-meta {
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      margin-top: 0.15rem;
+    }
+
+    .feed-time {
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      flex-shrink: 0;
+    }
+
+    /* Tables */
+    .table-responsive {
+      overflow-x: auto;
     }
 
     table {
@@ -633,501 +417,541 @@
     }
 
     th {
-      background: rgba(0, 0, 0, 0.2);
-      padding: 0.85rem 1.25rem;
-      color: var(--text-secondary);
-      font-weight: 700;
-      font-size: 0.725rem;
+      padding: 0.75rem 1rem;
+      color: var(--text-muted);
+      font-weight: 600;
+      font-size: 0.75rem;
       text-transform: uppercase;
       letter-spacing: 0.05em;
-      border-bottom: 1px solid var(--border-subtle);
+      border-bottom: 1px solid var(--border-color);
     }
 
     td {
-      padding: 0.85rem 1.25rem;
-      border-bottom: 1px solid var(--border-subtle);
-      color: var(--text-primary);
+      padding: 0.85rem 1rem;
+      border-bottom: 1px solid var(--border-color);
+      color: var(--text-main);
     }
 
-    tbody tr:last-child td {
-      border-bottom: none;
-    }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover { background: rgba(255, 255, 255, 0.015); }
 
-    tbody tr:hover {
-      background: rgba(255, 255, 255, 0.025);
-    }
-
-    .rank-pill {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 26px;
-      height: 26px;
+    .input-field {
+      padding: 0.5rem 0.85rem;
+      background: var(--bg-input);
+      border: 1px solid var(--border-color);
       border-radius: 8px;
-      font-weight: 700;
-      font-size: 0.75rem;
-      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-main);
+      font-size: 0.825rem;
+      outline: none;
+      width: 100%;
     }
+    .input-field:focus { border-color: var(--accent); }
 
-    .rank-1 { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
-    .rank-2 { background: rgba(148, 163, 184, 0.2); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.3); }
-    .rank-3 { background: rgba(180, 83, 9, 0.2); color: #f97316; border: 1px solid rgba(180, 83, 9, 0.3); }
-
-    /* Console Logs */
-    .console-wrapper {
-      background: #05080e;
-      border: 1px solid var(--border-subtle);
-      border-radius: 16px;
-      overflow: hidden;
+    /* Modals & Toasts */
+    .toast-container {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      z-index: 9999;
       display: flex;
       flex-direction: column;
-      height: 640px;
-      box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.8);
-    }
-
-    .console-topbar {
-      background: rgba(15, 23, 42, 0.9);
-      padding: 0.85rem 1.35rem;
-      border-bottom: 1px solid var(--border-subtle);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 0.75rem;
-    }
-
-    .console-controls {
-      display: flex;
-      align-items: center;
-      gap: 0.6rem;
-      flex-wrap: wrap;
-    }
-
-    .log-filter-input {
-      padding: 0.45rem 0.85rem;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid var(--border-subtle);
-      border-radius: 8px;
-      color: var(--text-primary);
-      font-size: 0.8rem;
-      outline: none;
-      width: 220px;
-    }
-
-    .log-filter-input:focus {
-      border-color: var(--accent-500);
-    }
-
-    .console-viewport {
-      flex: 1;
-      padding: 1.1rem;
-      font-family: var(--font-mono);
-      font-size: 0.825rem;
-      line-height: 1.65;
-      overflow-y: auto;
-      color: #94a3b8;
-      white-space: pre-wrap;
-      word-break: break-all;
-    }
-
-    .log-line {
-      margin-bottom: 0.25rem;
-      display: flex;
-      align-items: flex-start;
       gap: 0.5rem;
     }
-    .log-error { color: #f87171; }
-    .log-warn { color: #fbbf24; }
-    .log-rbot { color: #a5b4fc; }
-    .log-info { color: #34d399; }
 
-    /* Web Terminal */
-    .terminal-wrapper {
-      background: #05080e;
-      border: 1px solid var(--border-subtle);
-      border-radius: 16px;
+    .toast {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-left: 4px solid var(--accent);
+      padding: 0.75rem 1.25rem;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+      animation: slideIn 0.2s ease forwards;
+    }
+    .toast.success { border-left-color: var(--success); }
+    .toast.error { border-left-color: var(--danger); }
+    .toast.warning { border-left-color: var(--warning); }
+
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      z-index: 9000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+    .modal-backdrop.active { opacity: 1; pointer-events: auto; }
+
+    .modal-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 1.75rem;
+      width: 100%;
+      max-width: 440px;
+    }
+
+    /* Terminal Wrapper */
+    .terminal-box {
+      background: #06090e;
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      height: 600px;
       overflow: hidden;
       display: flex;
       flex-direction: column;
-      height: 680px;
-      box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.8);
     }
-
-    .terminal-topbar {
-      background: rgba(15, 23, 42, 0.9);
-      padding: 0.85rem 1.35rem;
-      border-bottom: 1px solid var(--border-subtle);
+    .terminal-bar {
+      padding: 0.75rem 1rem;
+      background: var(--bg-sidebar);
+      border-bottom: 1px solid var(--border-color);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 0.75rem;
     }
-
-    .mac-dots {
-      display: flex;
-      gap: 6px;
-    }
-    .mac-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-    }
-    .dot-red { background: #ef4444; }
-    .dot-yellow { background: #f59e0b; }
-    .dot-green { background: #10b981; }
-
-    #terminal {
-      flex: 1;
-      padding: 0.75rem;
-    }
-
-    /* Responsive Adjustments */
-    @media (max-width: 900px) {
-      header, nav, main {
-        padding-left: 1rem;
-        padding-right: 1rem;
-      }
-      .tables-grid {
-        grid-template-columns: 1fr;
-      }
-      .console-wrapper, .terminal-wrapper {
-        height: 520px;
-      }
-    }
+    #terminal { flex: 1; padding: 0.5rem; }
   </style>
 </head>
 <body>
 
-  <!-- Toast Notification Container -->
-  <div id="toastContainer"></div>
+  <!-- Toast Container -->
+  <div id="toastContainer" class="toast-container"></div>
 
   <!-- Login Modal -->
-  <div id="loginModal" class="modal-overlay">
-    <div class="modal-box">
-      <div class="login-header">
-        <div class="login-icon-box">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-        </div>
-        <h2>R-BOT Access</h2>
-        <p>Masukkan password untuk membuka Web Control Center</p>
+  <div id="loginModal" class="modal-backdrop active">
+    <div class="modal-box" style="max-width: 360px;">
+      <div style="text-align: center; margin-bottom: 1.5rem;">
+        <div class="brand-logo" style="width: 44px; height: 44px; margin: 0 auto 0.75rem; font-size: 1.25rem;">R</div>
+        <h3 style="font-size: 1.25rem; font-weight: 700;">R-BOT Control Center</h3>
+        <p style="color: var(--text-sub); font-size: 0.825rem; margin-top: 0.25rem;">Masukkan password admin untuk melanjutkan.</p>
       </div>
-      <form id="loginForm" onsubmit="handleLogin(event)">
-        <div class="form-group">
-          <label class="form-label" for="passwordInput">Password Admin</label>
-          <input type="password" id="passwordInput" class="form-input" placeholder="••••••••••••" required autofocus>
+      <form onsubmit="handleLogin(event)">
+        <div style="margin-bottom: 1rem;">
+          <input type="password" id="loginPassword" class="input-field" placeholder="Password admin..." required autofocus style="padding: 0.75rem 1rem;">
         </div>
-        <button type="submit" class="btn btn-primary btn-block">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
-          Masuk Dashboard
-        </button>
-        <div id="loginError" class="error-alert">Password salah! Silakan coba lagi.</div>
+        <button type="submit" class="btn btn-primary" style="width: 100%; padding: 0.75rem;">Masuk</button>
+        <div id="loginError" style="color: var(--danger); font-size: 0.8rem; margin-top: 0.75rem; display: none; text-align: center;"></div>
       </form>
     </div>
   </div>
 
-  <!-- Restart Confirmation Modal -->
-  <div id="restartModal" class="modal-overlay">
-    <div class="modal-box" style="max-width: 380px; text-align: center;">
-      <div style="width: 50px; height: 50px; background: rgba(245, 158, 11, 0.15); color: #fbbf24; border-radius: 14px; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 1rem;">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-      </div>
-      <h3 style="font-size: 1.25rem; font-weight: 800; margin-bottom: 0.5rem;">Restart Engine Bot?</h3>
-      <p style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 1.5rem;">Bot akan berhenti sejenak dan memulai ulang proses Go di server.</p>
-      <div style="display: flex; gap: 0.75rem;">
-        <button class="btn btn-secondary btn-block" onclick="closeRestartModal()">Batal</button>
-        <button class="btn btn-warning btn-block" onclick="confirmRestartBot()">Ya, Restart</button>
-      </div>
+  <!-- Broadcast / Direct Message Modal -->
+  <div id="messageModal" class="modal-backdrop">
+    <div class="modal-box">
+      <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 1rem;">Kirim Pesan WhatsApp</h3>
+      <form onsubmit="sendBroadcastMsg(event)">
+        <div style="margin-bottom: 1rem;">
+          <label style="display: block; font-size: 0.75rem; color: var(--text-sub); margin-bottom: 0.35rem;">Target JID / Nomor</label>
+          <input type="text" id="targetJidInput" class="input-field" placeholder="628xxxxxxxxxx@s.whatsapp.net" required>
+        </div>
+        <div style="margin-bottom: 1.25rem;">
+          <label style="display: block; font-size: 0.75rem; color: var(--text-sub); margin-bottom: 0.35rem;">Pesan Teks</label>
+          <textarea id="messageContentInput" class="input-field" rows="4" placeholder="Tulis pesan..." required style="resize: vertical;"></textarea>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+          <button type="button" class="btn btn-secondary" onclick="closeMessageModal()">Batal</button>
+          <button type="submit" class="btn btn-primary">Kirim Pesan</button>
+        </div>
+      </form>
     </div>
   </div>
 
-  <!-- Header -->
-  <header>
-    <div class="brand-wrap">
-      <div class="brand-avatar">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-      </div>
-      <div class="brand-info">
-        <h1>R-BOT Control Center</h1>
-        <span>WhatsApp Automation Suite v2.0</span>
-      </div>
+  <!-- Sidebar Navigation -->
+  <aside id="sidebar">
+    <div class="sidebar-header">
+      <a href="#" class="brand">
+        <div class="brand-logo">R</div>
+        <span class="brand-title">R-BOT Suite</span>
+      </a>
     </div>
 
-    <div class="nav-actions">
-      <div id="statusBadge" class="status-badge status-offline">
-        <span class="status-dot"></span>
-        <span id="statusText">MEMERIKSA...</span>
-      </div>
-
-      <button class="btn btn-warning btn-sm" onclick="openRestartModal()">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-        Restart
+    <nav class="sidebar-nav">
+      <button class="nav-item active" onclick="switchNav('overview', this)">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+        Overview
       </button>
 
-      <button class="btn btn-secondary btn-sm" onclick="reloadConfig()">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
-        Reload Config
+      <button class="nav-item" onclick="switchNav('activity', this)">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+        Activity
       </button>
 
-      <button class="btn btn-danger btn-sm" onclick="logout()">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-        Logout
+      <button class="nav-item" onclick="switchNav('users', this)">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+        Users & Groups
       </button>
+
+      <button class="nav-item" onclick="switchNav('commands', this)">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        Commands
+      </button>
+
+      <button class="nav-item" onclick="switchNav('logs', this)">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        Logs & Audit
+      </button>
+
+      <button class="nav-item" onclick="switchNav('settings', this)">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        Settings
+      </button>
+
+      <button class="nav-item" onclick="switchNav('terminal', this)">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M4 17l6-6-6-6m8 14h8"/></svg>
+        Terminal
+      </button>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="user-info">
+        <div class="user-avatar">A</div>
+        <div>
+          <div style="font-size: 0.8rem; font-weight: 600;">Admin</div>
+          <div style="font-size: 0.7rem; color: var(--text-muted);">Session Active</div>
+        </div>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="logout()" title="Logout">🚪</button>
     </div>
-  </header>
+  </aside>
 
-  <!-- Nav Tabs -->
-  <nav>
-    <button class="nav-tab active" onclick="switchTab('monitoring')">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
-      Monitoring <span class="tab-badge">Live</span>
-    </button>
+  <!-- Main Container -->
+  <div id="mainContent">
 
-    <button class="nav-tab" onclick="switchTab('logs')">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-      Real-Time Logs <span class="tab-badge" id="logBadgeCount">0</span>
-    </button>
-
-    <button class="nav-tab" onclick="switchTab('terminal')">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-      Web Terminal
-    </button>
-
-    <button class="nav-tab" onclick="switchTab('config')">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-      Config Viewer
-    </button>
-  </nav>
-
-  <!-- Main Body -->
-  <main>
-    <!-- TAB 1: MONITORING -->
-    <div id="tab-monitoring" class="tab-content active">
-      <div class="stats-grid">
-
-        <!-- Card 1: WA Connection -->
-        <div class="card">
-          <div class="card-top">
-            <span class="card-label">Koneksi WhatsApp</span>
-            <div class="card-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-            </div>
-          </div>
-          <div class="stat-main" id="waConnected">--</div>
-          <div class="stat-sub" id="waDetails">Nomor Bot: --</div>
-
-          <div id="pairingCard" class="pairing-card" style="display: none;">
-            <div style="font-size: 0.725rem; font-weight: 700; color: #fbbf24; text-transform: uppercase; letter-spacing: 0.05em;">Pairing Code WhatsApp</div>
-            <div id="pairingCode" class="pairing-code-text">----</div>
-            <button class="copy-btn" onclick="copyPairingCode()">Salin Kode</button>
-          </div>
-        </div>
-
-        <!-- Card 2: Memory -->
-        <div class="card">
-          <div class="card-top">
-            <span class="card-label">Penggunaan RAM</span>
-            <div class="card-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
-            </div>
-          </div>
-          <div class="stat-main" id="ramAlloc">0 MB</div>
-          <div class="stat-sub" id="ramSys">System: 0 MB | GC: 0</div>
-          <div class="progress-track">
-            <div id="ramBar" class="progress-fill" style="width: 0%;"></div>
-          </div>
-        </div>
-
-        <!-- Card 3: System Goroutines -->
-        <div class="card">
-          <div class="card-top">
-            <span class="card-label">Goroutines & Uptime</span>
-            <div class="card-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-            </div>
-          </div>
-          <div class="stat-main" id="goroutines">0</div>
-          <div class="stat-sub" id="botUptime">Uptime: 0s</div>
-        </div>
-
-        <!-- Card 4: Stats -->
-        <div class="card">
-          <div class="card-top">
-            <span class="card-label">Total Interaksi</span>
-            <div class="card-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-            </div>
-          </div>
-          <div class="stat-main" id="totalChats">0</div>
-          <div class="stat-sub" id="totalCmds">Commands: 0</div>
-        </div>
-
+    <!-- Topbar -->
+    <header class="topbar">
+      <div class="topbar-status">
+        <span id="statusDot" class="status-dot"></span>
+        <span id="statusText">Checking status...</span>
       </div>
 
-      <!-- Top Users & Groups Tables -->
-      <div class="tables-grid">
-
-        <!-- Top Users Table -->
-        <div class="table-panel">
-          <div class="table-panel-header">
-            <div class="table-panel-title">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent-500)" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-              Top 10 Pengguna Aktif
-            </div>
-            <input type="text" id="userSearch" class="log-filter-input" placeholder="Cari user JID..." oninput="filterUsersTable()" style="width: 150px;">
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th style="width: 50px;">Rank</th>
-                <th>User JID</th>
-                <th>Chats</th>
-                <th>Cmds</th>
-              </tr>
-            </thead>
-            <tbody id="topUsersBody">
-              <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Memuat statistik...</td></tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- Top Groups Table -->
-        <div class="table-panel">
-          <div class="table-panel-header">
-            <div class="table-panel-title">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--success-500)" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-3-3.87"/><path d="M9 21v-2a4 4 0 0 1 3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><circle cx="9" cy="7" r="4"/></svg>
-              Top 10 Grup Aktif
-            </div>
-            <input type="text" id="groupSearch" class="log-filter-input" placeholder="Cari grup JID..." oninput="filterGroupsTable()" style="width: 150px;">
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th style="width: 50px;">Rank</th>
-                <th>Group JID</th>
-                <th>Commands</th>
-              </tr>
-            </thead>
-            <tbody id="topGroupsBody">
-              <tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Memuat statistik...</td></tr>
-            </tbody>
-          </table>
-        </div>
-
+      <div class="topbar-actions">
+        <button class="btn btn-secondary btn-sm" onclick="openMessageModal()">💬 Kirim Pesan</button>
+        <button class="btn btn-secondary btn-sm" onclick="reloadConfig()">🔁 Reload Config</button>
+        <button class="btn btn-warning btn-sm" onclick="restartBot()">🔄 Restart</button>
       </div>
-    </div>
+    </header>
 
-    <!-- TAB 2: REAL-TIME LOGS -->
-    <div id="tab-logs" class="tab-content">
-      <div class="console-wrapper">
-        <div class="console-topbar">
-          <div style="display: flex; align-items: center; gap: 0.75rem;">
-            <div class="mac-dots">
-              <span class="mac-dot dot-red"></span>
-              <span class="mac-dot dot-yellow"></span>
-              <span class="mac-dot dot-green"></span>
-            </div>
-            <span style="font-weight: 700; font-size: 0.85rem; color: var(--text-secondary);">rbot.log stream</span>
+    <!-- VIEW 1: OVERVIEW -->
+    <section id="view-overview" class="view-container active">
+      <div class="greeting-header">
+        <h2>Selamat Datang 👋</h2>
+        <p id="greetingSub">Semua sistem R-BOT terpantau berjalan dengan lancar.</p>
+      </div>
+
+      <!-- 4 Core Metrics -->
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <div class="metric-title">Messages Today</div>
+          <div class="metric-value" id="metricChats">0</div>
+          <div class="metric-change">↑ 14.2% dibanding kemarin</div>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-title">Active Users</div>
+          <div class="metric-value" id="metricUsers">0</div>
+          <div class="metric-change">Total pengirim terdaftar</div>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-title">RAM Usage</div>
+          <div class="metric-value" id="metricRam">0 MB</div>
+          <div class="metric-change" id="metricRamSub" style="color: var(--text-muted);">Optimal Memory Heap</div>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-title">Engine Uptime</div>
+          <div class="metric-value" id="metricUptime">0m</div>
+          <div class="metric-change" id="metricUptimeSub" style="color: var(--text-muted);">System Up</div>
+        </div>
+      </div>
+
+      <!-- Overview 2 Column -->
+      <div class="two-column-layout">
+        <!-- Message Activity Chart Panel -->
+        <div class="panel">
+          <div class="panel-title">
+            <span>Volume Pesan 24 Jam Terakhir</span>
+            <span style="font-size: 0.75rem; color: var(--text-muted);">Hourly distribution</span>
           </div>
+          <div style="height: 220px; width: 100%; display: flex; align-items: flex-end; gap: 6px; padding-top: 1rem;" id="chartBars">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
 
-          <div class="console-controls">
-            <input type="text" id="logFilter" class="log-filter-input" placeholder="Filter log keyword..." oninput="filterLogs()">
-            
-            <button class="btn btn-secondary btn-sm" id="btnToggleScroll" onclick="toggleAutoScroll()">
-              📜 Auto-scroll: ON
+        <!-- Live Activity Feed -->
+        <div class="panel">
+          <div class="panel-title">
+            <span>Aktivitas Terakhir</span>
+            <button class="btn btn-secondary btn-sm" onclick="fetchStatus()">Refresh</button>
+          </div>
+          <div class="feed-list" id="activityFeed">
+            <div style="font-size: 0.8rem; color: var(--text-muted); text-align: center; padding: 1rem;">Memuat aktivitas...</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW 2: ACTIVITY -->
+    <section id="view-activity" class="view-container">
+      <div class="greeting-header">
+        <h2>Activity Feed</h2>
+        <p>Jejak eksekusi command & status event WhatsApp secara realtime.</p>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">
+          <span>Feed Event System</span>
+          <input type="text" id="feedSearch" class="input-field" placeholder="Filter aktivitas..." oninput="renderActivityFeedFull()" style="width: 200px;">
+        </div>
+        <div class="feed-list" id="activityFeedFull"></div>
+      </div>
+    </section>
+
+    <!-- VIEW 3: USERS & GROUPS -->
+    <section id="view-users" class="view-container">
+      <div class="greeting-header">
+        <h2>Pengguna & Grup</h2>
+        <p>Kelola interaksi pengirim pesan dan statistik grup WhatsApp.</p>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+        <div class="panel">
+          <div class="panel-title">
+            <span>Pengguna Paling Aktif</span>
+            <input type="text" id="userFilterInput" class="input-field" placeholder="Cari JID..." oninput="renderUsersTable()" style="width: 200px;">
+          </div>
+          <div class="table-responsive">
+            <table>
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>JID / Nomor</th>
+                  <th>Interaksi</th>
+                  <th>Commands</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="usersTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">
+            <span>Grup Paling Aktif</span>
+            <input type="text" id="groupFilterInput" class="input-field" placeholder="Cari Grup JID..." oninput="renderGroupsTable()" style="width: 200px;">
+          </div>
+          <div class="table-responsive">
+            <table>
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Group JID</th>
+                  <th>Total Commands</th>
+                </tr>
+              </thead>
+              <tbody id="groupsTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW 4: COMMANDS -->
+    <section id="view-commands" class="view-container">
+      <div class="greeting-header">
+        <h2>Command Analytics</h2>
+        <p>Statistik frekuensi penggunaan dan tingkat kesalahan command.</p>
+      </div>
+
+      <div class="two-column-layout">
+        <div class="panel">
+          <div class="panel-title">Top 10 Commands Digunakan</div>
+          <div class="table-responsive">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Command</th>
+                  <th>Total Penggunaan</th>
+                </tr>
+              </thead>
+              <tbody id="topCmdsBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">Command Paling Sering Error</div>
+          <div class="table-responsive">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Command</th>
+                  <th>Jumlah Error</th>
+                </tr>
+              </thead>
+              <tbody id="errCmdsBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW 5: LOGS & AUDIT -->
+    <section id="view-logs" class="view-container">
+      <div class="greeting-header">
+        <h2>Logs & Audit Trail</h2>
+        <p>Pemantauan log stream real-time dan log audit tindakan keamanan.</p>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+        <!-- Realtime Log Stream -->
+        <div class="panel">
+          <div class="panel-title">
+            <span>Console Log Stream</span>
+            <div style="display: flex; gap: 0.5rem;">
+              <input type="text" id="logSearchInput" class="input-field" placeholder="Filter log..." oninput="filterLogConsole()" style="width: 180px;">
+              <button class="btn btn-secondary btn-sm" id="autoScrollBtn" onclick="toggleAutoScroll()">Scroll: ON</button>
+              <button class="btn btn-secondary btn-sm" onclick="downloadLogs()">Download</button>
+              <button class="btn btn-secondary btn-sm" onclick="clearLogsConsole()">Clear</button>
+            </div>
+          </div>
+          <div id="logConsole" style="height: 380px; background: #06090e; font-family: var(--font-mono); font-size: 0.8rem; padding: 1rem; border-radius: 8px; overflow-y: auto; color: var(--text-sub); white-space: pre-wrap; line-height: 1.6;"></div>
+        </div>
+
+        <!-- Audit Log Table -->
+        <div class="panel">
+          <div class="panel-title">Audit Trail Keamanan</div>
+          <div class="table-responsive">
+            <table>
+              <thead>
+                <tr>
+                  <th>Waktu</th>
+                  <th>IP Address</th>
+                  <th>User</th>
+                  <th>Aksi</th>
+                  <th>Detail</th>
+                </tr>
+              </thead>
+              <tbody id="auditTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW 6: SETTINGS -->
+    <section id="view-settings" class="view-container">
+      <div class="greeting-header">
+        <h2>Pengaturan Bot & Kontrol Engine</h2>
+        <p>Kelola konfigurasi sistem, kontrol jalannya engine bot, dan opsi keamanan.</p>
+      </div>
+
+      <div class="two-column-layout">
+        <!-- Control Panel -->
+        <div class="panel">
+          <div class="panel-title">Kontrol Engine Bot</div>
+          <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+            <button class="btn btn-warning" onclick="restartBot()" style="justify-content: flex-start;">
+              🔄 Restart Process (Daur Ulang Biner)
             </button>
-            <button class="btn btn-secondary btn-sm" onclick="downloadLogs()">
-              💾 Export Log
+            <button class="btn btn-secondary" onclick="reloadConfig()" style="justify-content: flex-start;">
+              🔁 Reload Configuration (config.json)
             </button>
-            <button class="btn btn-secondary btn-sm" onclick="clearLogsConsole()">
-              🧹 Clear
+            <button class="btn btn-secondary" onclick="stopBot()" style="justify-content: flex-start;">
+              ⏹ Stop Process (Hentikan Bot Aman)
+            </button>
+            <button class="btn btn-danger" onclick="forceKillBot()" style="justify-content: flex-start; margin-top: 1rem;">
+              ☠ Force Kill Engine (Biner Terminate)
             </button>
           </div>
         </div>
 
-        <div id="logBody" class="console-viewport"></div>
-      </div>
-    </div>
-
-    <!-- TAB 3: WEB TERMINAL -->
-    <div id="tab-terminal" class="tab-content">
-      <div class="terminal-wrapper">
-        <div class="terminal-topbar">
-          <div style="display: flex; align-items: center; gap: 0.75rem;">
-            <div class="mac-dots">
-              <span class="mac-dot dot-red"></span>
-              <span class="mac-dot dot-yellow"></span>
-              <span class="mac-dot dot-green"></span>
-            </div>
-            <span style="font-weight: 700; font-size: 0.85rem; color: var(--text-secondary);">Bash Terminal (ptmx)</span>
+        <!-- Security & Status -->
+        <div class="panel">
+          <div class="panel-title">Status Keamanan Web</div>
+          <div style="font-size: 0.85rem; color: var(--text-sub); display: flex; flex-direction: column; gap: 0.5rem;">
+            <div>Session Type: <strong style="color: var(--text-main);">Bearer Token & Cookie</strong></div>
+            <div>Password Auth: <strong style="color: var(--success);">Protected (Hidden from Log)</strong></div>
+            <div>Rate Limiting: <strong style="color: var(--text-main);">5 Max Failed Attempts / 5 Min</strong></div>
+            <div>Web Server Port: <strong style="color: var(--accent);">7090</strong></div>
           </div>
+        </div>
+      </div>
 
-          <div class="console-controls">
+      <!-- Config JSON Editor/Viewer -->
+      <div class="panel" style="margin-top: 1.5rem;">
+        <div class="panel-title">
+          <span>Config Viewer (config.json)</span>
+          <button class="btn btn-secondary btn-sm" onclick="copyConfigJson()">📋 Copy JSON</button>
+        </div>
+        <pre id="configView" style="font-family: var(--font-mono); font-size: 0.825rem; color: #a5b4fc; background: #06090e; padding: 1rem; border-radius: 8px; overflow-x: auto; max-height: 400px;"></pre>
+      </div>
+    </section>
+
+    <!-- VIEW 7: TERMINAL -->
+    <section id="view-terminal" class="view-container">
+      <div class="greeting-header">
+        <h2>Web Terminal (ptmx)</h2>
+        <p>Akses shell perintah langsung di server tempat bot berjalan.</p>
+      </div>
+
+      <div class="terminal-box">
+        <div class="terminal-bar">
+          <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-sub);">Bash Session</span>
+          <div style="display: flex; gap: 0.5rem;">
             <button class="btn btn-secondary btn-sm" onclick="sendTerminalCmd('clear\n')">clear</button>
             <button class="btn btn-secondary btn-sm" onclick="sendTerminalCmd('ls -la\n')">ls -la</button>
             <button class="btn btn-secondary btn-sm" onclick="sendTerminalCmd('go version\n')">go version</button>
-            <button class="btn btn-secondary btn-sm" onclick="sendTerminalCmd('git status\n')">git status</button>
             <button class="btn btn-warning btn-sm" onclick="restartTerminal()">Restart Shell</button>
           </div>
         </div>
-
         <div id="terminal"></div>
       </div>
-    </div>
+    </section>
 
-    <!-- TAB 4: CONFIG VIEWER -->
-    <div id="tab-config" class="tab-content">
-      <div class="card">
-        <div class="card-top">
-          <span class="card-label">Konfigurasi Bot (config.json)</span>
-          <div style="display: flex; gap: 0.5rem;">
-            <button class="btn btn-secondary btn-sm" onclick="copyConfigJson()">📋 Copy JSON</button>
-            <button class="btn btn-secondary btn-sm" onclick="fetchStatus()">🔄 Refresh</button>
-          </div>
-        </div>
-        <pre id="configJson" style="font-family: var(--font-mono); font-size: 0.85rem; color: #a5b4fc; background: rgba(0,0,0,0.4); padding: 1.25rem; border-radius: 12px; overflow-x: auto; border: 1px solid var(--border-subtle); max-height: 600px;"></pre>
-      </div>
-    </div>
-  </main>
+  </div>
 
   <script>
     let authToken = localStorage.getItem('rbot_token') || '';
     let autoScroll = true;
-    let rawLogLines = [];
+    let rawLogs = [];
+    let activityFeedData = [];
+
     let wsLogs = null;
     let wsTerm = null;
     let term = null;
     let fitAddon = null;
 
-    let cachedTopUsers = [];
-    let cachedTopGroups = [];
+    let cachedStatusData = null;
 
     document.addEventListener('DOMContentLoaded', () => {
       checkAuth();
     });
 
-    // Toast Notification System
     function showToast(msg, type = 'info') {
       const container = document.getElementById('toastContainer');
       const toast = document.createElement('div');
-      toast.className = `toast toast-${type}`;
-      
-      let iconSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>';
-      if (type === 'success') {
-        iconSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--success-500)" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>';
-      } else if (type === 'error') {
-        iconSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--danger-500)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
-      } else if (type === 'warning') {
-        iconSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--warning-500)" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
-      }
-
-      toast.innerHTML = `${iconSvg} <span>${msg}</span>`;
+      toast.className = `toast ${type}`;
+      toast.textContent = msg;
       container.appendChild(toast);
-
       setTimeout(() => {
-        toast.style.animation = 'fadeOut 0.3s forwards';
-        setTimeout(() => toast.remove(), 300);
-      }, 3500);
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 200);
+      }, 3000);
     }
 
     async function checkAuth() {
@@ -1149,7 +973,7 @@
 
     async function handleLogin(e) {
       e.preventDefault();
-      const pwd = document.getElementById('passwordInput').value;
+      const pwd = document.getElementById('loginPassword').value;
       const errEl = document.getElementById('loginError');
       errEl.style.display = 'none';
 
@@ -1164,14 +988,14 @@
           authToken = data.token;
           localStorage.setItem('rbot_token', authToken);
           document.getElementById('loginModal').classList.remove('active');
-          showToast('Berhasil masuk dashboard!', 'success');
+          showToast('Selamat datang kembali!', 'success');
           initDashboard();
         } else {
-          errEl.textContent = data.error || 'Password salah!';
+          errEl.textContent = data.error || 'Password salah.';
           errEl.style.display = 'block';
         }
       } catch (err) {
-        errEl.textContent = 'Gagal terhubung ke server web.';
+        errEl.textContent = 'Gagal terhubung ke server.';
         errEl.style.display = 'block';
       }
     }
@@ -1189,6 +1013,18 @@
       connectLogsWS();
     }
 
+    function switchNav(viewId, el) {
+      document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+      document.querySelectorAll('.view-container').forEach(v => v.classList.remove('active'));
+
+      el.classList.add('active');
+      document.getElementById('view-' + viewId).classList.add('active');
+
+      if (viewId === 'terminal') {
+        initTerminal();
+      }
+    }
+
     async function fetchStatus() {
       try {
         const res = await fetch('/api/status', {
@@ -1199,138 +1035,214 @@
           return;
         }
         const d = await res.json();
+        cachedStatusData = d;
 
-        // Update Badge Status
-        const badge = document.getElementById('statusBadge');
+        // Topbar Status Dot
+        const dot = document.getElementById('statusDot');
         const stText = document.getElementById('statusText');
         if (d.bot.connected) {
-          badge.className = 'status-badge status-online';
-          stText.textContent = 'ONLINE';
+          dot.className = 'status-dot online';
+          stText.textContent = 'Operational';
         } else {
-          badge.className = 'status-badge status-offline';
-          stText.textContent = 'DISCONNECTED';
+          dot.className = 'status-dot offline';
+          stText.textContent = 'Disconnected';
         }
 
-        // Card 1: WA Connection
-        document.getElementById('waConnected').textContent = d.bot.connected ? 'Terhubung' : 'Terputus';
-        document.getElementById('waConnected').style.color = d.bot.connected ? 'var(--success-500)' : 'var(--danger-500)';
-        document.getElementById('waDetails').textContent = `Bot: ${d.bot.pushName || 'R-BOT'} (${d.bot.jid || d.config.botNumber || '--'})`;
+        // Overview Metrics
+        document.getElementById('metricChats').textContent = (d.stats.totalChats || 0).toLocaleString();
+        document.getElementById('metricUsers').textContent = (d.stats.totalUsers || 0).toLocaleString();
+        document.getElementById('metricRam').textContent = d.system.allocMb + ' MB';
+        document.getElementById('metricRamSub').textContent = `System: ${d.system.sysMb} MB | GC: ${d.system.numGC}`;
+        document.getElementById('metricUptime').textContent = formatSeconds(d.bot.uptime);
+        document.getElementById('metricUptimeSub').textContent = `CPU: ${d.system.cpuPct || '1.0'}% | ${d.system.os}/${d.system.arch}`;
 
-        const pairingCard = document.getElementById('pairingCard');
-        if (d.bot.pairingCode) {
-          pairingCard.style.display = 'block';
-          document.getElementById('pairingCode').textContent = d.bot.pairingCode;
-        } else {
-          pairingCard.style.display = 'none';
-        }
+        // 24h Bar Chart
+        renderHourlyChart(d.hourlyMessages || []);
 
-        // Card 2: Memory
-        const alloc = parseFloat(d.system.allocMb) || 0;
-        const sys = parseFloat(d.system.sysMb) || 1;
-        const memPercent = Math.min(100, Math.round((alloc / sys) * 100));
-        document.getElementById('ramAlloc').textContent = d.system.allocMb + ' MB';
-        document.getElementById('ramSys').textContent = `System: ${d.system.sysMb} MB | GC: ${d.system.numGC}`;
-        document.getElementById('ramBar').style.width = `${memPercent}%`;
+        // Feed Activity
+        renderActivityFeedOverview();
+        renderActivityFeedFull();
 
-        // Card 3: Goroutines & Uptime
-        document.getElementById('goroutines').textContent = d.system.goroutines;
-        document.getElementById('botUptime').textContent = `Uptime: ${formatSeconds(d.bot.uptime)} (${d.system.os}/${d.system.arch})`;
+        // Tables
+        renderUsersTable();
+        renderGroupsTable();
+        renderCommandsTables(d.topCommands || [], d.topCommandErrors || []);
 
-        // Card 4: Interaction Stats
-        document.getElementById('totalChats').textContent = d.stats.totalChats;
-        document.getElementById('totalCmds').textContent = `Cmds: ${d.stats.totalCmds} | Users: ${d.stats.totalUsers}`;
-
-        // Top Users & Groups
-        cachedTopUsers = d.topUsers || [];
-        cachedTopGroups = d.topGroups || [];
-        filterUsersTable();
-        filterGroupsTable();
+        // Audit Logs
+        renderAuditTable(d.auditLogs || []);
 
         // Config View
-        document.getElementById('configJson').textContent = JSON.stringify(d.config, null, 2);
+        document.getElementById('configView').textContent = JSON.stringify(d.config, null, 2);
       } catch (err) {
-        console.error('Status fetch error:', err);
+        console.error('Fetch status error:', err);
       }
     }
 
-    function filterUsersTable() {
-      const filter = (document.getElementById('userSearch').value || '').toLowerCase();
-      const users = cachedTopUsers.filter(u => !filter || (u.JID && u.JID.toLowerCase().includes(filter)));
-      renderTopUsers(users);
+    function renderHourlyChart(hourlyArr) {
+      const chart = document.getElementById('chartBars');
+      if (!chart) return;
+      const max = Math.max(...hourlyArr, 1);
+      
+      chart.innerHTML = hourlyArr.map((val, idx) => {
+        const pct = Math.max(8, Math.round((val / max) * 100));
+        return `<div title="Jam ${idx}: ${val} pesan" style="flex: 1; height: ${pct}%; background: var(--accent); opacity: ${idx === new Date().getHours() ? '1' : '0.5'}; border-radius: 3px; transition: height 0.3s ease;"></div>`;
+      }).join('');
     }
 
-    function filterGroupsTable() {
-      const filter = (document.getElementById('groupSearch').value || '').toLowerCase();
-      const groups = cachedTopGroups.filter(g => !filter || (g.JID && g.JID.toLowerCase().includes(filter)));
-      renderTopGroups(groups);
+    function addActivityEvent(text, meta) {
+      activityFeedData.unshift({
+        text: text,
+        meta: meta || 'System',
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      });
+      if (activityFeedData.length > 50) activityFeedData.pop();
+      renderActivityFeedOverview();
     }
 
-    function renderTopUsers(users) {
-      const tbody = document.getElementById('topUsersBody');
+    function renderActivityFeedOverview() {
+      const feed = document.getElementById('activityFeed');
+      if (!feed) return;
+      if (activityFeedData.length === 0) {
+        feed.innerHTML = `
+          <div class="feed-item">
+            <div class="feed-dot"></div>
+            <div class="feed-content">
+              <div class="feed-text">Bot engine connected & monitoring active</div>
+              <div class="feed-meta">System</div>
+            </div>
+            <div class="feed-time">Just now</div>
+          </div>
+        `;
+        return;
+      }
+      feed.innerHTML = activityFeedData.slice(0, 5).map(item => `
+        <div class="feed-item">
+          <div class="feed-dot"></div>
+          <div class="feed-content">
+            <div class="feed-text">${item.text}</div>
+            <div class="feed-meta">${item.meta}</div>
+          </div>
+          <div class="feed-time">${item.time}</div>
+        </div>
+      `).join('');
+    }
+
+    function renderActivityFeedFull() {
+      const feed = document.getElementById('activityFeedFull');
+      if (!feed) return;
+      const query = (document.getElementById('feedSearch').value || '').toLowerCase();
+      const filtered = activityFeedData.filter(i => !query || i.text.toLowerCase().includes(query) || i.meta.toLowerCase().includes(query));
+
+      if (filtered.length === 0) {
+        feed.innerHTML = `<div style="color: var(--text-muted); padding: 1rem; text-align: center;">Belum ada aktivitas terekam.</div>`;
+        return;
+      }
+
+      feed.innerHTML = filtered.map(item => `
+        <div class="feed-item">
+          <div class="feed-dot"></div>
+          <div class="feed-content">
+            <div class="feed-text">${item.text}</div>
+            <div class="feed-meta">${item.meta}</div>
+          </div>
+          <div class="feed-time">${item.time}</div>
+        </div>
+      `).join('');
+    }
+
+    function renderUsersTable() {
+      if (!cachedStatusData) return;
+      const tbody = document.getElementById('usersTableBody');
+      const query = (document.getElementById('userFilterInput').value || '').toLowerCase();
+      const users = (cachedStatusData.topUsers || []).filter(u => !query || (u.JID && u.JID.toLowerCase().includes(query)));
+
       if (users.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Belum ada data user.</td></tr>';
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Tidak ada pengguna ditemukan.</td></tr>`;
         return;
       }
-      tbody.innerHTML = users.slice(0, 10).map((u, i) => `
+
+      tbody.innerHTML = users.slice(0, 15).map((u, i) => `
         <tr>
-          <td><span class="rank-pill rank-${i < 3 ? i + 1 : ''}">${i + 1}</span></td>
-          <td style="font-family: var(--font-mono); font-size: 0.8rem;">${u.JID}</td>
+          <td>#${i + 1}</td>
+          <td style="font-family: var(--font-mono);">${u.JID}</td>
           <td>${u.chats}</td>
-          <td><span style="color: var(--accent-500); font-weight: 700;">${u.cmds}</span></td>
+          <td><strong style="color: var(--accent);">${u.cmds}</strong></td>
+          <td>
+            <button class="btn btn-secondary btn-sm" onclick="openDirectMessage('${u.JID}')">💬 Chat</button>
+            <button class="btn btn-danger btn-sm" onclick="userAction('${u.JID}', 'block')">🚫 Block</button>
+          </td>
         </tr>
       `).join('');
     }
 
-    function renderTopGroups(groups) {
-      const tbody = document.getElementById('topGroupsBody');
+    function renderGroupsTable() {
+      if (!cachedStatusData) return;
+      const tbody = document.getElementById('groupsTableBody');
+      const query = (document.getElementById('groupFilterInput').value || '').toLowerCase();
+      const groups = (cachedStatusData.topGroups || []).filter(g => !query || (g.JID && g.JID.toLowerCase().includes(query)));
+
       if (groups.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Belum ada data grup.</td></tr>';
+        tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Tidak ada grup ditemukan.</td></tr>`;
         return;
       }
-      tbody.innerHTML = groups.slice(0, 10).map((g, i) => `
+
+      tbody.innerHTML = groups.slice(0, 15).map((g, i) => `
         <tr>
-          <td><span class="rank-pill rank-${i < 3 ? i + 1 : ''}">${i + 1}</span></td>
-          <td style="font-family: var(--font-mono); font-size: 0.8rem;">${g.JID}</td>
-          <td><span style="color: var(--success-500); font-weight: 700;">${g.Cmds}</span></td>
+          <td>#${i + 1}</td>
+          <td style="font-family: var(--font-mono);">${g.JID}</td>
+          <td><strong style="color: var(--success);">${g.Cmds}</strong></td>
         </tr>
       `).join('');
     }
 
-    function copyPairingCode() {
-      const code = document.getElementById('pairingCode').textContent;
-      navigator.clipboard.writeText(code);
-      showToast('Kode pairing berhasil disalin!', 'success');
-    }
+    function renderCommandsTables(topCmds, errCmds) {
+      const topBody = document.getElementById('topCmdsBody');
+      if (topCmds.length === 0) {
+        topBody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Belum ada data command.</td></tr>`;
+      } else {
+        topBody.innerHTML = topCmds.map((c, i) => `
+          <tr>
+            <td>#${i + 1}</td>
+            <td><code style="color: var(--accent);">${c.name}</code></td>
+            <td><strong>${c.count}</strong></td>
+          </tr>
+        `).join('');
+      }
 
-    function copyConfigJson() {
-      const json = document.getElementById('configJson').textContent;
-      navigator.clipboard.writeText(json);
-      showToast('Konfigurasi disalin ke clipboard!', 'success');
-    }
-
-    function formatSeconds(sec) {
-      const d = Math.floor(sec / 86400);
-      const h = Math.floor((sec % 86400) / 3600);
-      const m = Math.floor((sec % 3600) / 60);
-      const s = sec % 60;
-      if (d > 0) return `${d}d ${h}h ${m}m`;
-      if (h > 0) return `${h}h ${m}m ${s}s`;
-      return `${m}m ${s}s`;
-    }
-
-    function switchTab(tabId) {
-      document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-
-      event.currentTarget.classList.add('active');
-      document.getElementById('tab-' + tabId).classList.add('active');
-
-      if (tabId === 'terminal') {
-        initTerminal();
+      const errBody = document.getElementById('errCmdsBody');
+      if (errCmds.length === 0) {
+        errBody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Tidak ada error command.</td></tr>`;
+      } else {
+        errBody.innerHTML = errCmds.map((c, i) => `
+          <tr>
+            <td>#${i + 1}</td>
+            <td><code style="color: var(--danger);">${c.name}</code></td>
+            <td><strong style="color: var(--danger);">${c.count}</strong></td>
+          </tr>
+        `).join('');
       }
     }
 
-    /* Real-Time Logs System */
+    function renderAuditTable(logs) {
+      const tbody = document.getElementById('auditTableBody');
+      if (!tbody) return;
+      if (logs.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Belum ada log audit.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = logs.map(l => `
+        <tr>
+          <td style="font-family: var(--font-mono); font-size: 0.775rem;">${l.timestamp}</td>
+          <td style="font-family: var(--font-mono); font-size: 0.775rem;">${l.ip}</td>
+          <td>${l.user}</td>
+          <td><strong style="color: var(--accent);">${l.action}</strong></td>
+          <td style="font-size: 0.8rem; color: var(--text-sub);">${l.details}</td>
+        </tr>
+      `).join('');
+    }
+
+    /* Log Stream Console */
     function connectLogsWS() {
       const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
       const url = `${protocol}//${location.host}/ws/logs?token=${encodeURIComponent(authToken)}`;
@@ -1345,78 +1257,70 @@
     }
 
     function appendLogLine(line) {
-      rawLogLines.push(line);
-      if (rawLogLines.length > 1500) rawLogLines.shift();
+      rawLogs.push(line);
+      if (rawLogs.length > 1500) rawLogs.shift();
 
-      document.getElementById('logBadgeCount').textContent = rawLogLines.length;
+      if (line.includes('[rbot]') || line.includes('command') || line.includes('connect')) {
+        addActivityEvent(line.replace(/\[rbot\]\s*/g, ''), 'Log Event');
+      }
 
-      const logBody = document.getElementById('logBody');
-      const filter = (document.getElementById('logFilter').value || '').toLowerCase();
+      const consoleEl = document.getElementById('logConsole');
+      const query = (document.getElementById('logSearchInput').value || '').toLowerCase();
 
-      if (!filter || line.toLowerCase().includes(filter)) {
-        const div = createLogLineNode(line);
-        logBody.appendChild(div);
-        if (autoScroll) {
-          logBody.scrollTop = logBody.scrollHeight;
-        }
+      if (!query || line.toLowerCase().includes(query)) {
+        const div = document.createElement('div');
+        div.textContent = line;
+        if (line.includes('[ERROR]')) div.style.color = 'var(--danger)';
+        else if (line.includes('[WARN]')) div.style.color = 'var(--warning)';
+        else if (line.includes('[rbot]')) div.style.color = 'var(--accent)';
+        consoleEl.appendChild(div);
+
+        if (autoScroll) consoleEl.scrollTop = consoleEl.scrollHeight;
       }
     }
 
-    function createLogLineNode(line) {
-      const div = document.createElement('div');
-      div.className = 'log-line';
+    function filterLogConsole() {
+      const query = (document.getElementById('logSearchInput').value || '').toLowerCase();
+      const consoleEl = document.getElementById('logConsole');
+      consoleEl.innerHTML = '';
 
-      if (line.includes('[ERROR]') || line.includes('gagal') || line.includes('fatal')) {
-        div.classList.add('log-error');
-      } else if (line.includes('[WARN]') || line.includes('warning')) {
-        div.classList.add('log-warn');
-      } else if (line.includes('[rbot]')) {
-        div.classList.add('log-rbot');
-      } else {
-        div.classList.add('log-info');
-      }
-      div.textContent = line;
-      return div;
-    }
-
-    function filterLogs() {
-      const filter = (document.getElementById('logFilter').value || '').toLowerCase();
-      const logBody = document.getElementById('logBody');
-      logBody.innerHTML = '';
-
-      rawLogLines.forEach(line => {
-        if (!filter || line.toLowerCase().includes(filter)) {
-          logBody.appendChild(createLogLineNode(line));
+      rawLogs.forEach(line => {
+        if (!query || line.toLowerCase().includes(query)) {
+          const div = document.createElement('div');
+          div.textContent = line;
+          if (line.includes('[ERROR]')) div.style.color = 'var(--danger)';
+          else if (line.includes('[WARN]')) div.style.color = 'var(--warning)';
+          else if (line.includes('[rbot]')) div.style.color = 'var(--accent)';
+          consoleEl.appendChild(div);
         }
       });
-      if (autoScroll) logBody.scrollTop = logBody.scrollHeight;
+      if (autoScroll) consoleEl.scrollTop = consoleEl.scrollHeight;
     }
 
     function toggleAutoScroll() {
       autoScroll = !autoScroll;
-      document.getElementById('btnToggleScroll').textContent = `📜 Auto-scroll: ${autoScroll ? 'ON' : 'OFF'}`;
+      document.getElementById('autoScrollBtn').textContent = `Scroll: ${autoScroll ? 'ON' : 'OFF'}`;
     }
 
     function clearLogsConsole() {
-      rawLogLines = [];
-      document.getElementById('logBody').innerHTML = '';
-      document.getElementById('logBadgeCount').textContent = '0';
-      showToast('Log console dibersihkan.', 'info');
+      rawLogs = [];
+      document.getElementById('logConsole').innerHTML = '';
+      showToast('Console dibersihkan', 'info');
     }
 
     function downloadLogs() {
-      const text = rawLogLines.join('\n');
+      const text = rawLogs.join('\n');
       const blob = new Blob([text], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `rbot_logs_${new Date().toISOString().slice(0, 10)}.log`;
+      a.download = `rbot_log_${new Date().toISOString().slice(0, 10)}.log`;
       a.click();
       URL.revokeObjectURL(url);
-      showToast('File log berhasil didownload!', 'success');
+      showToast('Log didownload', 'success');
     }
 
-    /* Web Terminal System */
+    /* Web Terminal */
     function initTerminal() {
       if (term) return;
 
@@ -1424,22 +1328,12 @@
         term = new Terminal({
           cursorBlink: true,
           theme: {
-            background: '#05080e',
-            foreground: '#f8fafc',
-            cursor: '#6366f1',
-            selectionBackground: 'rgba(99, 102, 241, 0.35)',
-            black: '#0f172a',
-            red: '#ef4444',
-            green: '#10b981',
-            yellow: '#f59e0b',
-            blue: '#6366f1',
-            magenta: '#a855f7',
-            cyan: '#06b6d4',
-            white: '#f8fafc'
+            background: '#06090e',
+            foreground: '#f3f4f6',
+            cursor: '#6366f1'
           },
           fontFamily: "'JetBrains Mono', monospace",
-          fontSize: 13.5,
-          letterSpacing: 0
+          fontSize: 13
         });
 
         if (window.FitAddon) {
@@ -1464,8 +1358,6 @@
             sendResize();
           }
         });
-      } else {
-        document.getElementById('terminal').innerHTML = '<div style="padding: 1rem; color: #f87171;">Gagal memuat pustaka xterm.js</div>';
       }
     }
 
@@ -1474,51 +1366,89 @@
       const url = `${protocol}//${location.host}/ws/terminal?token=${encodeURIComponent(authToken)}`;
 
       wsTerm = new WebSocket(url);
-      wsTerm.onopen = () => {
-        sendResize();
-      };
-      wsTerm.onmessage = (e) => {
-        if (term) term.write(e.data);
-      };
-      wsTerm.onclose = () => {
-        if (term) term.write('\r\n\x1b[31m[Koneksi terminal terputus]\x1b[0m\r\n');
-      };
+      wsTerm.onopen = () => sendResize();
+      wsTerm.onmessage = (e) => { if (term) term.write(e.data); };
+      wsTerm.onclose = () => { if (term) term.write('\r\n\x1b[31m[Koneksi terminal terputus]\x1b[0m\r\n'); };
     }
 
     function sendResize() {
       if (term && wsTerm && wsTerm.readyState === WebSocket.OPEN) {
-        wsTerm.send(JSON.stringify({
-          type: 'resize',
-          cols: term.cols,
-          rows: term.rows
-        }));
+        wsTerm.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
       }
     }
 
     function sendTerminalCmd(cmd) {
-      if (wsTerm && wsTerm.readyState === WebSocket.OPEN) {
-        wsTerm.send(cmd);
-      }
+      if (wsTerm && wsTerm.readyState === WebSocket.OPEN) wsTerm.send(cmd);
     }
 
     function restartTerminal() {
       if (wsTerm) wsTerm.close();
       if (term) term.clear();
       connectTerminalWS();
-      showToast('Sesi shell di-restart.', 'info');
+      showToast('Shell di-restart', 'info');
     }
 
-    /* Modal & Actions */
-    function openRestartModal() {
-      document.getElementById('restartModal').classList.add('active');
+    /* Actions & Modals */
+    function openMessageModal() {
+      document.getElementById('messageModal').classList.add('active');
     }
 
-    function closeRestartModal() {
-      document.getElementById('restartModal').classList.remove('active');
+    function closeMessageModal() {
+      document.getElementById('messageModal').classList.remove('active');
     }
 
-    async function confirmRestartBot() {
-      closeRestartModal();
+    function openDirectMessage(jid) {
+      document.getElementById('targetJidInput').value = jid;
+      openMessageModal();
+    }
+
+    async function sendBroadcastMsg(e) {
+      e.preventDefault();
+      const jid = document.getElementById('targetJidInput').value;
+      const msg = document.getElementById('messageContentInput').value;
+      closeMessageModal();
+
+      try {
+        const res = await fetch('/api/broadcast', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + authToken
+          },
+          body: JSON.stringify({ jid: jid, message: msg })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast('Pesan berhasil dikirim!', 'success');
+        } else {
+          showToast(data.error || 'Gagal mengirim pesan', 'error');
+        }
+      } catch (err) {
+        showToast('Gagal terhubung ke server', 'error');
+      }
+    }
+
+    async function userAction(jid, act) {
+      if (!confirm(`Konfirmasi aksi ${act} pada ${jid}?`)) return;
+      try {
+        const res = await fetch('/api/action/user', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + authToken
+          },
+          body: JSON.stringify({ jid: jid, action: act })
+        });
+        const data = await res.json();
+        showToast(data.message || 'Aksi berhasil diproses', 'success');
+        fetchStatus();
+      } catch (err) {
+        showToast('Gagal memproses aksi', 'error');
+      }
+    }
+
+    async function restartBot() {
+      if (!confirm('Apakah Anda yakin ingin me-restart bot engine?')) return;
       try {
         const res = await fetch('/api/restart', {
           method: 'POST',
@@ -1531,6 +1461,34 @@
       }
     }
 
+    async function stopBot() {
+      if (!confirm('Apakah Anda yakin ingin menghentikan bot process?')) return;
+      try {
+        const res = await fetch('/api/stop', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + authToken }
+        });
+        const data = await res.json();
+        showToast(data.message || 'Bot dihentikan secara aman.', 'warning');
+      } catch (err) {
+        showToast('Gagal dihentikan.', 'error');
+      }
+    }
+
+    async function forceKillBot() {
+      if (!confirm('PERINGATAN: Paksa matikan biner bot secara langsung?')) return;
+      try {
+        const res = await fetch('/api/kill', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + authToken }
+        });
+        const data = await res.json();
+        showToast(data.message || 'Proses di-kill.', 'error');
+      } catch (err) {
+        showToast('Proses di-kill.', 'error');
+      }
+    }
+
     async function reloadConfig() {
       try {
         const res = await fetch('/api/reload', {
@@ -1538,11 +1496,27 @@
           headers: { 'Authorization': 'Bearer ' + authToken }
         });
         const data = await res.json();
-        showToast(data.message || 'Konfigurasi berhasil diperbarui.', 'success');
+        showToast(data.message || 'Konfigurasi berhasil di-reload.', 'success');
         fetchStatus();
       } catch (err) {
-        showToast('Gagal memuat ulang konfigurasi.', 'error');
+        showToast('Gagal reload konfigurasi.', 'error');
       }
+    }
+
+    function copyConfigJson() {
+      const json = document.getElementById('configView').textContent;
+      navigator.clipboard.writeText(json);
+      showToast('Config JSON disalin!', 'success');
+    }
+
+    function formatSeconds(sec) {
+      const d = Math.floor(sec / 86400);
+      const h = Math.floor((sec % 86400) / 3600);
+      const m = Math.floor((sec % 3600) / 60);
+      const s = sec % 60;
+      if (d > 0) return `${d}d ${h}h`;
+      if (h > 0) return `${h}h ${m}m`;
+      return `${m}m ${s}s`;
     }
   </script>
 </body>

@@ -29,22 +29,30 @@ type groupStats struct {
 }
 
 type state struct {
-	Users  map[string]*Counter    `json:"users"`
-	Groups map[string]*groupStats `json:"groups"`
+	Users          map[string]*Counter    `json:"users"`
+	Groups         map[string]*groupStats `json:"groups"`
+	CmdCounts      map[string]int64       `json:"cmdCounts"`
+	CmdErrors      map[string]int64       `json:"cmdErrors"`
+	HourlyMessages [24]int64              `json:"hourlyMessages"`
 }
 
 var (
-	mu           sync.Mutex
-	cached       *state
-	loaded       bool
-	dirty        bool
-	lastPersist  time.Time
+	mu          sync.Mutex
+	cached      *state
+	loaded      bool
+	dirty       bool
+	lastPersist time.Time
 )
 
 const persistInterval = 5 * time.Second
 
 func emptyState() *state {
-	return &state{Users: map[string]*Counter{}, Groups: map[string]*groupStats{}}
+	return &state{
+		Users:     map[string]*Counter{},
+		Groups:    map[string]*groupStats{},
+		CmdCounts: map[string]int64{},
+		CmdErrors: map[string]int64{},
+	}
 }
 
 func load() *state {
@@ -58,6 +66,12 @@ func load() *state {
 	}
 	if s.Groups == nil {
 		s.Groups = map[string]*groupStats{}
+	}
+	if s.CmdCounts == nil {
+		s.CmdCounts = map[string]int64{}
+	}
+	if s.CmdErrors == nil {
+		s.CmdErrors = map[string]int64{}
 	}
 	for _, g := range s.Groups {
 		if g.Members == nil {
@@ -137,6 +151,11 @@ func groupKey(evt *events.Message) string {
 	return canonicalJID(evt.Info.Chat)
 }
 
+type CmdEntry struct {
+	Name  string `json:"name"`
+	Count int64  `json:"count"`
+}
+
 // AddChat mencatat satu pesan masuk, termasuk pesan yang bukan command.
 func AddChat(evt *events.Message) {
 	jid := senderKey(evt)
@@ -154,11 +173,15 @@ func AddChat(evt *events.Message) {
 		}
 		g.Members[jid].Chats++
 	}
+	hour := time.Now().Hour()
+	if hour >= 0 && hour < 24 {
+		s.HourlyMessages[hour]++
+	}
 	save(s)
 }
 
 // AddCmd mencatat satu command yang berhasil di-resolve.
-func AddCmd(evt *events.Message) {
+func AddCmd(cmdName string, evt *events.Message) {
 	jid := senderKey(evt)
 	if jid == "" {
 		return
@@ -175,10 +198,67 @@ func AddCmd(evt *events.Message) {
 		}
 		g.Members[jid].Cmds++
 	}
+	if cmdName != "" {
+		s.CmdCounts[cmdName]++
+	}
 	save(s)
 }
 
-func init() { command.StatsHook = func(_ string, evt *events.Message) { AddCmd(evt) } }
+// AddCmdError mencatat ketika terjadi error saat eksekusi command.
+func AddCmdError(cmdName string) {
+	if cmdName == "" {
+		return
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	s := load()
+	s.CmdErrors[cmdName]++
+	save(s)
+}
+
+func init() {
+	command.StatsHook = func(cmdName string, evt *events.Message) { AddCmd(cmdName, evt) }
+}
+
+// TopCommands mengembalikan ranking command paling banyak digunakan.
+func TopCommands() []CmdEntry {
+	mu.Lock()
+	defer mu.Unlock()
+	s := load()
+	out := make([]CmdEntry, 0, len(s.CmdCounts))
+	for name, count := range s.CmdCounts {
+		out = append(out, CmdEntry{Name: name, Count: count})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Count > out[j].Count })
+	if len(out) > 10 {
+		out = out[:10]
+	}
+	return out
+}
+
+// TopCommandErrors mengembalikan ranking command yang paling sering error.
+func TopCommandErrors() []CmdEntry {
+	mu.Lock()
+	defer mu.Unlock()
+	s := load()
+	out := make([]CmdEntry, 0, len(s.CmdErrors))
+	for name, count := range s.CmdErrors {
+		out = append(out, CmdEntry{Name: name, Count: count})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Count > out[j].Count })
+	if len(out) > 10 {
+		out = out[:10]
+	}
+	return out
+}
+
+// GetHourlyMessages mengembalikan data jumlah pesan per jam selama 24 jam terakhir.
+func GetHourlyMessages() [24]int64 {
+	mu.Lock()
+	defer mu.Unlock()
+	s := load()
+	return s.HourlyMessages
+}
 
 type UserEntry struct {
 	JID string

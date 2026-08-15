@@ -3,30 +3,41 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>R-BOT Monitoring & Terminal</title>
+  <title>R-BOT | Command & Control Dashboard</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css" />
   <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
 
   <style>
     :root {
-      --bg-base: #0a0d14;
-      --bg-surface: #121824;
-      --bg-card: #182030;
-      --bg-card-hover: #1e293b;
-      --border-color: rgba(255, 255, 255, 0.08);
-      --border-accent: rgba(99, 102, 241, 0.3);
-      --text-main: #f1f5f9;
-      --text-muted: #94a3b8;
-      --accent: #6366f1;
-      --accent-glow: rgba(99, 102, 241, 0.15);
-      --success: #10b981;
-      --warning: #f59e0b;
-      --danger: #ef4444;
-      --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+      --bg-canvas: #090d16;
+      --bg-surface: #0f172a;
+      --bg-card: rgba(18, 24, 38, 0.75);
+      --bg-card-hover: rgba(26, 35, 54, 0.85);
+      --border-subtle: rgba(255, 255, 255, 0.07);
+      --border-glow: rgba(99, 102, 241, 0.25);
+      
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+
+      --accent-500: #6366f1;
+      --accent-600: #4f46e5;
+      --accent-glow: rgba(99, 102, 241, 0.2);
+
+      --success-500: #10b981;
+      --success-glow: rgba(16, 185, 129, 0.2);
+      
+      --warning-500: #f59e0b;
+      --warning-glow: rgba(245, 158, 11, 0.2);
+
+      --danger-500: #ef4444;
+      --danger-glow: rgba(239, 68, 68, 0.2);
+
+      --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
       --font-mono: 'JetBrains Mono', monospace;
     }
 
@@ -37,284 +48,433 @@
     }
 
     body {
-      background-color: var(--bg-base);
-      color: var(--text-main);
+      background-color: var(--bg-canvas);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.08) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.05) 0px, transparent 50%);
+      background-attachment: fixed;
+      color: var(--text-primary);
       font-family: var(--font-sans);
       min-height: 100vh;
       display: flex;
       flex-direction: column;
       overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
     }
 
-    /* Modal Authentication */
-    #loginModal {
+    /* Scrollbar Customization */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.2);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.25);
+    }
+
+    /* Toast Notification Container */
+    #toastContainer {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      z-index: 10000;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      pointer-events: none;
+    }
+
+    .toast {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-left: 4px solid var(--accent-500);
+      border-radius: 10px;
+      padding: 0.875rem 1.25rem;
+      color: var(--text-primary);
+      font-size: 0.875rem;
+      font-weight: 500;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      pointer-events: auto;
+      animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      max-width: 380px;
+    }
+
+    .toast-success { border-left-color: var(--success-500); }
+    .toast-error { border-left-color: var(--danger-500); }
+    .toast-warning { border-left-color: var(--warning-500); }
+
+    @keyframes slideInRight {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    @keyframes fadeOut {
+      to { opacity: 0; transform: translateY(10px); }
+    }
+
+    /* Modal Overlay Base */
+    .modal-overlay {
       position: fixed;
       inset: 0;
-      background: rgba(10, 13, 20, 0.92);
+      background: rgba(9, 13, 22, 0.85);
       backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
       z-index: 9999;
       display: flex;
       align-items: center;
       justify-content: center;
       padding: 1.5rem;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
     }
 
-    .login-box {
-      background: var(--bg-surface);
-      border: 1px solid var(--border-color);
-      border-radius: 16px;
-      padding: 2.5rem;
+    .modal-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .modal-box {
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid var(--border-glow);
+      border-radius: 20px;
+      padding: 2.25rem;
       width: 100%;
-      max-width: 400px;
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
-      text-align: center;
+      max-width: 420px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 40px var(--accent-glow);
+      transform: scale(0.95);
+      transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
-    .login-box h2 {
+    .modal-overlay.active .modal-box {
+      transform: scale(1);
+    }
+
+    /* Login Modal Specifics */
+    .login-header {
+      text-align: center;
+      margin-bottom: 1.75rem;
+    }
+
+    .login-icon-box {
+      width: 56px;
+      height: 56px;
+      background: linear-gradient(135deg, var(--accent-500) 0%, #8b5cf6 100%);
+      border-radius: 16px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 10px 20px -5px rgba(99, 102, 241, 0.5);
+      margin-bottom: 1rem;
+    }
+
+    .login-header h2 {
       font-size: 1.5rem;
-      font-weight: 700;
-      margin-bottom: 0.5rem;
-      background: linear-gradient(135deg, #fff 0%, #a5b4fc 100%);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
 
-    .login-box p {
-      color: var(--text-muted);
+    .login-header p {
+      color: var(--text-secondary);
       font-size: 0.875rem;
-      margin-bottom: 1.75rem;
+      margin-top: 0.35rem;
     }
 
-    .input-group {
+    /* Form Controls */
+    .form-group {
       margin-bottom: 1.25rem;
-      text-align: left;
     }
 
-    .input-group label {
+    .form-label {
       display: block;
       font-size: 0.75rem;
-      font-weight: 600;
+      font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: var(--text-muted);
+      letter-spacing: 0.08em;
+      color: var(--text-secondary);
       margin-bottom: 0.5rem;
     }
 
-    .input-field {
+    .form-input {
       width: 100%;
-      padding: 0.75rem 1rem;
+      padding: 0.85rem 1.1rem;
       background: rgba(255, 255, 255, 0.04);
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      color: var(--text-main);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      color: var(--text-primary);
       font-family: var(--font-sans);
       font-size: 0.95rem;
       outline: none;
-      transition: all 0.2s;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
-    .input-field:focus {
-      border-color: var(--accent);
-      background: rgba(99, 102, 241, 0.05);
-      box-shadow: 0 0 0 3px var(--accent-glow);
+    .form-input:focus {
+      border-color: var(--accent-500);
+      background: rgba(99, 102, 241, 0.06);
+      box-shadow: 0 0 0 4px var(--accent-glow);
     }
 
+    /* Buttons */
     .btn {
       display: inline-flex;
       align-items: center;
       justify-content: center;
       gap: 0.5rem;
-      padding: 0.75rem 1.5rem;
-      border-radius: 8px;
+      padding: 0.75rem 1.35rem;
+      border-radius: 10px;
       font-weight: 600;
       font-size: 0.875rem;
       cursor: pointer;
-      border: none;
-      transition: all 0.2s;
+      border: 1px solid transparent;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      user-select: none;
     }
 
     .btn-primary {
-      background: var(--accent);
-      color: #fff;
-      width: 100%;
+      background: linear-gradient(135deg, var(--accent-500) 0%, var(--accent-600) 100%);
+      color: #ffffff;
+      box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
     }
-
     .btn-primary:hover {
-      background: #4f46e5;
-      transform: translateY(-1px);
+      transform: translateY(-1.5px);
+      box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5);
     }
 
     .btn-secondary {
-      background: rgba(255, 255, 255, 0.06);
-      color: var(--text-main);
-      border: 1px solid var(--border-color);
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-primary);
+      border-color: var(--border-subtle);
     }
-
     .btn-secondary:hover {
-      background: rgba(255, 255, 255, 0.1);
-    }
-
-    .btn-danger {
-      background: rgba(239, 68, 68, 0.15);
-      color: #fca5a5;
-      border: 1px solid rgba(239, 68, 68, 0.3);
-    }
-
-    .btn-danger:hover {
-      background: rgba(239, 68, 68, 0.25);
+      background: rgba(255, 255, 255, 0.09);
+      border-color: rgba(255, 255, 255, 0.15);
     }
 
     .btn-warning {
-      background: rgba(245, 158, 11, 0.15);
-      color: #fcd34d;
-      border: 1px solid rgba(245, 158, 11, 0.3);
+      background: rgba(245, 158, 11, 0.12);
+      color: #fbbf24;
+      border-color: rgba(245, 158, 11, 0.25);
+    }
+    .btn-warning:hover {
+      background: rgba(245, 158, 11, 0.22);
+      border-color: rgba(245, 158, 11, 0.4);
     }
 
-    .btn-warning:hover {
-      background: rgba(245, 158, 11, 0.25);
+    .btn-danger {
+      background: rgba(239, 68, 68, 0.12);
+      color: #f87171;
+      border-color: rgba(239, 68, 68, 0.25);
+    }
+    .btn-danger:hover {
+      background: rgba(239, 68, 68, 0.22);
+      border-color: rgba(239, 68, 68, 0.4);
     }
 
     .btn-sm {
-      padding: 0.4rem 0.8rem;
-      font-size: 0.75rem;
-    }
-
-    .error-msg {
-      color: var(--danger);
+      padding: 0.45rem 0.85rem;
       font-size: 0.8rem;
-      margin-top: 0.75rem;
-      display: none;
+      border-radius: 8px;
     }
 
-    /* Layout Dashboard */
+    .btn-block {
+      width: 100%;
+    }
+
+    .error-alert {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.25);
+      color: #f87171;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      font-size: 0.825rem;
+      margin-top: 1rem;
+      display: none;
+      text-align: center;
+    }
+
+    /* Top Navbar */
     header {
-      background: var(--bg-surface);
-      border-bottom: 1px solid var(--border-color);
-      padding: 1rem 1.75rem;
+      background: rgba(15, 23, 42, 0.8);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 0.9rem 2rem;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      flex-wrap: wrap;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .brand-wrap {
+      display: flex;
+      align-items: center;
       gap: 1rem;
     }
 
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-    }
-
-    .brand-icon {
-      width: 38px;
-      height: 38px;
-      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-      border-radius: 10px;
+    .brand-avatar {
+      width: 42px;
+      height: 42px;
+      background: linear-gradient(135deg, var(--accent-500), #8b5cf6);
+      border-radius: 12px;
       display: flex;
       align-items: center;
       justify-content: center;
+      box-shadow: 0 0 15px var(--accent-glow);
+    }
+
+    .brand-info h1 {
+      font-size: 1.15rem;
       font-weight: 800;
-      color: #fff;
-      font-size: 1.1rem;
+      letter-spacing: -0.01em;
     }
 
-    .brand-title h1 {
-      font-size: 1.1rem;
-      font-weight: 700;
-    }
-
-    .brand-title span {
+    .brand-info span {
       font-size: 0.75rem;
-      color: var(--text-muted);
+      color: var(--text-secondary);
+      font-weight: 500;
     }
 
-    .header-actions {
+    .nav-actions {
       display: flex;
       align-items: center;
       gap: 0.75rem;
     }
 
-    .badge {
+    /* Pulse Status Badge */
+    .status-badge {
       display: inline-flex;
       align-items: center;
-      gap: 0.375rem;
-      padding: 0.35rem 0.75rem;
+      gap: 0.5rem;
+      padding: 0.4rem 0.85rem;
       border-radius: 9999px;
       font-size: 0.75rem;
-      font-weight: 600;
+      font-weight: 700;
+      letter-spacing: 0.04em;
     }
 
-    .badge-online {
-      background: rgba(16, 185, 129, 0.15);
-      color: #6ee7b7;
+    .status-online {
+      background: rgba(16, 185, 129, 0.12);
+      color: #34d399;
       border: 1px solid rgba(16, 185, 129, 0.3);
     }
 
-    .badge-offline {
-      background: rgba(239, 68, 68, 0.15);
-      color: #fca5a5;
+    .status-offline {
+      background: rgba(239, 68, 68, 0.12);
+      color: #f87171;
       border: 1px solid rgba(239, 68, 68, 0.3);
     }
 
-    .dot {
-      width: 6px;
-      height: 6px;
+    .status-dot {
+      width: 8px;
+      height: 8px;
       border-radius: 50%;
       background: currentColor;
+      position: relative;
     }
 
+    .status-online .status-dot::after {
+      content: '';
+      position: absolute;
+      inset: -3px;
+      border-radius: 50%;
+      background: currentColor;
+      opacity: 0.5;
+      animation: pulseRing 1.8s infinite ease-out;
+    }
+
+    @keyframes pulseRing {
+      0% { transform: scale(1); opacity: 0.8; }
+      100% { transform: scale(2.4); opacity: 0; }
+    }
+
+    /* Navigation Bar */
     nav {
-      background: var(--bg-surface);
-      border-bottom: 1px solid var(--border-color);
-      padding: 0 1.75rem;
+      background: rgba(15, 23, 42, 0.5);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 0 2rem;
       display: flex;
       gap: 0.5rem;
       overflow-x: auto;
     }
 
     .nav-tab {
-      padding: 0.875rem 1.25rem;
+      padding: 0.9rem 1.25rem;
       font-size: 0.875rem;
-      font-weight: 500;
-      color: var(--text-muted);
+      font-weight: 600;
+      color: var(--text-secondary);
       background: none;
       border: none;
       border-bottom: 2px solid transparent;
       cursor: pointer;
       display: flex;
       align-items: center;
-      gap: 0.5rem;
+      gap: 0.6rem;
       white-space: nowrap;
       transition: all 0.2s;
     }
 
     .nav-tab:hover {
-      color: var(--text-main);
+      color: var(--text-primary);
+      background: rgba(255, 255, 255, 0.02);
     }
 
     .nav-tab.active {
-      color: var(--accent);
-      border-bottom-color: var(--accent);
-      font-weight: 600;
+      color: var(--accent-500);
+      border-bottom-color: var(--accent-500);
+      background: rgba(99, 102, 241, 0.05);
     }
 
+    .tab-badge {
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text-secondary);
+      font-size: 0.7rem;
+      padding: 0.15rem 0.5rem;
+      border-radius: 6px;
+    }
+
+    .nav-tab.active .tab-badge {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+
+    /* Main Content Wrapper */
     main {
       flex: 1;
-      padding: 1.75rem;
-      max-width: 1400px;
+      padding: 2rem;
+      max-width: 1440px;
       width: 100%;
       margin: 0 auto;
     }
 
     .tab-content {
       display: none;
+      animation: fadeIn 0.25s ease forwards;
     }
 
     .tab-content.active {
       display: block;
     }
 
-    /* Cards Grid */
-    .grid {
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Card Grid */
+    .stats-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
       gap: 1.25rem;
@@ -322,128 +482,213 @@
     }
 
     .card {
-      background: var(--bg-surface);
-      border: 1px solid var(--border-color);
-      border-radius: 12px;
-      padding: 1.25rem;
-      transition: border-color 0.2s;
+      background: var(--bg-card);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      padding: 1.35rem;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
+      overflow: hidden;
     }
 
     .card:hover {
-      border-color: rgba(255, 255, 255, 0.15);
+      background: var(--bg-card-hover);
+      border-color: rgba(255, 255, 255, 0.12);
+      transform: translateY(-2px);
+      box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.5);
     }
 
-    .card-header {
+    .card-top {
       display: flex;
       align-items: center;
       justify-content: space-between;
       margin-bottom: 1rem;
     }
 
-    .card-title {
-      font-size: 0.85rem;
-      font-weight: 600;
-      color: var(--text-muted);
+    .card-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--text-secondary);
       text-transform: uppercase;
-      letter-spacing: 0.05em;
+      letter-spacing: 0.06em;
     }
 
     .card-icon {
-      color: var(--accent);
-      font-size: 1.25rem;
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: rgba(99, 102, 241, 0.1);
+      color: var(--accent-500);
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
-    .stat-value {
-      font-size: 1.75rem;
-      font-weight: 700;
+    .stat-main {
+      font-size: 1.85rem;
+      font-weight: 800;
       letter-spacing: -0.02em;
+      line-height: 1.2;
     }
 
     .stat-sub {
-      font-size: 0.75rem;
-      color: var(--text-muted);
-      margin-top: 0.25rem;
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      margin-top: 0.35rem;
     }
 
-    .pairing-box {
-      background: rgba(245, 158, 11, 0.1);
-      border: 1px solid rgba(245, 158, 11, 0.3);
-      border-radius: 8px;
-      padding: 1rem;
+    /* Progress bar gauge */
+    .progress-track {
+      height: 6px;
+      width: 100%;
+      background: rgba(255, 255, 255, 0.07);
+      border-radius: 9999px;
+      margin-top: 0.85rem;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      border-radius: 9999px;
+      background: linear-gradient(90deg, var(--accent-500), #8b5cf6);
+      transition: width 0.5s ease;
+    }
+
+    /* Pairing Code Box */
+    .pairing-card {
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(245, 158, 11, 0.03) 100%);
+      border: 1px dashed rgba(245, 158, 11, 0.35);
+      border-radius: 12px;
+      padding: 1.1rem;
       margin-top: 1rem;
       text-align: center;
+      position: relative;
     }
 
-    .pairing-code {
+    .pairing-code-text {
       font-family: var(--font-mono);
-      font-size: 1.5rem;
-      font-weight: 700;
+      font-size: 1.6rem;
+      font-weight: 800;
       color: #fcd34d;
-      letter-spacing: 0.15em;
+      letter-spacing: 0.25em;
       margin: 0.5rem 0;
+      text-shadow: 0 0 12px rgba(245, 158, 11, 0.3);
+    }
+
+    .copy-btn {
+      background: rgba(245, 158, 11, 0.2);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      color: #fcd34d;
+      padding: 0.3rem 0.75rem;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .copy-btn:hover {
+      background: rgba(245, 158, 11, 0.35);
     }
 
     /* Tables */
-    .table-container {
-      background: var(--bg-surface);
-      border: 1px solid var(--border-color);
-      border-radius: 12px;
-      overflow: hidden;
-      margin-bottom: 1.75rem;
+    .tables-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+      gap: 1.5rem;
     }
 
-    .table-header {
-      padding: 1.25rem;
-      border-bottom: 1px solid var(--border-color);
-      font-weight: 600;
+    .table-panel {
+      background: var(--bg-card);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    .table-panel-header {
+      padding: 1.1rem 1.5rem;
+      background: rgba(255, 255, 255, 0.02);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .table-panel-title {
+      font-weight: 700;
       font-size: 0.95rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
     }
 
     table {
       width: 100%;
       border-collapse: collapse;
       text-align: left;
-      font-size: 0.875rem;
+      font-size: 0.85rem;
     }
 
     th {
-      background: rgba(255, 255, 255, 0.02);
-      padding: 0.75rem 1.25rem;
-      color: var(--text-muted);
-      font-weight: 600;
-      font-size: 0.75rem;
+      background: rgba(0, 0, 0, 0.2);
+      padding: 0.85rem 1.25rem;
+      color: var(--text-secondary);
+      font-weight: 700;
+      font-size: 0.725rem;
       text-transform: uppercase;
-      border-bottom: 1px solid var(--border-color);
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid var(--border-subtle);
     }
 
     td {
-      padding: 0.875rem 1.25rem;
-      border-bottom: 1px solid var(--border-color);
+      padding: 0.85rem 1.25rem;
+      border-bottom: 1px solid var(--border-subtle);
+      color: var(--text-primary);
     }
 
-    tr:last-child td {
+    tbody tr:last-child td {
       border-bottom: none;
     }
 
     tbody tr:hover {
-      background: rgba(255, 255, 255, 0.02);
+      background: rgba(255, 255, 255, 0.025);
     }
 
-    /* Logs Console */
-    .console-box {
-      background: #06080d;
-      border: 1px solid var(--border-color);
-      border-radius: 12px;
+    .rank-pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px;
+      height: 26px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 0.75rem;
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .rank-1 { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+    .rank-2 { background: rgba(148, 163, 184, 0.2); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.3); }
+    .rank-3 { background: rgba(180, 83, 9, 0.2); color: #f97316; border: 1px solid rgba(180, 83, 9, 0.3); }
+
+    /* Console Logs */
+    .console-wrapper {
+      background: #05080e;
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
       overflow: hidden;
       display: flex;
       flex-direction: column;
-      height: 600px;
+      height: 640px;
+      box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.8);
     }
 
-    .console-header {
-      background: var(--bg-surface);
-      padding: 0.75rem 1.25rem;
-      border-bottom: 1px solid var(--border-color);
+    .console-topbar {
+      background: rgba(15, 23, 42, 0.9);
+      padding: 0.85rem 1.35rem;
+      border-bottom: 1px solid var(--border-subtle);
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -451,175 +696,293 @@
       gap: 0.75rem;
     }
 
-    .console-actions {
+    .console-controls {
       display: flex;
       align-items: center;
-      gap: 0.5rem;
+      gap: 0.6rem;
+      flex-wrap: wrap;
     }
 
-    .console-body {
-      flex: 1;
-      padding: 1rem;
-      font-family: var(--font-mono);
+    .log-filter-input {
+      padding: 0.45rem 0.85rem;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      color: var(--text-primary);
       font-size: 0.8rem;
-      line-height: 1.6;
+      outline: none;
+      width: 220px;
+    }
+
+    .log-filter-input:focus {
+      border-color: var(--accent-500);
+    }
+
+    .console-viewport {
+      flex: 1;
+      padding: 1.1rem;
+      font-family: var(--font-mono);
+      font-size: 0.825rem;
+      line-height: 1.65;
       overflow-y: auto;
-      color: #cbd5e1;
+      color: #94a3b8;
       white-space: pre-wrap;
       word-break: break-all;
     }
 
-    /* Terminal View */
-    .terminal-container {
-      background: #090c10;
-      border: 1px solid var(--border-color);
-      border-radius: 12px;
+    .log-line {
+      margin-bottom: 0.25rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+    }
+    .log-error { color: #f87171; }
+    .log-warn { color: #fbbf24; }
+    .log-rbot { color: #a5b4fc; }
+    .log-info { color: #34d399; }
+
+    /* Web Terminal */
+    .terminal-wrapper {
+      background: #05080e;
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
       overflow: hidden;
       display: flex;
       flex-direction: column;
-      height: 650px;
+      height: 680px;
+      box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.8);
     }
 
-    .terminal-header {
-      background: var(--bg-surface);
-      padding: 0.75rem 1.25rem;
-      border-bottom: 1px solid var(--border-color);
+    .terminal-topbar {
+      background: rgba(15, 23, 42, 0.9);
+      padding: 0.85rem 1.35rem;
+      border-bottom: 1px solid var(--border-subtle);
       display: flex;
       align-items: center;
       justify-content: space-between;
       flex-wrap: wrap;
-      gap: 0.5rem;
+      gap: 0.75rem;
     }
 
-    .terminal-macros {
+    .mac-dots {
       display: flex;
-      gap: 0.375rem;
-      flex-wrap: wrap;
+      gap: 6px;
     }
+    .mac-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+    .dot-red { background: #ef4444; }
+    .dot-yellow { background: #f59e0b; }
+    .dot-green { background: #10b981; }
 
     #terminal {
       flex: 1;
-      padding: 0.5rem;
+      padding: 0.75rem;
     }
 
-    /* Responsive */
-    @media (max-width: 768px) {
-      header, main {
-        padding: 1rem;
+    /* Responsive Adjustments */
+    @media (max-width: 900px) {
+      header, nav, main {
+        padding-left: 1rem;
+        padding-right: 1rem;
       }
-      .grid {
+      .tables-grid {
         grid-template-columns: 1fr;
       }
-      .console-box, .terminal-container {
-        height: 480px;
+      .console-wrapper, .terminal-wrapper {
+        height: 520px;
       }
     }
   </style>
 </head>
 <body>
 
+  <!-- Toast Notification Container -->
+  <div id="toastContainer"></div>
+
   <!-- Login Modal -->
-  <div id="loginModal">
-    <div class="login-box">
-      <h2>R-BOT Control</h2>
-      <p>Masukkan password untuk mengakses monitoring & terminal.</p>
-      <form id="loginForm" onsubmit="handleLogin(event)">
-        <div class="input-group">
-          <label for="passwordInput">Password Akses</label>
-          <input type="password" id="passwordInput" class="input-field" placeholder="Masukkan password..." required autofocus>
+  <div id="loginModal" class="modal-overlay">
+    <div class="modal-box">
+      <div class="login-header">
+        <div class="login-icon-box">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
         </div>
-        <button type="submit" class="btn btn-primary">Masuk Dashboard</button>
-        <div id="loginError" class="error-msg">Password tidak valid.</div>
+        <h2>R-BOT Access</h2>
+        <p>Masukkan password untuk membuka Web Control Center</p>
+      </div>
+      <form id="loginForm" onsubmit="handleLogin(event)">
+        <div class="form-group">
+          <label class="form-label" for="passwordInput">Password Admin</label>
+          <input type="password" id="passwordInput" class="form-input" placeholder="••••••••••••" required autofocus>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+          Masuk Dashboard
+        </button>
+        <div id="loginError" class="error-alert">Password salah! Silakan coba lagi.</div>
       </form>
+    </div>
+  </div>
+
+  <!-- Restart Confirmation Modal -->
+  <div id="restartModal" class="modal-overlay">
+    <div class="modal-box" style="max-width: 380px; text-align: center;">
+      <div style="width: 50px; height: 50px; background: rgba(245, 158, 11, 0.15); color: #fbbf24; border-radius: 14px; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 1rem;">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+      </div>
+      <h3 style="font-size: 1.25rem; font-weight: 800; margin-bottom: 0.5rem;">Restart Engine Bot?</h3>
+      <p style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 1.5rem;">Bot akan berhenti sejenak dan memulai ulang proses Go di server.</p>
+      <div style="display: flex; gap: 0.75rem;">
+        <button class="btn btn-secondary btn-block" onclick="closeRestartModal()">Batal</button>
+        <button class="btn btn-warning btn-block" onclick="confirmRestartBot()">Ya, Restart</button>
+      </div>
     </div>
   </div>
 
   <!-- Header -->
   <header>
-    <div class="brand">
-      <div class="brand-icon">R</div>
-      <div class="brand-title">
-        <h1>R-BOT Monitoring</h1>
-        <span>Dashboard Status & Web Terminal</span>
+    <div class="brand-wrap">
+      <div class="brand-avatar">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      </div>
+      <div class="brand-info">
+        <h1>R-BOT Control Center</h1>
+        <span>WhatsApp Automation Suite v2.0</span>
       </div>
     </div>
-    <div class="header-actions">
-      <div id="statusBadge" class="badge badge-offline">
-        <span class="dot"></span> <span id="statusText">Checking...</span>
+
+    <div class="nav-actions">
+      <div id="statusBadge" class="status-badge status-offline">
+        <span class="status-dot"></span>
+        <span id="statusText">MEMERIKSA...</span>
       </div>
-      <button class="btn btn-warning btn-sm" onclick="restartBot()">🔄 Restart Bot</button>
-      <button class="btn btn-secondary btn-sm" onclick="reloadConfig()">⚙️ Reload Config</button>
-      <button class="btn btn-danger btn-sm" onclick="logout()">🚪 Logout</button>
+
+      <button class="btn btn-warning btn-sm" onclick="openRestartModal()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+        Restart
+      </button>
+
+      <button class="btn btn-secondary btn-sm" onclick="reloadConfig()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+        Reload Config
+      </button>
+
+      <button class="btn btn-danger btn-sm" onclick="logout()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        Logout
+      </button>
     </div>
   </header>
 
-  <!-- Navigation -->
+  <!-- Nav Tabs -->
   <nav>
-    <button class="nav-tab active" onclick="switchTab('monitoring')">📊 Monitoring</button>
-    <button class="nav-tab" onclick="switchTab('logs')">📜 Real-time Logs</button>
-    <button class="nav-tab" onclick="switchTab('terminal')">💻 Web Terminal</button>
-    <button class="nav-tab" onclick="switchTab('config')">⚙️ Config Viewer</button>
+    <button class="nav-tab active" onclick="switchTab('monitoring')">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+      Monitoring <span class="tab-badge">Live</span>
+    </button>
+
+    <button class="nav-tab" onclick="switchTab('logs')">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+      Real-Time Logs <span class="tab-badge" id="logBadgeCount">0</span>
+    </button>
+
+    <button class="nav-tab" onclick="switchTab('terminal')">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+      Web Terminal
+    </button>
+
+    <button class="nav-tab" onclick="switchTab('config')">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      Config Viewer
+    </button>
   </nav>
 
-  <!-- Main Content -->
+  <!-- Main Body -->
   <main>
-
-    <!-- Tab 1: Monitoring -->
+    <!-- TAB 1: MONITORING -->
     <div id="tab-monitoring" class="tab-content active">
-      <div class="grid">
+      <div class="stats-grid">
+
+        <!-- Card 1: WA Connection -->
         <div class="card">
-          <div class="card-header">
-            <span class="card-title">Koneksi WhatsApp</span>
-            <span class="card-icon">📱</span>
+          <div class="card-top">
+            <span class="card-label">Koneksi WhatsApp</span>
+            <div class="card-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+            </div>
           </div>
-          <div class="stat-value" id="waConnected">--</div>
+          <div class="stat-main" id="waConnected">--</div>
           <div class="stat-sub" id="waDetails">Nomor Bot: --</div>
-          <div id="pairingBox" class="pairing-box" style="display: none;">
-            <div style="font-size: 0.75rem; color: #fcd34d;">KODE PAIRING WHATSAPP:</div>
-            <div id="pairingCode" class="pairing-code">----</div>
-            <div style="font-size: 0.7rem; color: var(--text-muted);">Masukkan di WhatsApp > Perangkat Tertaut</div>
+
+          <div id="pairingCard" class="pairing-card" style="display: none;">
+            <div style="font-size: 0.725rem; font-weight: 700; color: #fbbf24; text-transform: uppercase; letter-spacing: 0.05em;">Pairing Code WhatsApp</div>
+            <div id="pairingCode" class="pairing-code-text">----</div>
+            <button class="copy-btn" onclick="copyPairingCode()">Salin Kode</button>
           </div>
         </div>
 
+        <!-- Card 2: Memory -->
         <div class="card">
-          <div class="card-header">
-            <span class="card-title">Penggunaan RAM</span>
-            <span class="card-icon">💾</span>
+          <div class="card-top">
+            <span class="card-label">Penggunaan RAM</span>
+            <div class="card-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+            </div>
           </div>
-          <div class="stat-value" id="ramAlloc">0 MB</div>
+          <div class="stat-main" id="ramAlloc">0 MB</div>
           <div class="stat-sub" id="ramSys">System: 0 MB | GC: 0</div>
+          <div class="progress-track">
+            <div id="ramBar" class="progress-fill" style="width: 0%;"></div>
+          </div>
         </div>
 
+        <!-- Card 3: System Goroutines -->
         <div class="card">
-          <div class="card-header">
-            <span class="card-title">Goroutines & Uptime</span>
-            <span class="card-icon">⚡</span>
+          <div class="card-top">
+            <span class="card-label">Goroutines & Uptime</span>
+            <div class="card-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            </div>
           </div>
-          <div class="stat-value" id="goroutines">0</div>
+          <div class="stat-main" id="goroutines">0</div>
           <div class="stat-sub" id="botUptime">Uptime: 0s</div>
         </div>
 
+        <!-- Card 4: Stats -->
         <div class="card">
-          <div class="card-header">
-            <span class="card-title">Total Interaksi</span>
-            <span class="card-icon">💬</span>
+          <div class="card-top">
+            <span class="card-label">Total Interaksi</span>
+            <div class="card-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            </div>
           </div>
-          <div class="stat-value" id="totalChats">0</div>
+          <div class="stat-main" id="totalChats">0</div>
           <div class="stat-sub" id="totalCmds">Commands: 0</div>
         </div>
+
       </div>
 
-      <!-- User & Group Stats Tables -->
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.25rem;">
-        <div class="table-container">
-          <div class="table-header">Top 10 Pengguna Aktif</div>
+      <!-- Top Users & Groups Tables -->
+      <div class="tables-grid">
+
+        <!-- Top Users Table -->
+        <div class="table-panel">
+          <div class="table-panel-header">
+            <div class="table-panel-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent-500)" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              Top 10 Pengguna Aktif
+            </div>
+            <input type="text" id="userSearch" class="log-filter-input" placeholder="Cari user JID..." oninput="filterUsersTable()" style="width: 150px;">
+          </div>
           <table>
             <thead>
               <tr>
-                <th>#</th>
+                <th style="width: 50px;">Rank</th>
                 <th>User JID</th>
                 <th>Chats</th>
-                <th>Commands</th>
+                <th>Cmds</th>
               </tr>
             </thead>
             <tbody id="topUsersBody">
@@ -628,12 +991,19 @@
           </table>
         </div>
 
-        <div class="table-container">
-          <div class="table-header">Top 10 Grup Aktif</div>
+        <!-- Top Groups Table -->
+        <div class="table-panel">
+          <div class="table-panel-header">
+            <div class="table-panel-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--success-500)" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-3-3.87"/><path d="M9 21v-2a4 4 0 0 1 3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><circle cx="9" cy="7" r="4"/></svg>
+              Top 10 Grup Aktif
+            </div>
+            <input type="text" id="groupSearch" class="log-filter-input" placeholder="Cari grup JID..." oninput="filterGroupsTable()" style="width: 150px;">
+          </div>
           <table>
             <thead>
               <tr>
-                <th>#</th>
+                <th style="width: 50px;">Rank</th>
                 <th>Group JID</th>
                 <th>Commands</th>
               </tr>
@@ -643,54 +1013,81 @@
             </tbody>
           </table>
         </div>
+
       </div>
     </div>
 
-    <!-- Tab 2: Logs -->
+    <!-- TAB 2: REAL-TIME LOGS -->
     <div id="tab-logs" class="tab-content">
-      <div class="console-box">
-        <div class="console-header">
+      <div class="console-wrapper">
+        <div class="console-topbar">
           <div style="display: flex; align-items: center; gap: 0.75rem;">
-            <input type="text" id="logFilter" class="input-field" placeholder="Filter log..." oninput="filterLogs()" style="padding: 0.4rem 0.8rem; width: 220px; font-size: 0.8rem;">
-            <span id="logCount" style="font-size: 0.75rem; color: var(--text-muted);">0 baris</span>
+            <div class="mac-dots">
+              <span class="mac-dot dot-red"></span>
+              <span class="mac-dot dot-yellow"></span>
+              <span class="mac-dot dot-green"></span>
+            </div>
+            <span style="font-weight: 700; font-size: 0.85rem; color: var(--text-secondary);">rbot.log stream</span>
           </div>
-          <div class="console-actions">
-            <button class="btn btn-secondary btn-sm" id="btnToggleScroll" onclick="toggleAutoScroll()">📜 Auto-scroll: ON</button>
-            <button class="btn btn-secondary btn-sm" onclick="clearLogsConsole()">🧹 Clear</button>
+
+          <div class="console-controls">
+            <input type="text" id="logFilter" class="log-filter-input" placeholder="Filter log keyword..." oninput="filterLogs()">
+            
+            <button class="btn btn-secondary btn-sm" id="btnToggleScroll" onclick="toggleAutoScroll()">
+              📜 Auto-scroll: ON
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="downloadLogs()">
+              💾 Export Log
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="clearLogsConsole()">
+              🧹 Clear
+            </button>
           </div>
         </div>
-        <div id="logBody" class="console-body"></div>
+
+        <div id="logBody" class="console-viewport"></div>
       </div>
     </div>
 
-    <!-- Tab 3: Terminal -->
+    <!-- TAB 3: WEB TERMINAL -->
     <div id="tab-terminal" class="tab-content">
-      <div class="terminal-container">
-        <div class="terminal-header">
-          <div style="font-weight: 600; font-size: 0.85rem; color: var(--text-muted);">Bash Web Terminal Session</div>
-          <div class="terminal-macros">
-            <button class="btn btn-secondary btn-sm" onclick="sendTerminalCmd('clear\n')">Clear</button>
+      <div class="terminal-wrapper">
+        <div class="terminal-topbar">
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <div class="mac-dots">
+              <span class="mac-dot dot-red"></span>
+              <span class="mac-dot dot-yellow"></span>
+              <span class="mac-dot dot-green"></span>
+            </div>
+            <span style="font-weight: 700; font-size: 0.85rem; color: var(--text-secondary);">Bash Terminal (ptmx)</span>
+          </div>
+
+          <div class="console-controls">
+            <button class="btn btn-secondary btn-sm" onclick="sendTerminalCmd('clear\n')">clear</button>
             <button class="btn btn-secondary btn-sm" onclick="sendTerminalCmd('ls -la\n')">ls -la</button>
             <button class="btn btn-secondary btn-sm" onclick="sendTerminalCmd('go version\n')">go version</button>
             <button class="btn btn-secondary btn-sm" onclick="sendTerminalCmd('git status\n')">git status</button>
             <button class="btn btn-warning btn-sm" onclick="restartTerminal()">Restart Shell</button>
           </div>
         </div>
+
         <div id="terminal"></div>
       </div>
     </div>
 
-    <!-- Tab 4: Config -->
+    <!-- TAB 4: CONFIG VIEWER -->
     <div id="tab-config" class="tab-content">
       <div class="card">
-        <div class="card-header">
-          <span class="card-title">Ringkasan Konfigurasi Bot</span>
-          <button class="btn btn-secondary btn-sm" onclick="fetchStatus()">Refresh</button>
+        <div class="card-top">
+          <span class="card-label">Konfigurasi Bot (config.json)</span>
+          <div style="display: flex; gap: 0.5rem;">
+            <button class="btn btn-secondary btn-sm" onclick="copyConfigJson()">📋 Copy JSON</button>
+            <button class="btn btn-secondary btn-sm" onclick="fetchStatus()">🔄 Refresh</button>
+          </div>
         </div>
-        <pre id="configJson" style="font-family: var(--font-mono); font-size: 0.85rem; color: #a5b4fc; background: rgba(0,0,0,0.3); padding: 1rem; border-radius: 8px; overflow-x: auto;"></pre>
+        <pre id="configJson" style="font-family: var(--font-mono); font-size: 0.85rem; color: #a5b4fc; background: rgba(0,0,0,0.4); padding: 1.25rem; border-radius: 12px; overflow-x: auto; border: 1px solid var(--border-subtle); max-height: 600px;"></pre>
       </div>
     </div>
-
   </main>
 
   <script>
@@ -702,9 +1099,36 @@
     let term = null;
     let fitAddon = null;
 
+    let cachedTopUsers = [];
+    let cachedTopGroups = [];
+
     document.addEventListener('DOMContentLoaded', () => {
       checkAuth();
     });
+
+    // Toast Notification System
+    function showToast(msg, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = `toast toast-${type}`;
+      
+      let iconSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>';
+      if (type === 'success') {
+        iconSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--success-500)" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>';
+      } else if (type === 'error') {
+        iconSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--danger-500)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
+      } else if (type === 'warning') {
+        iconSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--warning-500)" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+      }
+
+      toast.innerHTML = `${iconSvg} <span>${msg}</span>`;
+      container.appendChild(toast);
+
+      setTimeout(() => {
+        toast.style.animation = 'fadeOut 0.3s forwards';
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    }
 
     async function checkAuth() {
       try {
@@ -713,13 +1137,13 @@
         });
         const data = await res.json();
         if (data.authenticated) {
-          document.getElementById('loginModal').style.display = 'none';
+          document.getElementById('loginModal').classList.remove('active');
           initDashboard();
         } else {
-          document.getElementById('loginModal').style.display = 'flex';
+          document.getElementById('loginModal').classList.add('active');
         }
       } catch (err) {
-        document.getElementById('loginModal').style.display = 'flex';
+        document.getElementById('loginModal').classList.add('active');
       }
     }
 
@@ -739,14 +1163,15 @@
         if (data.ok) {
           authToken = data.token;
           localStorage.setItem('rbot_token', authToken);
-          document.getElementById('loginModal').style.display = 'none';
+          document.getElementById('loginModal').classList.remove('active');
+          showToast('Berhasil masuk dashboard!', 'success');
           initDashboard();
         } else {
-          errEl.textContent = data.error || 'Password tidak sesuai.';
+          errEl.textContent = data.error || 'Password salah!';
           errEl.style.display = 'block';
         }
       } catch (err) {
-        errEl.textContent = 'Gagal terhubung ke server.';
+        errEl.textContent = 'Gagal terhubung ke server web.';
         errEl.style.display = 'block';
       }
     }
@@ -775,51 +1200,69 @@
         }
         const d = await res.json();
 
-        // Update Badge
+        // Update Badge Status
         const badge = document.getElementById('statusBadge');
         const stText = document.getElementById('statusText');
         if (d.bot.connected) {
-          badge.className = 'badge badge-online';
+          badge.className = 'status-badge status-online';
           stText.textContent = 'ONLINE';
         } else {
-          badge.className = 'badge badge-offline';
+          badge.className = 'status-badge status-offline';
           stText.textContent = 'DISCONNECTED';
         }
 
-        // Card 1
+        // Card 1: WA Connection
         document.getElementById('waConnected').textContent = d.bot.connected ? 'Terhubung' : 'Terputus';
-        document.getElementById('waConnected').style.color = d.bot.connected ? 'var(--success)' : 'var(--danger)';
+        document.getElementById('waConnected').style.color = d.bot.connected ? 'var(--success-500)' : 'var(--danger-500)';
         document.getElementById('waDetails').textContent = `Bot: ${d.bot.pushName || 'R-BOT'} (${d.bot.jid || d.config.botNumber || '--'})`;
 
-        const pairingBox = document.getElementById('pairingBox');
+        const pairingCard = document.getElementById('pairingCard');
         if (d.bot.pairingCode) {
-          pairingBox.style.display = 'block';
+          pairingCard.style.display = 'block';
           document.getElementById('pairingCode').textContent = d.bot.pairingCode;
         } else {
-          pairingBox.style.display = 'none';
+          pairingCard.style.display = 'none';
         }
 
-        // Card 2
+        // Card 2: Memory
+        const alloc = parseFloat(d.system.allocMb) || 0;
+        const sys = parseFloat(d.system.sysMb) || 1;
+        const memPercent = Math.min(100, Math.round((alloc / sys) * 100));
         document.getElementById('ramAlloc').textContent = d.system.allocMb + ' MB';
         document.getElementById('ramSys').textContent = `System: ${d.system.sysMb} MB | GC: ${d.system.numGC}`;
+        document.getElementById('ramBar').style.width = `${memPercent}%`;
 
-        // Card 3
+        // Card 3: Goroutines & Uptime
         document.getElementById('goroutines').textContent = d.system.goroutines;
         document.getElementById('botUptime').textContent = `Uptime: ${formatSeconds(d.bot.uptime)} (${d.system.os}/${d.system.arch})`;
 
-        // Card 4
+        // Card 4: Interaction Stats
         document.getElementById('totalChats').textContent = d.stats.totalChats;
-        document.getElementById('totalCmds').textContent = `Commands: ${d.stats.totalCmds} | Users: ${d.stats.totalUsers}`;
+        document.getElementById('totalCmds').textContent = `Cmds: ${d.stats.totalCmds} | Users: ${d.stats.totalUsers}`;
 
-        // Tables
-        renderTopUsers(d.topUsers || []);
-        renderTopGroups(d.topGroups || []);
+        // Top Users & Groups
+        cachedTopUsers = d.topUsers || [];
+        cachedTopGroups = d.topGroups || [];
+        filterUsersTable();
+        filterGroupsTable();
 
-        // Config view
+        // Config View
         document.getElementById('configJson').textContent = JSON.stringify(d.config, null, 2);
       } catch (err) {
         console.error('Status fetch error:', err);
       }
+    }
+
+    function filterUsersTable() {
+      const filter = (document.getElementById('userSearch').value || '').toLowerCase();
+      const users = cachedTopUsers.filter(u => !filter || (u.JID && u.JID.toLowerCase().includes(filter)));
+      renderTopUsers(users);
+    }
+
+    function filterGroupsTable() {
+      const filter = (document.getElementById('groupSearch').value || '').toLowerCase();
+      const groups = cachedTopGroups.filter(g => !filter || (g.JID && g.JID.toLowerCase().includes(filter)));
+      renderTopGroups(groups);
     }
 
     function renderTopUsers(users) {
@@ -830,10 +1273,10 @@
       }
       tbody.innerHTML = users.slice(0, 10).map((u, i) => `
         <tr>
-          <td style="font-weight: 600;">#${i + 1}</td>
-          <td style="font-family: var(--font-mono);">${u.JID}</td>
+          <td><span class="rank-pill rank-${i < 3 ? i + 1 : ''}">${i + 1}</span></td>
+          <td style="font-family: var(--font-mono); font-size: 0.8rem;">${u.JID}</td>
           <td>${u.chats}</td>
-          <td><span style="color: var(--accent); font-weight: 600;">${u.cmds}</span></td>
+          <td><span style="color: var(--accent-500); font-weight: 700;">${u.cmds}</span></td>
         </tr>
       `).join('');
     }
@@ -846,11 +1289,23 @@
       }
       tbody.innerHTML = groups.slice(0, 10).map((g, i) => `
         <tr>
-          <td style="font-weight: 600;">#${i + 1}</td>
-          <td style="font-family: var(--font-mono);">${g.JID}</td>
-          <td><span style="color: var(--success); font-weight: 600;">${g.Cmds}</span></td>
+          <td><span class="rank-pill rank-${i < 3 ? i + 1 : ''}">${i + 1}</span></td>
+          <td style="font-family: var(--font-mono); font-size: 0.8rem;">${g.JID}</td>
+          <td><span style="color: var(--success-500); font-weight: 700;">${g.Cmds}</span></td>
         </tr>
       `).join('');
+    }
+
+    function copyPairingCode() {
+      const code = document.getElementById('pairingCode').textContent;
+      navigator.clipboard.writeText(code);
+      showToast('Kode pairing berhasil disalin!', 'success');
+    }
+
+    function copyConfigJson() {
+      const json = document.getElementById('configJson').textContent;
+      navigator.clipboard.writeText(json);
+      showToast('Konfigurasi disalin ke clipboard!', 'success');
     }
 
     function formatSeconds(sec) {
@@ -867,7 +1322,7 @@
       document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active'));
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
 
-      event.target.classList.add('active');
+      event.currentTarget.classList.add('active');
       document.getElementById('tab-' + tabId).classList.add('active');
 
       if (tabId === 'terminal') {
@@ -875,7 +1330,7 @@
       }
     }
 
-    /* Real-time Logs */
+    /* Real-Time Logs System */
     function connectLogsWS() {
       const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
       const url = `${protocol}//${location.host}/ws/logs?token=${encodeURIComponent(authToken)}`;
@@ -891,21 +1346,15 @@
 
     function appendLogLine(line) {
       rawLogLines.push(line);
-      if (rawLogLines.length > 1000) rawLogLines.shift();
+      if (rawLogLines.length > 1500) rawLogLines.shift();
 
-      document.getElementById('logCount').textContent = `${rawLogLines.length} baris`;
+      document.getElementById('logBadgeCount').textContent = rawLogLines.length;
 
       const logBody = document.getElementById('logBody');
-      const filter = document.getElementById('logFilter').value.toLowerCase();
+      const filter = (document.getElementById('logFilter').value || '').toLowerCase();
 
       if (!filter || line.toLowerCase().includes(filter)) {
-        const div = document.createElement('div');
-        div.textContent = line;
-        if (line.includes('[ERROR]') || line.includes('gagal') || line.includes('fatal')) {
-          div.style.color = '#fca5a5';
-        } else if (line.includes('[rbot]')) {
-          div.style.color = '#818cf8';
-        }
+        const div = createLogLineNode(line);
         logBody.appendChild(div);
         if (autoScroll) {
           logBody.scrollTop = logBody.scrollHeight;
@@ -913,21 +1362,31 @@
       }
     }
 
+    function createLogLineNode(line) {
+      const div = document.createElement('div');
+      div.className = 'log-line';
+
+      if (line.includes('[ERROR]') || line.includes('gagal') || line.includes('fatal')) {
+        div.classList.add('log-error');
+      } else if (line.includes('[WARN]') || line.includes('warning')) {
+        div.classList.add('log-warn');
+      } else if (line.includes('[rbot]')) {
+        div.classList.add('log-rbot');
+      } else {
+        div.classList.add('log-info');
+      }
+      div.textContent = line;
+      return div;
+    }
+
     function filterLogs() {
-      const filter = document.getElementById('logFilter').value.toLowerCase();
+      const filter = (document.getElementById('logFilter').value || '').toLowerCase();
       const logBody = document.getElementById('logBody');
       logBody.innerHTML = '';
 
       rawLogLines.forEach(line => {
         if (!filter || line.toLowerCase().includes(filter)) {
-          const div = document.createElement('div');
-          div.textContent = line;
-          if (line.includes('[ERROR]') || line.includes('gagal')) {
-            div.style.color = '#fca5a5';
-          } else if (line.includes('[rbot]')) {
-            div.style.color = '#818cf8';
-          }
-          logBody.appendChild(div);
+          logBody.appendChild(createLogLineNode(line));
         }
       });
       if (autoScroll) logBody.scrollTop = logBody.scrollHeight;
@@ -941,31 +1400,55 @@
     function clearLogsConsole() {
       rawLogLines = [];
       document.getElementById('logBody').innerHTML = '';
-      document.getElementById('logCount').textContent = '0 baris';
+      document.getElementById('logBadgeCount').textContent = '0';
+      showToast('Log console dibersihkan.', 'info');
     }
 
-    /* Web Terminal */
+    function downloadLogs() {
+      const text = rawLogLines.join('\n');
+      const blob = new Blob([text], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `rbot_logs_${new Date().toISOString().slice(0, 10)}.log`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('File log berhasil didownload!', 'success');
+    }
+
+    /* Web Terminal System */
     function initTerminal() {
-      if (term) return; // Already initialized
+      if (term) return;
 
       if (window.Terminal) {
         term = new Terminal({
           cursorBlink: true,
           theme: {
-            background: '#090c10',
-            foreground: '#f1f5f9',
+            background: '#05080e',
+            foreground: '#f8fafc',
             cursor: '#6366f1',
-            selectionBackground: 'rgba(99, 102, 241, 0.3)'
+            selectionBackground: 'rgba(99, 102, 241, 0.35)',
+            black: '#0f172a',
+            red: '#ef4444',
+            green: '#10b981',
+            yellow: '#f59e0b',
+            blue: '#6366f1',
+            magenta: '#a855f7',
+            cyan: '#06b6d4',
+            white: '#f8fafc'
           },
           fontFamily: "'JetBrains Mono', monospace",
-          fontSize: 14
+          fontSize: 13.5,
+          letterSpacing: 0
         });
+
         if (window.FitAddon) {
           fitAddon = new FitAddon.FitAddon();
           term.loadAddon(fitAddon);
         }
+
         term.open(document.getElementById('terminal'));
-        if (fitAddon) fitAddon.fit();
+        if (fitAddon) setTimeout(() => fitAddon.fit(), 100);
 
         connectTerminalWS();
 
@@ -982,7 +1465,7 @@
           }
         });
       } else {
-        document.getElementById('terminal').innerHTML = '<div style="padding: 1rem; color: #fca5a5;">Gagal memuat pustaka xterm.js</div>';
+        document.getElementById('terminal').innerHTML = '<div style="padding: 1rem; color: #f87171;">Gagal memuat pustaka xterm.js</div>';
       }
     }
 
@@ -1022,20 +1505,29 @@
       if (wsTerm) wsTerm.close();
       if (term) term.clear();
       connectTerminalWS();
+      showToast('Sesi shell di-restart.', 'info');
     }
 
-    /* Bot Actions */
-    async function restartBot() {
-      if (!confirm('Apakah Anda yakin ingin merefleksikan/restart bot?')) return;
+    /* Modal & Actions */
+    function openRestartModal() {
+      document.getElementById('restartModal').classList.add('active');
+    }
+
+    function closeRestartModal() {
+      document.getElementById('restartModal').classList.remove('active');
+    }
+
+    async function confirmRestartBot() {
+      closeRestartModal();
       try {
         const res = await fetch('/api/restart', {
           method: 'POST',
           headers: { 'Authorization': 'Bearer ' + authToken }
         });
         const data = await res.json();
-        alert(data.message || 'Perintah restart telah dikirim.');
+        showToast(data.message || 'Perintah restart telah dikirim!', 'warning');
       } catch (err) {
-        alert('Gagal mengirim perintah restart.');
+        showToast('Gagal mengirim perintah restart.', 'error');
       }
     }
 
@@ -1046,10 +1538,10 @@
           headers: { 'Authorization': 'Bearer ' + authToken }
         });
         const data = await res.json();
-        alert(data.message || 'Konfigurasi berhasil diperbarui.');
+        showToast(data.message || 'Konfigurasi berhasil diperbarui.', 'success');
         fetchStatus();
       } catch (err) {
-        alert('Gagal memuat ulang konfigurasi.');
+        showToast('Gagal memuat ulang konfigurasi.', 'error');
       }
     }
   </script>

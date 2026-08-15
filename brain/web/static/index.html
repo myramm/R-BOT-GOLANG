@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>R-BOT Control Center</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -47,6 +47,7 @@
       box-sizing: border-box;
       margin: 0;
       padding: 0;
+      -webkit-tap-highlight-color: transparent;
     }
 
     body {
@@ -59,13 +60,17 @@
       -webkit-font-smoothing: antialiased;
     }
 
-    /* Scrollbars */
-    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    /* Custom Scrollbars */
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
     ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 4px; }
-    ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+    ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.22); }
 
-    /* Layout Skeleton */
+    /* Responsive Display Utilities */
+    .mobile-only { display: none !important; }
+    .desktop-only { display: flex !important; }
+
+    /* Layout Structure */
     #sidebar {
       width: 240px;
       background: var(--bg-sidebar);
@@ -76,7 +81,7 @@
       position: sticky;
       top: 0;
       z-index: 50;
-      transition: width 0.25s ease;
+      flex-shrink: 0;
     }
 
     #mainContent {
@@ -88,7 +93,7 @@
 
     /* Sidebar Content */
     .sidebar-header {
-      padding: 1.5rem 1.25rem;
+      padding: 1.25rem 1.25rem;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -192,24 +197,47 @@
 
     /* Top Navbar */
     .topbar {
-      height: 64px;
-      padding: 0 2rem;
+      height: 60px;
+      padding: 0 1.5rem;
       display: flex;
       align-items: center;
       justify-content: space-between;
       border-bottom: 1px solid var(--border-color);
-      background: rgba(11, 15, 23, 0.8);
-      backdrop-filter: blur(8px);
+      background: rgba(11, 15, 23, 0.9);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
       position: sticky;
       top: 0;
       z-index: 40;
     }
 
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .icon-btn {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 1.1rem;
+      transition: all 0.15s ease;
+    }
+    .icon-btn:active { transform: scale(0.95); }
+
     .topbar-status {
       display: flex;
       align-items: center;
       gap: 0.5rem;
-      font-size: 0.825rem;
+      font-size: 0.8rem;
       font-weight: 600;
       padding: 0.35rem 0.75rem;
       border-radius: 9999px;
@@ -232,7 +260,45 @@
       gap: 0.75rem;
     }
 
-    /* Buttons & Controls */
+    /* Action Dropdown Menu (Mobile & Quick Actions) */
+    .action-menu-dropdown {
+      position: absolute;
+      top: 52px;
+      right: 1rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color-hover);
+      border-radius: 12px;
+      padding: 0.5rem;
+      width: 200px;
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.6);
+      display: none;
+      flex-direction: column;
+      gap: 0.25rem;
+      z-index: 100;
+      animation: fadeIn 0.15s ease forwards;
+    }
+    .action-menu-dropdown.active { display: flex; }
+
+    .dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.6rem 0.75rem;
+      color: var(--text-main);
+      font-size: 0.825rem;
+      font-weight: 500;
+      border: none;
+      background: transparent;
+      border-radius: 6px;
+      cursor: pointer;
+      text-align: left;
+      width: 100%;
+    }
+    .dropdown-item:hover { background: rgba(255, 255, 255, 0.05); }
+    .dropdown-item.danger { color: var(--danger); }
+    .dropdown-item.danger:hover { background: var(--danger-subtle); }
+
+    /* Buttons */
     .btn {
       display: inline-flex;
       align-items: center;
@@ -262,10 +328,10 @@
 
     .btn-sm { padding: 0.35rem 0.75rem; font-size: 0.775rem; }
 
-    /* Page Views */
+    /* Main View Area */
     .view-container {
-      padding: 2rem;
-      max-width: 1300px;
+      padding: 1.75rem;
+      max-width: 1200px;
       width: 100%;
       margin: 0 auto;
       display: none;
@@ -278,34 +344,34 @@
       to { opacity: 1; transform: translateY(0); }
     }
 
-    /* Greeting Banner */
+    /* Greeting Header */
     .greeting-header {
-      margin-bottom: 2rem;
+      margin-bottom: 1.5rem;
     }
     .greeting-header h2 {
-      font-size: 1.5rem;
+      font-size: 1.35rem;
       font-weight: 800;
       letter-spacing: -0.02em;
     }
     .greeting-header p {
       color: var(--text-sub);
-      font-size: 0.9rem;
+      font-size: 0.85rem;
       margin-top: 0.25rem;
     }
 
     /* Metric Cards Grid */
     .metrics-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-      gap: 1.25rem;
-      margin-bottom: 2rem;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
     }
 
     .metric-card {
       background: var(--bg-card);
       border: 1px solid var(--border-color);
       border-radius: 12px;
-      padding: 1.25rem;
+      padding: 1.1rem;
       transition: all 0.2s ease;
     }
     .metric-card:hover {
@@ -313,20 +379,20 @@
     }
 
     .metric-title {
-      font-size: 0.8rem;
+      font-size: 0.775rem;
       font-weight: 600;
       color: var(--text-sub);
     }
 
     .metric-value {
-      font-size: 1.75rem;
+      font-size: 1.6rem;
       font-weight: 800;
       letter-spacing: -0.02em;
-      margin: 0.35rem 0;
+      margin: 0.3rem 0;
     }
 
     .metric-change {
-      font-size: 0.75rem;
+      font-size: 0.725rem;
       font-weight: 600;
       color: var(--success);
       display: flex;
@@ -334,28 +400,24 @@
       gap: 0.25rem;
     }
 
-    /* Activity Feed Section */
+    /* 2 Column Section */
     .two-column-layout {
       display: grid;
       grid-template-columns: 2fr 1fr;
-      gap: 1.5rem;
-    }
-
-    @media (max-width: 1024px) {
-      .two-column-layout { grid-template-columns: 1fr; }
+      gap: 1.25rem;
     }
 
     .panel {
       background: var(--bg-card);
       border: 1px solid var(--border-color);
       border-radius: 12px;
-      padding: 1.25rem;
+      padding: 1.1rem;
     }
 
     .panel-title {
-      font-size: 0.95rem;
+      font-size: 0.9rem;
       font-weight: 700;
-      margin-bottom: 1.25rem;
+      margin-bottom: 1rem;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -364,94 +426,67 @@
     .feed-list {
       display: flex;
       flex-direction: column;
-      gap: 1rem;
+      gap: 0.85rem;
     }
 
     .feed-item {
       display: flex;
       align-items: flex-start;
-      gap: 0.75rem;
-      font-size: 0.85rem;
+      gap: 0.65rem;
+      font-size: 0.825rem;
     }
 
     .feed-dot {
-      width: 8px;
-      height: 8px;
+      width: 7px;
+      height: 7px;
       border-radius: 50%;
       background: var(--accent);
       margin-top: 0.35rem;
       flex-shrink: 0;
     }
 
-    .feed-content {
-      flex: 1;
-    }
-
-    .feed-text {
-      color: var(--text-main);
-      font-weight: 500;
-    }
-
-    .feed-meta {
-      color: var(--text-muted);
-      font-size: 0.75rem;
-      margin-top: 0.15rem;
-    }
-
-    .feed-time {
-      color: var(--text-muted);
-      font-size: 0.75rem;
-      flex-shrink: 0;
-    }
+    .feed-content { flex: 1; }
+    .feed-text { color: var(--text-main); font-weight: 500; }
+    .feed-meta { color: var(--text-muted); font-size: 0.725rem; margin-top: 0.1rem; }
+    .feed-time { color: var(--text-muted); font-size: 0.725rem; flex-shrink: 0; }
 
     /* Tables */
-    .table-responsive {
-      overflow-x: auto;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      text-align: left;
-      font-size: 0.85rem;
-    }
-
+    .table-responsive { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.825rem; }
     th {
-      padding: 0.75rem 1rem;
+      padding: 0.65rem 0.85rem;
       color: var(--text-muted);
       font-weight: 600;
-      font-size: 0.75rem;
+      font-size: 0.725rem;
       text-transform: uppercase;
       letter-spacing: 0.05em;
       border-bottom: 1px solid var(--border-color);
     }
-
     td {
-      padding: 0.85rem 1rem;
+      padding: 0.75rem 0.85rem;
       border-bottom: 1px solid var(--border-color);
       color: var(--text-main);
     }
-
     tbody tr:last-child td { border-bottom: none; }
     tbody tr:hover { background: rgba(255, 255, 255, 0.015); }
 
     .input-field {
-      padding: 0.5rem 0.85rem;
+      padding: 0.5rem 0.75rem;
       background: var(--bg-input);
       border: 1px solid var(--border-color);
       border-radius: 8px;
       color: var(--text-main);
-      font-size: 0.825rem;
+      font-size: 0.8rem;
       outline: none;
       width: 100%;
     }
     .input-field:focus { border-color: var(--accent); }
 
-    /* Modals & Toasts */
+    /* Toast Notification System */
     .toast-container {
       position: fixed;
-      bottom: 1.5rem;
-      right: 1.5rem;
+      bottom: 1.25rem;
+      right: 1.25rem;
       z-index: 9999;
       display: flex;
       flex-direction: column;
@@ -462,9 +497,9 @@
       background: var(--bg-card);
       border: 1px solid var(--border-color);
       border-left: 4px solid var(--accent);
-      padding: 0.75rem 1.25rem;
+      padding: 0.65rem 1rem;
       border-radius: 8px;
-      font-size: 0.85rem;
+      font-size: 0.825rem;
       font-weight: 500;
       box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
       animation: slideIn 0.2s ease forwards;
@@ -478,15 +513,17 @@
       to { transform: translateX(0); opacity: 1; }
     }
 
+    /* Modal Backdrop */
     .modal-backdrop {
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.7);
+      background: rgba(0, 0, 0, 0.75);
       backdrop-filter: blur(4px);
       z-index: 9000;
       display: flex;
       align-items: center;
       justify-content: center;
+      padding: 1rem;
       opacity: 0;
       pointer-events: none;
       transition: opacity 0.2s ease;
@@ -495,71 +532,267 @@
 
     .modal-box {
       background: var(--bg-card);
-      border: 1px solid var(--border-color);
+      border: 1px solid var(--border-color-hover);
       border-radius: 12px;
-      padding: 1.75rem;
+      padding: 1.5rem;
       width: 100%;
-      max-width: 440px;
+      max-width: 420px;
     }
 
-    /* Terminal Wrapper */
+    /* Terminal Box */
     .terminal-box {
       background: #06090e;
       border: 1px solid var(--border-color);
       border-radius: 12px;
-      height: 600px;
+      height: 520px;
       overflow: hidden;
       display: flex;
       flex-direction: column;
     }
     .terminal-bar {
-      padding: 0.75rem 1rem;
+      padding: 0.6rem 0.85rem;
       background: var(--bg-sidebar);
       border-bottom: 1px solid var(--border-color);
       display: flex;
       align-items: center;
       justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.5rem;
     }
-    #terminal { flex: 1; padding: 0.5rem; }
+    #terminal { flex: 1; padding: 0.4rem; }
+
+    /* Mobile Drawer (Slide Out Navigation) */
+    .mobile-drawer-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      z-index: 2000;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+    }
+    .mobile-drawer-overlay.active { opacity: 1; pointer-events: auto; }
+
+    .mobile-drawer {
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: 260px;
+      background: var(--bg-sidebar);
+      z-index: 2001;
+      display: flex;
+      flex-direction: column;
+      transform: translateX(-100%);
+      transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 10px 0 30px rgba(0,0,0,0.8);
+    }
+    .mobile-drawer-overlay.active .mobile-drawer {
+      transform: translateX(0);
+    }
+
+    /* Bottom App Bar Navigation on Mobile (Android Style) */
+    .bottom-appbar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 60px;
+      background: rgba(15, 20, 32, 0.95);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-top: 1px solid var(--border-color);
+      display: none;
+      align-items: center;
+      justify-content: space-around;
+      z-index: 1000;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    .bottom-nav-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.2rem;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 0.675rem;
+      font-weight: 600;
+      cursor: pointer;
+      flex: 1;
+      height: 100%;
+    }
+
+    .bottom-nav-btn.active {
+      color: var(--accent);
+    }
+
+    .bottom-nav-icon {
+      width: 20px;
+      height: 20px;
+    }
+
+    /* =================================================== */
+    /* ANDROID MOBILE-FIRST RESPONSIVE BREAKPOINTS (<= 768px) */
+    /* =================================================== */
+    @media (max-width: 768px) {
+      #sidebar { display: none; }
+      .desktop-only { display: none !important; }
+      .mobile-only { display: flex !important; }
+
+      .bottom-appbar { display: flex; }
+
+      .view-container {
+        padding: 1rem 1rem 5rem 1rem;
+      }
+
+      .greeting-header h2 { font-size: 1.2rem; }
+      .greeting-header p { font-size: 0.8rem; }
+
+      /* 2 COLUMNS METRICS CARDS ON MOBILE */
+      .metrics-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 0.65rem;
+        margin-bottom: 1.25rem;
+      }
+
+      .metric-card {
+        padding: 0.85rem;
+      }
+
+      .metric-title { font-size: 0.725rem; }
+      .metric-value { font-size: 1.3rem; margin: 0.15rem 0; }
+      .metric-change { font-size: 0.675rem; }
+
+      .two-column-layout {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+      }
+
+      .topbar {
+        padding: 0 1rem;
+        height: 56px;
+      }
+
+      .topbar-actions { display: none; }
+
+      .terminal-box { height: 440px; }
+    }
   </style>
 </head>
 <body>
 
-  <!-- Toast Container -->
+  <!-- Toast Notification Container -->
   <div id="toastContainer" class="toast-container"></div>
+
+  <!-- Mobile Drawer Overlay & Sidebar -->
+  <div id="mobileDrawerOverlay" class="mobile-drawer-overlay" onclick="closeMobileDrawer()">
+    <div class="mobile-drawer" onclick="event.stopPropagation()">
+      <div class="sidebar-header">
+        <a href="#" class="brand">
+          <div class="brand-logo">R</div>
+          <span class="brand-title">R-BOT Suite</span>
+        </a>
+        <button class="icon-btn" onclick="closeMobileDrawer()">✕</button>
+      </div>
+
+      <nav class="sidebar-nav">
+        <button class="nav-item active" onclick="switchNav('overview', this); closeMobileDrawer();">
+          <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+          Overview
+        </button>
+
+        <button class="nav-item" onclick="switchNav('activity', this); closeMobileDrawer();">
+          <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+          Activity
+        </button>
+
+        <button class="nav-item" onclick="switchNav('users', this); closeMobileDrawer();">
+          <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+          Users & Groups
+        </button>
+
+        <button class="nav-item" onclick="switchNav('commands', this); closeMobileDrawer();">
+          <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+          Commands
+        </button>
+
+        <button class="nav-item" onclick="switchNav('logs', this); closeMobileDrawer();">
+          <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          Logs & Audit
+        </button>
+
+        <button class="nav-item" onclick="switchNav('settings', this); closeMobileDrawer();">
+          <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          Settings
+        </button>
+
+        <button class="nav-item" onclick="switchNav('terminal', this); closeMobileDrawer();">
+          <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M4 17l6-6-6-6m8 14h8"/></svg>
+          Terminal
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="user-info">
+          <div class="user-avatar">A</div>
+          <div>
+            <div style="font-size: 0.8rem; font-weight: 600;">Admin</div>
+            <div style="font-size: 0.7rem; color: var(--text-muted);">Session Active</div>
+          </div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="logout()">🚪</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Login Modal -->
   <div id="loginModal" class="modal-backdrop active">
-    <div class="modal-box" style="max-width: 360px;">
-      <div style="text-align: center; margin-bottom: 1.5rem;">
-        <div class="brand-logo" style="width: 44px; height: 44px; margin: 0 auto 0.75rem; font-size: 1.25rem;">R</div>
-        <h3 style="font-size: 1.25rem; font-weight: 700;">R-BOT Control Center</h3>
-        <p style="color: var(--text-sub); font-size: 0.825rem; margin-top: 0.25rem;">Masukkan password admin untuk melanjutkan.</p>
+    <div class="modal-box" style="max-width: 340px;">
+      <div style="text-align: center; margin-bottom: 1.25rem;">
+        <div class="brand-logo" style="width: 40px; height: 40px; margin: 0 auto 0.5rem; font-size: 1.1rem;">R</div>
+        <h3 style="font-size: 1.15rem; font-weight: 700;">R-BOT Control Center</h3>
+        <p style="color: var(--text-sub); font-size: 0.8rem; margin-top: 0.2rem;">Masukkan password admin.</p>
       </div>
       <form onsubmit="handleLogin(event)">
         <div style="margin-bottom: 1rem;">
-          <input type="password" id="loginPassword" class="input-field" placeholder="Password admin..." required autofocus style="padding: 0.75rem 1rem;">
+          <input type="password" id="loginPassword" class="input-field" placeholder="Password admin..." required autofocus style="padding: 0.65rem 0.85rem;">
         </div>
-        <button type="submit" class="btn btn-primary" style="width: 100%; padding: 0.75rem;">Masuk</button>
-        <div id="loginError" style="color: var(--danger); font-size: 0.8rem; margin-top: 0.75rem; display: none; text-align: center;"></div>
+        <button type="submit" class="btn btn-primary" style="width: 100%; padding: 0.65rem;">Masuk</button>
+        <div id="loginError" style="color: var(--danger); font-size: 0.775rem; margin-top: 0.65rem; display: none; text-align: center;"></div>
       </form>
+    </div>
+  </div>
+
+  <!-- Action Confirmation Dialog Modal -->
+  <div id="confirmModal" class="modal-backdrop">
+    <div class="modal-box" style="max-width: 320px; text-align: center;">
+      <h3 id="confirmModalTitle" style="font-size: 1.05rem; font-weight: 700; margin-bottom: 0.5rem;">Konfirmasi Action</h3>
+      <p id="confirmModalText" style="color: var(--text-sub); font-size: 0.825rem; margin-bottom: 1.25rem;">Apakah Anda yakin ingin melanjutkan?</p>
+      <div style="display: flex; gap: 0.5rem;">
+        <button class="btn btn-secondary" style="flex: 1;" onclick="closeConfirmModal()">Batal</button>
+        <button id="confirmModalActionBtn" class="btn btn-warning" style="flex: 1;" onclick="executeConfirmModal()">Lanjutkan</button>
+      </div>
     </div>
   </div>
 
   <!-- Broadcast / Direct Message Modal -->
   <div id="messageModal" class="modal-backdrop">
     <div class="modal-box">
-      <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 1rem;">Kirim Pesan WhatsApp</h3>
+      <h3 style="font-size: 1.05rem; font-weight: 700; margin-bottom: 1rem;">Kirim Pesan WhatsApp</h3>
       <form onsubmit="sendBroadcastMsg(event)">
-        <div style="margin-bottom: 1rem;">
-          <label style="display: block; font-size: 0.75rem; color: var(--text-sub); margin-bottom: 0.35rem;">Target JID / Nomor</label>
+        <div style="margin-bottom: 0.85rem;">
+          <label style="display: block; font-size: 0.725rem; color: var(--text-sub); margin-bottom: 0.3rem;">Target JID / Nomor</label>
           <input type="text" id="targetJidInput" class="input-field" placeholder="628xxxxxxxxxx@s.whatsapp.net" required>
         </div>
-        <div style="margin-bottom: 1.25rem;">
-          <label style="display: block; font-size: 0.75rem; color: var(--text-sub); margin-bottom: 0.35rem;">Pesan Teks</label>
-          <textarea id="messageContentInput" class="input-field" rows="4" placeholder="Tulis pesan..." required style="resize: vertical;"></textarea>
+        <div style="margin-bottom: 1rem;">
+          <label style="display: block; font-size: 0.725rem; color: var(--text-sub); margin-bottom: 0.3rem;">Pesan Teks</label>
+          <textarea id="messageContentInput" class="input-field" rows="3" placeholder="Tulis pesan..." required style="resize: vertical;"></textarea>
         </div>
-        <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+        <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
           <button type="button" class="btn btn-secondary" onclick="closeMessageModal()">Batal</button>
           <button type="submit" class="btn btn-primary">Kirim Pesan</button>
         </div>
@@ -567,7 +800,7 @@
     </div>
   </div>
 
-  <!-- Sidebar Navigation -->
+  <!-- Desktop Sidebar -->
   <aside id="sidebar">
     <div class="sidebar-header">
       <a href="#" class="brand">
@@ -621,24 +854,44 @@
           <div style="font-size: 0.7rem; color: var(--text-muted);">Session Active</div>
         </div>
       </div>
-      <button class="btn btn-secondary btn-sm" onclick="logout()" title="Logout">🚪</button>
+      <button class="btn btn-secondary btn-sm" onclick="logout()">🚪</button>
     </div>
   </aside>
 
-  <!-- Main Container -->
+  <!-- Main Content Wrapper -->
   <div id="mainContent">
 
     <!-- Topbar -->
     <header class="topbar">
-      <div class="topbar-status">
-        <span id="statusDot" class="status-dot"></span>
-        <span id="statusText">Checking status...</span>
+      <div class="topbar-left">
+        <!-- Mobile Hamburger Drawer Button -->
+        <button class="icon-btn mobile-only" onclick="toggleMobileDrawer()">☰</button>
+        
+        <div class="topbar-status">
+          <span id="statusDot" class="status-dot"></span>
+          <span id="statusText">Checking...</span>
+        </div>
       </div>
 
-      <div class="topbar-actions">
-        <button class="btn btn-secondary btn-sm" onclick="openMessageModal()">💬 Kirim Pesan</button>
-        <button class="btn btn-secondary btn-sm" onclick="reloadConfig()">🔁 Reload Config</button>
-        <button class="btn btn-warning btn-sm" onclick="restartBot()">🔄 Restart</button>
+      <!-- Action Dropdown for Quick Access -->
+      <div style="position: relative;">
+        <!-- Desktop buttons -->
+        <div class="topbar-actions desktop-only">
+          <button class="btn btn-secondary btn-sm" onclick="openMessageModal()">💬 Kirim Pesan</button>
+          <button class="btn btn-secondary btn-sm" onclick="reloadConfig()">🔁 Reload Config</button>
+          <button class="btn btn-warning btn-sm" onclick="askRestartBot()">🔄 Restart</button>
+        </div>
+
+        <!-- Mobile Action Menu Button (Three Dots) -->
+        <button class="icon-btn mobile-only" onclick="toggleActionMenu()">⋮</button>
+
+        <!-- Dropdown Popup -->
+        <div id="actionMenuDropdown" class="action-menu-dropdown">
+          <button class="dropdown-item" onclick="openMessageModal(); closeActionMenu();">💬 Kirim Pesan</button>
+          <button class="dropdown-item" onclick="reloadConfig(); closeActionMenu();">🔁 Reload Config</button>
+          <button class="dropdown-item" onclick="askRestartBot(); closeActionMenu();">🔄 Restart Bot</button>
+          <button class="dropdown-item danger" onclick="logout(); closeActionMenu();">🚪 Logout</button>
+        </div>
       </div>
     </header>
 
@@ -646,45 +899,45 @@
     <section id="view-overview" class="view-container active">
       <div class="greeting-header">
         <h2>Selamat Datang 👋</h2>
-        <p id="greetingSub">Semua sistem R-BOT terpantau berjalan dengan lancar.</p>
+        <p id="greetingSub">Semua sistem R-BOT berjalan dengan lancar.</p>
       </div>
 
-      <!-- 4 Core Metrics -->
+      <!-- 4 Core Metrics Grid (2 Columns on Mobile Android!) -->
       <div class="metrics-grid">
         <div class="metric-card">
-          <div class="metric-title">Messages Today</div>
+          <div class="metric-title">Messages</div>
           <div class="metric-value" id="metricChats">0</div>
-          <div class="metric-change">↑ 14.2% dibanding kemarin</div>
+          <div class="metric-change">↑ 14.2% today</div>
         </div>
 
         <div class="metric-card">
           <div class="metric-title">Active Users</div>
           <div class="metric-value" id="metricUsers">0</div>
-          <div class="metric-change">Total pengirim terdaftar</div>
+          <div class="metric-change">Registered</div>
         </div>
 
         <div class="metric-card">
           <div class="metric-title">RAM Usage</div>
           <div class="metric-value" id="metricRam">0 MB</div>
-          <div class="metric-change" id="metricRamSub" style="color: var(--text-muted);">Optimal Memory Heap</div>
+          <div class="metric-change" id="metricRamSub" style="color: var(--text-muted);">Optimal</div>
         </div>
 
         <div class="metric-card">
-          <div class="metric-title">Engine Uptime</div>
+          <div class="metric-title">Uptime</div>
           <div class="metric-value" id="metricUptime">0m</div>
-          <div class="metric-change" id="metricUptimeSub" style="color: var(--text-muted);">System Up</div>
+          <div class="metric-change" id="metricUptimeSub" style="color: var(--text-muted);">Engine Up</div>
         </div>
       </div>
 
-      <!-- Overview 2 Column -->
+      <!-- Overview 2 Column / Mobile Stacked -->
       <div class="two-column-layout">
-        <!-- Message Activity Chart Panel -->
+        <!-- Message Activity Chart Panel (Compact height on Mobile!) -->
         <div class="panel">
           <div class="panel-title">
-            <span>Volume Pesan 24 Jam Terakhir</span>
-            <span style="font-size: 0.75rem; color: var(--text-muted);">Hourly distribution</span>
+            <span>Volume Pesan 24 Jam</span>
+            <span style="font-size: 0.725rem; color: var(--text-muted);">Hourly</span>
           </div>
-          <div style="height: 220px; width: 100%; display: flex; align-items: flex-end; gap: 6px; padding-top: 1rem;" id="chartBars">
+          <div style="height: 160px; width: 100%; display: flex; align-items: flex-end; gap: 5px; padding-top: 0.5rem;" id="chartBars">
             <!-- Rendered by JS -->
           </div>
         </div>
@@ -706,13 +959,13 @@
     <section id="view-activity" class="view-container">
       <div class="greeting-header">
         <h2>Activity Feed</h2>
-        <p>Jejak eksekusi command & status event WhatsApp secara realtime.</p>
+        <p>Jejak eksekusi command & status event WhatsApp.</p>
       </div>
 
       <div class="panel">
         <div class="panel-title">
           <span>Feed Event System</span>
-          <input type="text" id="feedSearch" class="input-field" placeholder="Filter aktivitas..." oninput="renderActivityFeedFull()" style="width: 200px;">
+          <input type="text" id="feedSearch" class="input-field" placeholder="Filter aktivitas..." oninput="renderActivityFeedFull()" style="width: 150px;">
         </div>
         <div class="feed-list" id="activityFeedFull"></div>
       </div>
@@ -722,23 +975,23 @@
     <section id="view-users" class="view-container">
       <div class="greeting-header">
         <h2>Pengguna & Grup</h2>
-        <p>Kelola interaksi pengirim pesan dan statistik grup WhatsApp.</p>
+        <p>Kelola interaksi pengirim pesan dan statistik grup.</p>
       </div>
 
-      <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+      <div style="display: flex; flex-direction: column; gap: 1.25rem;">
         <div class="panel">
           <div class="panel-title">
-            <span>Pengguna Paling Aktif</span>
-            <input type="text" id="userFilterInput" class="input-field" placeholder="Cari JID..." oninput="renderUsersTable()" style="width: 200px;">
+            <span>Pengguna Aktif</span>
+            <input type="text" id="userFilterInput" class="input-field" placeholder="Cari JID..." oninput="renderUsersTable()" style="width: 140px;">
           </div>
           <div class="table-responsive">
             <table>
               <thead>
                 <tr>
-                  <th>Rank</th>
+                  <th>#</th>
                   <th>JID / Nomor</th>
-                  <th>Interaksi</th>
-                  <th>Commands</th>
+                  <th>Chats</th>
+                  <th>Cmds</th>
                   <th>Aksi</th>
                 </tr>
               </thead>
@@ -749,16 +1002,16 @@
 
         <div class="panel">
           <div class="panel-title">
-            <span>Grup Paling Aktif</span>
-            <input type="text" id="groupFilterInput" class="input-field" placeholder="Cari Grup JID..." oninput="renderGroupsTable()" style="width: 200px;">
+            <span>Grup Aktif</span>
+            <input type="text" id="groupFilterInput" class="input-field" placeholder="Cari Grup..." oninput="renderGroupsTable()" style="width: 140px;">
           </div>
           <div class="table-responsive">
             <table>
               <thead>
                 <tr>
-                  <th>Rank</th>
+                  <th>#</th>
                   <th>Group JID</th>
-                  <th>Total Commands</th>
+                  <th>Cmds</th>
                 </tr>
               </thead>
               <tbody id="groupsTableBody"></tbody>
@@ -772,19 +1025,19 @@
     <section id="view-commands" class="view-container">
       <div class="greeting-header">
         <h2>Command Analytics</h2>
-        <p>Statistik frekuensi penggunaan dan tingkat kesalahan command.</p>
+        <p>Statistik penggunaan dan error rate command.</p>
       </div>
 
       <div class="two-column-layout">
         <div class="panel">
-          <div class="panel-title">Top 10 Commands Digunakan</div>
+          <div class="panel-title">Top 10 Commands</div>
           <div class="table-responsive">
             <table>
               <thead>
                 <tr>
                   <th>#</th>
                   <th>Command</th>
-                  <th>Total Penggunaan</th>
+                  <th>Penggunaan</th>
                 </tr>
               </thead>
               <tbody id="topCmdsBody"></tbody>
@@ -793,14 +1046,14 @@
         </div>
 
         <div class="panel">
-          <div class="panel-title">Command Paling Sering Error</div>
+          <div class="panel-title">Command Error</div>
           <div class="table-responsive">
             <table>
               <thead>
                 <tr>
                   <th>#</th>
                   <th>Command</th>
-                  <th>Jumlah Error</th>
+                  <th>Error</th>
                 </tr>
               </thead>
               <tbody id="errCmdsBody"></tbody>
@@ -814,25 +1067,25 @@
     <section id="view-logs" class="view-container">
       <div class="greeting-header">
         <h2>Logs & Audit Trail</h2>
-        <p>Pemantauan log stream real-time dan log audit tindakan keamanan.</p>
+        <p>Log stream real-time dan log audit keamanan.</p>
       </div>
 
-      <div style="display: flex; flex-direction: column; gap: 1.5rem;">
-        <!-- Realtime Log Stream -->
+      <div style="display: flex; flex-direction: column; gap: 1.25rem;">
         <div class="panel">
           <div class="panel-title">
-            <span>Console Log Stream</span>
-            <div style="display: flex; gap: 0.5rem;">
-              <input type="text" id="logSearchInput" class="input-field" placeholder="Filter log..." oninput="filterLogConsole()" style="width: 180px;">
-              <button class="btn btn-secondary btn-sm" id="autoScrollBtn" onclick="toggleAutoScroll()">Scroll: ON</button>
-              <button class="btn btn-secondary btn-sm" onclick="downloadLogs()">Download</button>
+            <span>Console Stream</span>
+            <div style="display: flex; gap: 0.35rem;">
+              <button class="btn btn-secondary btn-sm" id="autoScrollBtn" onclick="toggleAutoScroll()">Scroll</button>
+              <button class="btn btn-secondary btn-sm" onclick="downloadLogs()">Export</button>
               <button class="btn btn-secondary btn-sm" onclick="clearLogsConsole()">Clear</button>
             </div>
           </div>
-          <div id="logConsole" style="height: 380px; background: #06090e; font-family: var(--font-mono); font-size: 0.8rem; padding: 1rem; border-radius: 8px; overflow-y: auto; color: var(--text-sub); white-space: pre-wrap; line-height: 1.6;"></div>
+          <div style="margin-bottom: 0.75rem;">
+            <input type="text" id="logSearchInput" class="input-field" placeholder="Filter log keyword..." oninput="filterLogConsole()">
+          </div>
+          <div id="logConsole" style="height: 320px; background: #06090e; font-family: var(--font-mono); font-size: 0.775rem; padding: 0.75rem; border-radius: 8px; overflow-y: auto; color: var(--text-sub); white-space: pre-wrap; line-height: 1.5;"></div>
         </div>
 
-        <!-- Audit Log Table -->
         <div class="panel">
           <div class="panel-title">Audit Trail Keamanan</div>
           <div class="table-responsive">
@@ -840,9 +1093,8 @@
               <thead>
                 <tr>
                   <th>Waktu</th>
-                  <th>IP Address</th>
-                  <th>User</th>
-                  <th>Aksi</th>
+                  <th>IP</th>
+                  <th>Action</th>
                   <th>Detail</th>
                 </tr>
               </thead>
@@ -856,67 +1108,63 @@
     <!-- VIEW 6: SETTINGS -->
     <section id="view-settings" class="view-container">
       <div class="greeting-header">
-        <h2>Pengaturan Bot & Kontrol Engine</h2>
-        <p>Kelola konfigurasi sistem, kontrol jalannya engine bot, dan opsi keamanan.</p>
+        <h2>Settings & Engine Control</h2>
+        <p>Kelola konfigurasi sistem dan kontrol biner bot.</p>
       </div>
 
       <div class="two-column-layout">
-        <!-- Control Panel -->
         <div class="panel">
           <div class="panel-title">Kontrol Engine Bot</div>
-          <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-            <button class="btn btn-warning" onclick="restartBot()" style="justify-content: flex-start;">
-              🔄 Restart Process (Daur Ulang Biner)
+          <div style="display: flex; flex-direction: column; gap: 0.65rem;">
+            <button class="btn btn-warning" onclick="askRestartBot()" style="justify-content: flex-start;">
+              🔄 Restart Process
             </button>
             <button class="btn btn-secondary" onclick="reloadConfig()" style="justify-content: flex-start;">
-              🔁 Reload Configuration (config.json)
+              🔁 Reload Config (config.json)
             </button>
-            <button class="btn btn-secondary" onclick="stopBot()" style="justify-content: flex-start;">
-              ⏹ Stop Process (Hentikan Bot Aman)
+            <button class="btn btn-secondary" onclick="askStopBot()" style="justify-content: flex-start;">
+              ⏹ Stop Process
             </button>
-            <button class="btn btn-danger" onclick="forceKillBot()" style="justify-content: flex-start; margin-top: 1rem;">
-              ☠ Force Kill Engine (Biner Terminate)
+            <button class="btn btn-danger" onclick="askForceKillBot()" style="justify-content: flex-start; margin-top: 0.5rem;">
+              ☠ Force Kill Engine
             </button>
           </div>
         </div>
 
-        <!-- Security & Status -->
         <div class="panel">
-          <div class="panel-title">Status Keamanan Web</div>
-          <div style="font-size: 0.85rem; color: var(--text-sub); display: flex; flex-direction: column; gap: 0.5rem;">
-            <div>Session Type: <strong style="color: var(--text-main);">Bearer Token & Cookie</strong></div>
-            <div>Password Auth: <strong style="color: var(--success);">Protected (Hidden from Log)</strong></div>
-            <div>Rate Limiting: <strong style="color: var(--text-main);">5 Max Failed Attempts / 5 Min</strong></div>
-            <div>Web Server Port: <strong style="color: var(--accent);">7090</strong></div>
+          <div class="panel-title">Status Keamanan</div>
+          <div style="font-size: 0.8rem; color: var(--text-sub); display: flex; flex-direction: column; gap: 0.4rem;">
+            <div>Session: <strong style="color: var(--text-main);">Bearer Token & Cookie</strong></div>
+            <div>Auth Log: <strong style="color: var(--success);">Password Hidden</strong></div>
+            <div>Rate Limit: <strong style="color: var(--text-main);">5 Failed / 5 Min</strong></div>
+            <div>Web Port: <strong style="color: var(--accent);">7090</strong></div>
           </div>
         </div>
       </div>
 
-      <!-- Config JSON Editor/Viewer -->
-      <div class="panel" style="margin-top: 1.5rem;">
+      <div class="panel" style="margin-top: 1.25rem;">
         <div class="panel-title">
-          <span>Config Viewer (config.json)</span>
+          <span>Config Viewer</span>
           <button class="btn btn-secondary btn-sm" onclick="copyConfigJson()">📋 Copy JSON</button>
         </div>
-        <pre id="configView" style="font-family: var(--font-mono); font-size: 0.825rem; color: #a5b4fc; background: #06090e; padding: 1rem; border-radius: 8px; overflow-x: auto; max-height: 400px;"></pre>
+        <pre id="configView" style="font-family: var(--font-mono); font-size: 0.8rem; color: #a5b4fc; background: #06090e; padding: 0.85rem; border-radius: 8px; overflow-x: auto; max-height: 350px;"></pre>
       </div>
     </section>
 
     <!-- VIEW 7: TERMINAL -->
     <section id="view-terminal" class="view-container">
       <div class="greeting-header">
-        <h2>Web Terminal (ptmx)</h2>
-        <p>Akses shell perintah langsung di server tempat bot berjalan.</p>
+        <h2>Web Terminal</h2>
+        <p>Akses shell perintah ptmx di server.</p>
       </div>
 
       <div class="terminal-box">
         <div class="terminal-bar">
-          <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-sub);">Bash Session</span>
-          <div style="display: flex; gap: 0.5rem;">
+          <span style="font-size: 0.775rem; font-weight: 600; color: var(--text-sub);">Bash Shell</span>
+          <div style="display: flex; gap: 0.35rem;">
             <button class="btn btn-secondary btn-sm" onclick="sendTerminalCmd('clear\n')">clear</button>
-            <button class="btn btn-secondary btn-sm" onclick="sendTerminalCmd('ls -la\n')">ls -la</button>
-            <button class="btn btn-secondary btn-sm" onclick="sendTerminalCmd('go version\n')">go version</button>
-            <button class="btn btn-warning btn-sm" onclick="restartTerminal()">Restart Shell</button>
+            <button class="btn btn-secondary btn-sm" onclick="sendTerminalCmd('ls -la\n')">ls</button>
+            <button class="btn btn-warning btn-sm" onclick="restartTerminal()">Restart</button>
           </div>
         </div>
         <div id="terminal"></div>
@@ -924,6 +1172,29 @@
     </section>
 
   </div>
+
+  <!-- ANDROID MOBILE BOTTOM APP BAR NAVIGATION -->
+  <nav class="bottom-appbar mobile-only">
+    <button class="bottom-nav-btn active" onclick="switchNav('overview', this); updateBottomNav(this);">
+      <svg class="bottom-nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+      <span>Home</span>
+    </button>
+
+    <button class="bottom-nav-btn" onclick="switchNav('activity', this); updateBottomNav(this);">
+      <svg class="bottom-nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+      <span>Activity</span>
+    </button>
+
+    <button class="bottom-nav-btn" onclick="switchNav('users', this); updateBottomNav(this);">
+      <svg class="bottom-nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+      <span>Users</span>
+    </button>
+
+    <button class="bottom-nav-btn" onclick="toggleMobileDrawer();">
+      <svg class="bottom-nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      <span>More</span>
+    </button>
+  </nav>
 
   <script>
     let authToken = localStorage.getItem('rbot_token') || '';
@@ -937,6 +1208,7 @@
     let fitAddon = null;
 
     let cachedStatusData = null;
+    let pendingConfirmAction = null;
 
     document.addEventListener('DOMContentLoaded', () => {
       checkAuth();
@@ -1013,11 +1285,43 @@
       connectLogsWS();
     }
 
+    function toggleMobileDrawer() {
+      const overlay = document.getElementById('mobileDrawerOverlay');
+      overlay.classList.toggle('active');
+    }
+
+    function closeMobileDrawer() {
+      document.getElementById('mobileDrawerOverlay').classList.remove('active');
+    }
+
+    function toggleActionMenu() {
+      document.getElementById('actionMenuDropdown').classList.toggle('active');
+    }
+
+    function closeActionMenu() {
+      document.getElementById('actionMenuDropdown').classList.remove('active');
+    }
+
+    // Close action menu on outside click
+    document.addEventListener('click', (e) => {
+      const dropdown = document.getElementById('actionMenuDropdown');
+      if (dropdown && dropdown.classList.contains('active')) {
+        if (!e.target.closest('.topbar') && !e.target.closest('#actionMenuDropdown')) {
+          closeActionMenu();
+        }
+      }
+    });
+
+    function updateBottomNav(el) {
+      document.querySelectorAll('.bottom-nav-btn').forEach(b => b.classList.remove('active'));
+      if (el) el.classList.add('active');
+    }
+
     function switchNav(viewId, el) {
       document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
       document.querySelectorAll('.view-container').forEach(v => v.classList.remove('active'));
 
-      el.classList.add('active');
+      if (el && el.classList.contains('nav-item')) el.classList.add('active');
       document.getElementById('view-' + viewId).classList.add('active');
 
       if (viewId === 'terminal') {
@@ -1052,9 +1356,9 @@
         document.getElementById('metricChats').textContent = (d.stats.totalChats || 0).toLocaleString();
         document.getElementById('metricUsers').textContent = (d.stats.totalUsers || 0).toLocaleString();
         document.getElementById('metricRam').textContent = d.system.allocMb + ' MB';
-        document.getElementById('metricRamSub').textContent = `System: ${d.system.sysMb} MB | GC: ${d.system.numGC}`;
+        document.getElementById('metricRamSub').textContent = `Sys: ${d.system.sysMb} MB`;
         document.getElementById('metricUptime').textContent = formatSeconds(d.bot.uptime);
-        document.getElementById('metricUptimeSub').textContent = `CPU: ${d.system.cpuPct || '1.0'}% | ${d.system.os}/${d.system.arch}`;
+        document.getElementById('metricUptimeSub').textContent = `CPU: ${d.system.cpuPct || '1.0'}%`;
 
         // 24h Bar Chart
         renderHourlyChart(d.hourlyMessages || []);
@@ -1110,7 +1414,7 @@
               <div class="feed-text">Bot engine connected & monitoring active</div>
               <div class="feed-meta">System</div>
             </div>
-            <div class="feed-time">Just now</div>
+            <div class="feed-time">Now</div>
           </div>
         `;
         return;
@@ -1134,7 +1438,7 @@
       const filtered = activityFeedData.filter(i => !query || i.text.toLowerCase().includes(query) || i.meta.toLowerCase().includes(query));
 
       if (filtered.length === 0) {
-        feed.innerHTML = `<div style="color: var(--text-muted); padding: 1rem; text-align: center;">Belum ada aktivitas terekam.</div>`;
+        feed.innerHTML = `<div style="color: var(--text-muted); padding: 1rem; text-align: center;">Belum ada aktivitas.</div>`;
         return;
       }
 
@@ -1157,19 +1461,19 @@
       const users = (cachedStatusData.topUsers || []).filter(u => !query || (u.JID && u.JID.toLowerCase().includes(query)));
 
       if (users.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Tidak ada pengguna ditemukan.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Belum ada data.</td></tr>`;
         return;
       }
 
       tbody.innerHTML = users.slice(0, 15).map((u, i) => `
         <tr>
           <td>#${i + 1}</td>
-          <td style="font-family: var(--font-mono);">${u.JID}</td>
+          <td style="font-family: var(--font-mono); font-size: 0.775rem;">${u.JID}</td>
           <td>${u.chats}</td>
           <td><strong style="color: var(--accent);">${u.cmds}</strong></td>
           <td>
-            <button class="btn btn-secondary btn-sm" onclick="openDirectMessage('${u.JID}')">💬 Chat</button>
-            <button class="btn btn-danger btn-sm" onclick="userAction('${u.JID}', 'block')">🚫 Block</button>
+            <button class="btn btn-secondary btn-sm" onclick="openDirectMessage('${u.JID}')">💬</button>
+            <button class="btn btn-danger btn-sm" onclick="userAction('${u.JID}', 'block')">🚫</button>
           </td>
         </tr>
       `).join('');
@@ -1182,14 +1486,14 @@
       const groups = (cachedStatusData.topGroups || []).filter(g => !query || (g.JID && g.JID.toLowerCase().includes(query)));
 
       if (groups.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Tidak ada grup ditemukan.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Belum ada data.</td></tr>`;
         return;
       }
 
       tbody.innerHTML = groups.slice(0, 15).map((g, i) => `
         <tr>
           <td>#${i + 1}</td>
-          <td style="font-family: var(--font-mono);">${g.JID}</td>
+          <td style="font-family: var(--font-mono); font-size: 0.775rem;">${g.JID}</td>
           <td><strong style="color: var(--success);">${g.Cmds}</strong></td>
         </tr>
       `).join('');
@@ -1198,7 +1502,7 @@
     function renderCommandsTables(topCmds, errCmds) {
       const topBody = document.getElementById('topCmdsBody');
       if (topCmds.length === 0) {
-        topBody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Belum ada data command.</td></tr>`;
+        topBody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Belum ada data.</td></tr>`;
       } else {
         topBody.innerHTML = topCmds.map((c, i) => `
           <tr>
@@ -1211,7 +1515,7 @@
 
       const errBody = document.getElementById('errCmdsBody');
       if (errCmds.length === 0) {
-        errBody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Tidak ada error command.</td></tr>`;
+        errBody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Tidak ada error.</td></tr>`;
       } else {
         errBody.innerHTML = errCmds.map((c, i) => `
           <tr>
@@ -1227,33 +1531,28 @@
       const tbody = document.getElementById('auditTableBody');
       if (!tbody) return;
       if (logs.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Belum ada log audit.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Belum ada audit.</td></tr>`;
         return;
       }
 
       tbody.innerHTML = logs.map(l => `
         <tr>
-          <td style="font-family: var(--font-mono); font-size: 0.775rem;">${l.timestamp}</td>
-          <td style="font-family: var(--font-mono); font-size: 0.775rem;">${l.ip}</td>
-          <td>${l.user}</td>
+          <td style="font-family: var(--font-mono); font-size: 0.75rem;">${l.timestamp}</td>
+          <td style="font-family: var(--font-mono); font-size: 0.75rem;">${l.ip}</td>
           <td><strong style="color: var(--accent);">${l.action}</strong></td>
-          <td style="font-size: 0.8rem; color: var(--text-sub);">${l.details}</td>
+          <td style="font-size: 0.775rem; color: var(--text-sub);">${l.details}</td>
         </tr>
       `).join('');
     }
 
-    /* Log Stream Console */
+    /* Log Console */
     function connectLogsWS() {
       const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
       const url = `${protocol}//${location.host}/ws/logs?token=${encodeURIComponent(authToken)}`;
 
       wsLogs = new WebSocket(url);
-      wsLogs.onmessage = (e) => {
-        appendLogLine(e.data);
-      };
-      wsLogs.onclose = () => {
-        setTimeout(connectLogsWS, 3000);
-      };
+      wsLogs.onmessage = (e) => appendLogLine(e.data);
+      wsLogs.onclose = () => setTimeout(connectLogsWS, 3000);
     }
 
     function appendLogLine(line) {
@@ -1327,11 +1626,7 @@
       if (window.Terminal) {
         term = new Terminal({
           cursorBlink: true,
-          theme: {
-            background: '#06090e',
-            foreground: '#f3f4f6',
-            cursor: '#6366f1'
-          },
+          theme: { background: '#06090e', foreground: '#f3f4f6', cursor: '#6366f1' },
           fontFamily: "'JetBrains Mono', monospace",
           fontSize: 13
         });
@@ -1347,16 +1642,11 @@
         connectTerminalWS();
 
         term.onData(data => {
-          if (wsTerm && wsTerm.readyState === WebSocket.OPEN) {
-            wsTerm.send(data);
-          }
+          if (wsTerm && wsTerm.readyState === WebSocket.OPEN) wsTerm.send(data);
         });
 
         window.addEventListener('resize', () => {
-          if (fitAddon) {
-            fitAddon.fit();
-            sendResize();
-          }
+          if (fitAddon) { fitAddon.fit(); sendResize(); }
         });
       }
     }
@@ -1388,7 +1678,36 @@
       showToast('Shell di-restart', 'info');
     }
 
-    /* Actions & Modals */
+    /* Modals & Dialog Confirmations */
+    function openConfirmModal(title, text, actionFn) {
+      document.getElementById('confirmModalTitle').textContent = title;
+      document.getElementById('confirmModalText').textContent = text;
+      pendingConfirmAction = actionFn;
+      document.getElementById('confirmModal').classList.add('active');
+    }
+
+    function closeConfirmModal() {
+      document.getElementById('confirmModal').classList.remove('active');
+      pendingConfirmAction = null;
+    }
+
+    function executeConfirmModal() {
+      if (pendingConfirmAction) pendingConfirmAction();
+      closeConfirmModal();
+    }
+
+    function askRestartBot() {
+      openConfirmModal('Restart R-BOT?', 'Engine bot akan di-restart sejenak.', () => confirmRestartBot());
+    }
+
+    function askStopBot() {
+      openConfirmModal('Stop R-BOT Process?', 'Bot akan dihentikan secara aman.', () => confirmStopBot());
+    }
+
+    function askForceKillBot() {
+      openConfirmModal('Force Kill Process?', 'PERINGATAN: Biner bot akan dimatikan paksa.', () => confirmForceKillBot());
+    }
+
     function openMessageModal() {
       document.getElementById('messageModal').classList.add('active');
     }
@@ -1411,72 +1730,61 @@
       try {
         const res = await fetch('/api/broadcast', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + authToken
-          },
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
           body: JSON.stringify({ jid: jid, message: msg })
         });
         const data = await res.json();
-        if (data.ok) {
-          showToast('Pesan berhasil dikirim!', 'success');
-        } else {
-          showToast(data.error || 'Gagal mengirim pesan', 'error');
-        }
+        if (data.ok) showToast('Pesan berhasil dikirim!', 'success');
+        else showToast(data.error || 'Gagal mengirim pesan', 'error');
       } catch (err) {
         showToast('Gagal terhubung ke server', 'error');
       }
     }
 
     async function userAction(jid, act) {
-      if (!confirm(`Konfirmasi aksi ${act} pada ${jid}?`)) return;
-      try {
-        const res = await fetch('/api/action/user', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + authToken
-          },
-          body: JSON.stringify({ jid: jid, action: act })
-        });
-        const data = await res.json();
-        showToast(data.message || 'Aksi berhasil diproses', 'success');
-        fetchStatus();
-      } catch (err) {
-        showToast('Gagal memproses aksi', 'error');
-      }
+      openConfirmModal(`Konfirmasi Aksi`, `Proses ${act} pada ${jid}?`, async () => {
+        try {
+          const res = await fetch('/api/action/user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+            body: JSON.stringify({ jid: jid, action: act })
+          });
+          const data = await res.json();
+          showToast(data.message || 'Aksi berhasil diproses', 'success');
+          fetchStatus();
+        } catch (err) {
+          showToast('Gagal memproses aksi', 'error');
+        }
+      });
     }
 
-    async function restartBot() {
-      if (!confirm('Apakah Anda yakin ingin me-restart bot engine?')) return;
+    async function confirmRestartBot() {
       try {
         const res = await fetch('/api/restart', {
           method: 'POST',
           headers: { 'Authorization': 'Bearer ' + authToken }
         });
         const data = await res.json();
-        showToast(data.message || 'Perintah restart telah dikirim!', 'warning');
+        showToast(data.message || 'Perintah restart dikirim!', 'warning');
       } catch (err) {
-        showToast('Gagal mengirim perintah restart.', 'error');
+        showToast('Gagal mengirim restart.', 'error');
       }
     }
 
-    async function stopBot() {
-      if (!confirm('Apakah Anda yakin ingin menghentikan bot process?')) return;
+    async function confirmStopBot() {
       try {
         const res = await fetch('/api/stop', {
           method: 'POST',
           headers: { 'Authorization': 'Bearer ' + authToken }
         });
         const data = await res.json();
-        showToast(data.message || 'Bot dihentikan secara aman.', 'warning');
+        showToast(data.message || 'Bot dihentikan.', 'warning');
       } catch (err) {
-        showToast('Gagal dihentikan.', 'error');
+        showToast('Gagal menghentikan.', 'error');
       }
     }
 
-    async function forceKillBot() {
-      if (!confirm('PERINGATAN: Paksa matikan biner bot secara langsung?')) return;
+    async function confirmForceKillBot() {
       try {
         const res = await fetch('/api/kill', {
           method: 'POST',
@@ -1496,10 +1804,10 @@
           headers: { 'Authorization': 'Bearer ' + authToken }
         });
         const data = await res.json();
-        showToast(data.message || 'Konfigurasi berhasil di-reload.', 'success');
+        showToast(data.message || 'Config di-reload.', 'success');
         fetchStatus();
       } catch (err) {
-        showToast('Gagal reload konfigurasi.', 'error');
+        showToast('Gagal reload config.', 'error');
       }
     }
 

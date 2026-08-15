@@ -151,6 +151,8 @@ func groupKey(evt *events.Message) string {
 	return canonicalJID(evt.Info.Chat)
 }
 
+var OnChangeEvent func()
+
 type CmdEntry struct {
 	Name  string `json:"name"`
 	Count int64  `json:"count"`
@@ -163,7 +165,6 @@ func AddChat(evt *events.Message) {
 		return
 	}
 	mu.Lock()
-	defer mu.Unlock()
 	s := load()
 	ensureUser(s, jid).Chats++
 	if group := groupKey(evt); group != "" {
@@ -178,6 +179,11 @@ func AddChat(evt *events.Message) {
 		s.HourlyMessages[hour]++
 	}
 	save(s)
+	mu.Unlock()
+
+	if OnChangeEvent != nil {
+		OnChangeEvent()
+	}
 }
 
 // AddCmd mencatat satu command yang berhasil di-resolve.
@@ -187,7 +193,6 @@ func AddCmd(cmdName string, evt *events.Message) {
 		return
 	}
 	mu.Lock()
-	defer mu.Unlock()
 	s := load()
 	ensureUser(s, jid).Cmds++
 	if group := groupKey(evt); group != "" {
@@ -202,6 +207,11 @@ func AddCmd(cmdName string, evt *events.Message) {
 		s.CmdCounts[cmdName]++
 	}
 	save(s)
+	mu.Unlock()
+
+	if OnChangeEvent != nil {
+		OnChangeEvent()
+	}
 }
 
 // AddCmdError mencatat ketika terjadi error saat eksekusi command.
@@ -210,10 +220,14 @@ func AddCmdError(cmdName string) {
 		return
 	}
 	mu.Lock()
-	defer mu.Unlock()
 	s := load()
 	s.CmdErrors[cmdName]++
 	save(s)
+	mu.Unlock()
+
+	if OnChangeEvent != nil {
+		OnChangeEvent()
+	}
 }
 
 func init() {

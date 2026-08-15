@@ -131,6 +131,7 @@ func run(ctx context.Context) error {
 			command.Dispatch(ctx, client, evt, false)
 		case *events.Connected:
 			log.Printf("[rbot] terhubung ke WhatsApp sebagai %s", client.Store.ID)
+			web.BroadcastMetricsNow()
 			// Notif "sudah online" setelah restart: baca penanda sekali saja
 			// (Connected bisa berulang saat reconnect). Best-effort — error di-log.
 			notifyOnce.Do(func() {
@@ -151,8 +152,10 @@ func run(ctx context.Context) error {
 			})
 		case *events.Disconnected:
 			log.Printf("[rbot] koneksi WhatsApp terputus")
+			web.BroadcastMetricsNow()
 		case *events.LoggedOut:
 			log.Printf("[rbot] sesi WhatsApp logout; hapus session/store.db untuk pairing baru")
+			web.BroadcastMetricsNow()
 		}
 	})
 

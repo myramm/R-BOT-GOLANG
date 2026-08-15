@@ -48,6 +48,13 @@ type loginTracker struct {
 	BlockedTo time.Time
 }
 
+type metricsSubscriber chan []byte
+
+type MetricsBroadcaster struct {
+	mu          sync.RWMutex
+	subscribers map[metricsSubscriber]bool
+}
+
 var (
 	sessions   = make(map[string]time.Time)
 	sessionsMu sync.RWMutex
@@ -65,7 +72,62 @@ var (
 
 	lastCPUTime int64
 	cpuMu       sync.Mutex
+
+	MetricsHub = &MetricsBroadcaster{
+		subscribers: make(map[metricsSubscriber]bool),
+	}
 )
+
+func (b *MetricsBroadcaster) Subscribe() metricsSubscriber {
+	ch := make(metricsSubscriber, 50)
+	b.mu.Lock()
+	b.subscribers[ch] = true
+	b.mu.Unlock()
+	return ch
+}
+
+func (b *MetricsBroadcaster) Unsubscribe(ch metricsSubscriber) {
+	b.mu.Lock()
+	delete(b.subscribers, ch)
+	b.mu.Unlock()
+	for len(ch) > 0 {
+		<-ch
+	}
+	close(ch)
+}
+
+func (b *MetricsBroadcaster) HasSubscribers() bool {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return len(b.subscribers) > 0
+}
+
+func (b *MetricsBroadcaster) Broadcast(data []byte) {
+	b.mu.RLock()
+	subs := make([]metricsSubscriber, 0, len(b.subscribers))
+	for ch := range b.subscribers {
+		subs = append(subs, ch)
+	}
+	b.mu.RUnlock()
+
+	for _, ch := range subs {
+		select {
+		case ch <- data:
+		default:
+		}
+	}
+}
+
+func BroadcastMetricsNow() {
+	if !MetricsHub.HasSubscribers() {
+		return
+	}
+	payload := BuildStatusPayload()
+	b, err := json.Marshal(payload)
+	if err == nil {
+		MetricsHub.Broadcast(b)
+	}
+}
 
 func RecordAudit(r *http.Request, action, details string) {
 	ip := "127.0.0.1"
@@ -88,11 +150,13 @@ func RecordAudit(r *http.Request, action, details string) {
 	}
 
 	auditMu.Lock()
-	defer auditMu.Unlock()
 	auditLogs = append([]AuditLog{entry}, auditLogs...)
 	if len(auditLogs) > 150 {
 		auditLogs = auditLogs[:150]
 	}
+	auditMu.Unlock()
+
+	BroadcastMetricsNow()
 }
 
 func getPassword() string {
@@ -165,12 +229,14 @@ func SetWhatsAppClient(cli *whatsmeow.Client) {
 	stateMu.Lock()
 	waClient = cli
 	stateMu.Unlock()
+	BroadcastMetricsNow()
 }
 
 func SetPairingCode(code string) {
 	stateMu.Lock()
 	pairingCode = code
 	stateMu.Unlock()
+	BroadcastMetricsNow()
 }
 
 // System Metrics Helpers
@@ -246,9 +312,99 @@ func getNetStats() (rxMB, txMB float64) {
 	return float64(totalRX) / (1024 * 1024), float64(totalTX) / (1024 * 1024)
 }
 
+func BuildStatusPayload() map[string]any {
+	stateMu.RLock()
+	cli := waClient
+	pairCode := pairingCode
+	stateMu.RUnlock()
+
+	var connected, loggedIn bool
+	var jid, pushName string
+
+	if cli != nil {
+		connected = cli.IsConnected()
+		loggedIn = cli.IsLoggedIn()
+		if cli.Store != nil {
+			if cli.Store.ID != nil {
+				jid = cli.Store.ID.String()
+			}
+			pushName = cli.Store.PushName
+		}
+	}
+
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+
+	diskTotal, diskUsed, diskFree, diskPct := getDiskUsage()
+	rxMB, txMB := getNetStats()
+	cpuPct := getCPUUsage()
+
+	overview := stats.GetOverview()
+
+	auditMu.RLock()
+	recentAudit := append([]AuditLog(nil), auditLogs...)
+	auditMu.RUnlock()
+	if len(recentAudit) > 10 {
+		recentAudit = recentAudit[:10]
+	}
+
+	return map[string]any{
+		"bot": map[string]any{
+			"name":        config.C.BotName,
+			"uptime":      int64(time.Since(startTime).Seconds()),
+			"connected":   connected,
+			"loggedIn":    loggedIn,
+			"jid":         jid,
+			"pushName":    pushName,
+			"pairingCode": pairCode,
+		},
+		"system": map[string]any{
+			"goVersion":  runtime.Version(),
+			"goroutines": runtime.NumGoroutine(),
+			"allocMb":    fmt.Sprintf("%.2f", float64(m.Alloc)/1024/1024),
+			"sysMb":      fmt.Sprintf("%.2f", float64(m.Sys)/1024/1024),
+			"numGC":      m.NumGC,
+			"os":         runtime.GOOS,
+			"arch":       runtime.GOARCH,
+			"cpuPct":     fmt.Sprintf("%.1f", cpuPct),
+			"diskTotal":  diskTotal,
+			"diskUsed":   diskUsed,
+			"diskFree":   diskFree,
+			"diskPct":    fmt.Sprintf("%.1f", diskPct),
+			"netRxMb":    fmt.Sprintf("%.2f", rxMB),
+			"netTxMb":    fmt.Sprintf("%.2f", txMB),
+		},
+		"health": map[string]any{
+			"whatsapp":  connected,
+			"database":  true,
+			"api":       true,
+			"websocket": true,
+		},
+		"config": map[string]any{
+			"botName":     config.C.BotName,
+			"prefix":      config.C.Prefix,
+			"botNumber":   config.C.BotNumber,
+			"ownerNumber": config.C.OwnerNumber,
+			"logLevel":    config.C.LogLevel,
+			"webPort":     config.C.Web.Port,
+		},
+		"stats":            overview,
+		"topUsers":         stats.TopUsers(),
+		"topGroups":        stats.TopGroups(),
+		"topCommands":      stats.TopCommands(),
+		"topCommandErrors": stats.TopCommandErrors(),
+		"hourlyMessages":   stats.GetHourlyMessages(),
+		"auditLogs":        recentAudit,
+	}
+}
+
 // Start mengaktifkan server web monitoring dan WebSocket terminal.
 func Start(ctx context.Context) {
 	InitLogger()
+
+	stats.OnChangeEvent = func() {
+		BroadcastMetricsNow()
+	}
 
 	host := strings.TrimSpace(config.C.Web.Host)
 	if host == "" {
@@ -279,6 +435,7 @@ func Start(ctx context.Context) {
 	mux.HandleFunc("/api/action/user", handleUserAction)
 
 	// WebSockets
+	mux.HandleFunc("/ws/metrics", handleMetricsWS)
 	mux.HandleFunc("/ws/logs", handleLogsWS)
 	mux.HandleFunc("/ws/terminal", handleTerminalWS)
 
@@ -295,6 +452,22 @@ func Start(ctx context.Context) {
 			return ctx
 		},
 	}
+
+	// Real-time hardware ticker loop (every 1.5 seconds)
+	go func() {
+		ticker := time.NewTicker(1500 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if MetricsHub.HasSubscribers() {
+					BroadcastMetricsNow()
+				}
+			}
+		}
+	}()
 
 	RecordAudit(nil, "SYSTEM", "Web Server Control Center Aktif")
 	log.Printf("[rbot] Web monitoring & control center aktif di http://%s", addr)
@@ -429,90 +602,9 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stateMu.RLock()
-	cli := waClient
-	pairCode := pairingCode
-	stateMu.RUnlock()
-
-	var connected, loggedIn bool
-	var jid, pushName string
-
-	if cli != nil {
-		connected = cli.IsConnected()
-		loggedIn = cli.IsLoggedIn()
-		if cli.Store != nil {
-			if cli.Store.ID != nil {
-				jid = cli.Store.ID.String()
-			}
-			pushName = cli.Store.PushName
-		}
-	}
-
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
-
-	diskTotal, diskUsed, diskFree, diskPct := getDiskUsage()
-	rxMB, txMB := getNetStats()
-	cpuPct := getCPUUsage()
-
-	overview := stats.GetOverview()
-
-	auditMu.RLock()
-	recentAudit := append([]AuditLog(nil), auditLogs...)
-	auditMu.RUnlock()
-	if len(recentAudit) > 10 {
-		recentAudit = recentAudit[:10]
-	}
-
+	payload := BuildStatusPayload()
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"bot": map[string]any{
-			"name":        config.C.BotName,
-			"uptime":      int64(time.Since(startTime).Seconds()),
-			"connected":   connected,
-			"loggedIn":    loggedIn,
-			"jid":         jid,
-			"pushName":    pushName,
-			"pairingCode": pairCode,
-		},
-		"system": map[string]any{
-			"goVersion":  runtime.Version(),
-			"goroutines": runtime.NumGoroutine(),
-			"allocMb":    fmt.Sprintf("%.2f", float64(m.Alloc)/1024/1024),
-			"sysMb":      fmt.Sprintf("%.2f", float64(m.Sys)/1024/1024),
-			"numGC":      m.NumGC,
-			"os":         runtime.GOOS,
-			"arch":       runtime.GOARCH,
-			"cpuPct":     fmt.Sprintf("%.1f", cpuPct),
-			"diskTotal":  diskTotal,
-			"diskUsed":   diskUsed,
-			"diskFree":   diskFree,
-			"diskPct":    fmt.Sprintf("%.1f", diskPct),
-			"netRxMb":    fmt.Sprintf("%.2f", rxMB),
-			"netTxMb":    fmt.Sprintf("%.2f", txMB),
-		},
-		"health": map[string]any{
-			"whatsapp":  connected,
-			"database":  true,
-			"api":       true,
-			"websocket": true,
-		},
-		"config": map[string]any{
-			"botName":     config.C.BotName,
-			"prefix":      config.C.Prefix,
-			"botNumber":   config.C.BotNumber,
-			"ownerNumber": config.C.OwnerNumber,
-			"logLevel":    config.C.LogLevel,
-			"webPort":     config.C.Web.Port,
-		},
-		"stats":            overview,
-		"topUsers":         stats.TopUsers(),
-		"topGroups":        stats.TopGroups(),
-		"topCommands":      stats.TopCommands(),
-		"topCommandErrors": stats.TopCommandErrors(),
-		"hourlyMessages":   stats.GetHourlyMessages(),
-		"auditLogs":        recentAudit,
-	})
+	_ = json.NewEncoder(w).Encode(payload)
 }
 
 func handleAuditLogs(w http.ResponseWriter, r *http.Request) {
@@ -696,7 +788,7 @@ func handleUserAction(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		JID    string `json:"jid"`
-		Action string `json:"action"` // "block", "unblock", "mute", "unmute"
+		Action string `json:"action"` // "block", "unblock"
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.JID == "" || req.Action == "" {
 		http.Error(w, "Bad request", http.StatusBadRequest)
@@ -705,7 +797,6 @@ func handleUserAction(w http.ResponseWriter, r *http.Request) {
 
 	RecordAudit(r, "USER_ACTION", fmt.Sprintf("%s pada %s", strings.ToUpper(req.Action), req.JID))
 
-	// Direct execution according to action
 	stateMu.RLock()
 	cli := waClient
 	stateMu.RUnlock()
@@ -728,6 +819,58 @@ func handleUserAction(w http.ResponseWriter, r *http.Request) {
 		"ok":      true,
 		"message": fmt.Sprintf("Aksi %s pada %s berhasil diproses.", req.Action, req.JID),
 	})
+}
+
+func handleMetricsWS(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		InsecureSkipVerify: true,
+	})
+	if err != nil {
+		return
+	}
+	defer c.CloseNow()
+
+	ctx := r.Context()
+
+	// Immediately push current metrics JSON upon connecting
+	if b, err := json.Marshal(BuildStatusPayload()); err == nil {
+		writeCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		_ = c.Write(writeCtx, websocket.MessageText, b)
+		cancel()
+	}
+
+	sub := MetricsHub.Subscribe()
+	defer MetricsHub.Unsubscribe(sub)
+
+	go func() {
+		for {
+			if _, _, err := c.Read(ctx); err != nil {
+				break
+			}
+		}
+	}()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case data, ok := <-sub:
+			if !ok {
+				return
+			}
+			writeCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+			err := c.Write(writeCtx, websocket.MessageText, data)
+			cancel()
+			if err != nil {
+				return
+			}
+		}
+	}
 }
 
 func handleLogsWS(w http.ResponseWriter, r *http.Request) {

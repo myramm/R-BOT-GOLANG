@@ -1279,10 +1279,114 @@
       location.reload();
     }
 
+    let wsMetrics = null;
+    let wsMetricsDelay = 1000;
+    let wsMetricsTimer = null;
+
     function initDashboard() {
       fetchStatus();
-      setInterval(fetchStatus, 3000);
+      connectMetricsWS();
       connectLogsWS();
+    }
+
+    function connectMetricsWS() {
+      if (!authToken) return;
+      if (wsMetrics && (wsMetrics.readyState === WebSocket.OPEN || wsMetrics.readyState === WebSocket.CONNECTING)) {
+        return;
+      }
+
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const url = `${protocol}//${location.host}/ws/metrics?token=${encodeURIComponent(authToken)}`;
+
+      updateConnectionIndicator('reconnecting');
+
+      try {
+        wsMetrics = new WebSocket(url);
+      } catch (err) {
+        scheduleMetricsReconnect();
+        return;
+      }
+
+      wsMetrics.onopen = () => {
+        wsMetricsDelay = 1000;
+        updateConnectionIndicator('live');
+      };
+
+      wsMetrics.onmessage = (e) => {
+        try {
+          const d = JSON.parse(e.data);
+          applyMetricsData(d);
+        } catch (err) {
+          console.error('Failed to parse WS metrics:', err);
+        }
+      };
+
+      wsMetrics.onerror = () => {
+        updateConnectionIndicator('reconnecting');
+      };
+
+      wsMetrics.onclose = () => {
+        updateConnectionIndicator('reconnecting');
+        scheduleMetricsReconnect();
+      };
+    }
+
+    function scheduleMetricsReconnect() {
+      if (wsMetricsTimer) clearTimeout(wsMetricsTimer);
+      wsMetricsTimer = setTimeout(() => {
+        wsMetricsDelay = Math.min(wsMetricsDelay * 2, 15000);
+        connectMetricsWS();
+      }, wsMetricsDelay);
+    }
+
+    function updateConnectionIndicator(state) {
+      const dot = document.getElementById('statusDot');
+      const stText = document.getElementById('statusText');
+      if (!dot || !stText) return;
+
+      if (state === 'live') {
+        dot.className = 'status-dot online';
+        stText.textContent = 'Live';
+        stText.style.color = 'var(--success)';
+      } else if (state === 'reconnecting') {
+        dot.className = 'status-dot warning';
+        stText.textContent = 'Reconnecting...';
+        stText.style.color = 'var(--warning)';
+      } else {
+        dot.className = 'status-dot offline';
+        stText.textContent = 'Disconnected';
+        stText.style.color = 'var(--danger)';
+      }
+    }
+
+    function applyMetricsData(d) {
+      cachedStatusData = d;
+
+      if (wsMetrics && wsMetrics.readyState === WebSocket.OPEN) {
+        updateConnectionIndicator('live');
+      }
+
+      // Overview Metrics
+      document.getElementById('metricChats').textContent = (d.stats.totalChats || 0).toLocaleString();
+      document.getElementById('metricUsers').textContent = (d.stats.totalUsers || 0).toLocaleString();
+      document.getElementById('metricRam').textContent = d.system.allocMb + ' MB';
+      document.getElementById('metricRamSub').textContent = `Sys: ${d.system.sysMb} MB`;
+      document.getElementById('metricUptime').textContent = formatSeconds(d.bot.uptime);
+      document.getElementById('metricUptimeSub').textContent = `CPU: ${d.system.cpuPct || '1.0'}%`;
+
+      // 24h Bar Chart
+      renderHourlyChart(d.hourlyMessages || []);
+
+      // Feed Activity & Tables
+      renderActivityFeedOverview();
+      renderActivityFeedFull();
+      renderUsersTable();
+      renderGroupsTable();
+      renderCommandsTables(d.topCommands || [], d.topCommandErrors || []);
+      renderAuditTable(d.auditLogs || []);
+
+      // Config View
+      document.getElementById('configView').textContent = JSON.stringify(d.config, null, 2);
     }
 
     function toggleMobileDrawer() {
@@ -1339,46 +1443,9 @@
           return;
         }
         const d = await res.json();
-        cachedStatusData = d;
-
-        // Topbar Status Dot
-        const dot = document.getElementById('statusDot');
-        const stText = document.getElementById('statusText');
-        if (d.bot.connected) {
-          dot.className = 'status-dot online';
-          stText.textContent = 'Operational';
-        } else {
-          dot.className = 'status-dot offline';
-          stText.textContent = 'Disconnected';
-        }
-
-        // Overview Metrics
-        document.getElementById('metricChats').textContent = (d.stats.totalChats || 0).toLocaleString();
-        document.getElementById('metricUsers').textContent = (d.stats.totalUsers || 0).toLocaleString();
-        document.getElementById('metricRam').textContent = d.system.allocMb + ' MB';
-        document.getElementById('metricRamSub').textContent = `Sys: ${d.system.sysMb} MB`;
-        document.getElementById('metricUptime').textContent = formatSeconds(d.bot.uptime);
-        document.getElementById('metricUptimeSub').textContent = `CPU: ${d.system.cpuPct || '1.0'}%`;
-
-        // 24h Bar Chart
-        renderHourlyChart(d.hourlyMessages || []);
-
-        // Feed Activity
-        renderActivityFeedOverview();
-        renderActivityFeedFull();
-
-        // Tables
-        renderUsersTable();
-        renderGroupsTable();
-        renderCommandsTables(d.topCommands || [], d.topCommandErrors || []);
-
-        // Audit Logs
-        renderAuditTable(d.auditLogs || []);
-
-        // Config View
-        document.getElementById('configView').textContent = JSON.stringify(d.config, null, 2);
+        applyMetricsData(d);
       } catch (err) {
-        console.error('Fetch status error:', err);
+        console.error('Fetch status fallback error:', err);
       }
     }
 

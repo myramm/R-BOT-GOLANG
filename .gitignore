@@ -37,3 +37,4 @@ data/
 # === Lain-lain ===
 *.log
 .DS_Store
+.agent/

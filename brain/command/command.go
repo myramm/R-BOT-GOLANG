@@ -378,26 +378,13 @@ func energiHabisMessage(evt *events.Message) string {
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "⚡ *Energi habis!* (sisa %d/%d ⚡)\n\n", e.Bank, maxE)
-	b.WriteString("*Silahkan istirahat atau makan hasil tani/ternak:*")
-
-	if RestSectionHook != nil {
-		if s := RestSectionHook(evt); s != "" {
-			b.WriteString("\n\n" + s)
-		}
-	}
-	if MakananSectionHook != nil {
-		if s := MakananSectionHook(evt); s != "" {
-			b.WriteString("\n\n" + s)
-		}
-	} else {
-		fmt.Fprintf(&b, "\n\n_Kulkas kosong — panen dulu: %stani / %sternak_", mp, mp)
-	}
+	fmt.Fprintf(&b, "💤 Ketik *%sistirahat* untuk memulihkan energi kamu.", mp)
 
 	if !premium.IsPremium(evt) {
-		fmt.Fprintf(&b, "\n\n💎 Atau upgrade ke premium: *%spremium*", mp)
+		fmt.Fprintf(&b, "\n\n💎 Upgrade ke premium untuk energi lebih: *%spremium*", mp)
 	}
 	if url := config.C.GrupOfficial.Invite; url != "" {
-		fmt.Fprintf(&b, "\n\n🎁 Join grup official buat diskon 3%%:\n%s", url)
+		fmt.Fprintf(&b, "\n\n🎁 Join grup official buat diskon energi:\n%s", url)
 	}
 	return b.String()
 }

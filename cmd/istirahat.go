@@ -3,91 +3,142 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
+	"sync"
+	"time"
 
 	"rbot/brain/command"
 	"rbot/brain/config"
-	"rbot/brain/econ"
+	"rbot/brain/energy"
+	"rbot/brain/identity"
+	"rbot/brain/store"
 )
 
-// istirahat.go: isi ulang energi lewat istirahat/tidur. Port istirahat.js.
+const restStoreKey = "istirahat_cooldowns"
+
+type restOption struct {
+	ID       string
+	Name     string
+	Emoji    string
+	Energy   int
+	Cooldown time.Duration
+}
+
+var restOptions = []restOption{
+	{ID: "nap", Name: "Tidur Siang", Emoji: "☕", Energy: 5, Cooldown: 1 * time.Hour},
+	{ID: "tidur", Name: "Tidur Malam", Emoji: "🛌", Energy: 15, Cooldown: 4 * time.Hour},
+	{ID: "nyenyak", Name: "Istirahat Total", Emoji: "💤", Energy: 30, Cooldown: 8 * time.Hour},
+}
+
+type restUserRecord map[string]int64
+
+var restMu sync.Mutex
+
+func getRestMap() map[string]restUserRecord {
+	data := map[string]restUserRecord{}
+	_, _ = store.Get(restStoreKey, &data)
+	if data == nil {
+		data = map[string]restUserRecord{}
+	}
+	return data
+}
+
+func saveRestMap(data map[string]restUserRecord) {
+	_ = store.Set(restStoreKey, data)
+}
 
 func init() {
 	command.Register(&command.Command{
 		Name:        "istirahat",
-		Category:    "Energi",
-		Alias:       []string{"rest", "tidur", "sleep"},
-		Description: "Isi ulang energi dengan istirahat atau tidur",
+		Category:    "Info",
+		Alias:       []string{"rest", "tidur", "nap"},
+		Description: "Istirahat untuk memulihkan energi bot",
 		Handler:     istirahatHandler,
 	})
 }
 
 func istirahatHandler(ctx context.Context, c *command.Ctx) error {
 	mp := config.MainPrefix()
+	e := energy.Get(c.Evt)
 
-	if config.C.Energy.IsUnlimited() {
-		_, err := c.Reply(ctx, "⚡ Energi sedang *tak terbatas* — belum perlu istirahat.")
+	if e.Unlimited {
+		_, err := c.Reply(ctx, "⚡ Energi kamu sudah tak terbatas!")
 		return err
 	}
 
-	// .tidur → mode tidur, .istirahat → mode singkat. Bisa juga .istirahat tidur.
-	argMode := ""
+	sub := ""
 	if len(c.Args) > 0 {
-		argMode = strings.ToLower(c.Args[0])
-	}
-	modeID := "istirahat"
-	if c.InvokedAs == "tidur" || c.InvokedAs == "sleep" || argMode == "tidur" {
-		modeID = "tidur"
+		sub = strings.ToLower(c.Args[0])
 	}
 
-	hasil := econ.Istirahat(c.Evt, modeID)
-
-	if !hasil.OK && hasil.Err == "cooldown" {
-		saran := fmt.Sprintf("\n\n_Sambil menunggu, makan hasil tani/ternak: %smakan_", mp)
-		for _, m := range econ.StatusRest(c.Evt) {
-			if m.ID != modeID && m.Siap {
-				saran = fmt.Sprintf("\n\n%s *%s%s* sudah bisa dipakai sekarang.", m.Emoji, mp, m.ID)
+	var sel *restOption
+	if sub == "" {
+		sel = &restOptions[0]
+	} else {
+		for i := range restOptions {
+			if restOptions[i].ID == sub || strings.Contains(strings.ToLower(restOptions[i].Name), sub) {
+				sel = &restOptions[i]
 				break
 			}
 		}
-		_, err := c.Reply(ctx, fmt.Sprintf("%s Kamu baru saja %s.\n"+
-			"Bisa lagi dalam *%s*.%s",
-			hasil.Mode.Emoji, strings.ToLower(hasil.Mode.Nama), econ.FormatDurasi(hasil.Sisa), saran))
+	}
+
+	if sel == nil {
+		var list []string
+		for _, opt := range restOptions {
+			list = append(list, fmt.Sprintf("%s *%s%s %s* — +%d ⚡ (cooldown %v)", opt.Emoji, mp, c.InvokedAs, opt.ID, opt.Energy, opt.Cooldown))
+		}
+		_, err := c.Reply(ctx, fmt.Sprintf("💤 *Pilihan Istirahat:*\n\n%s\n\n_Contoh: *%s%s nap*_", strings.Join(list, "\n"), mp, c.InvokedAs))
 		return err
 	}
 
-	if !hasil.OK {
-		_, err := c.Reply(ctx, "❌ "+hasil.Err)
+	candidates := identity.Candidates(c.Evt)
+	if len(candidates) == 0 {
+		_, err := c.Reply(ctx, "❌ Gagal mengidentifikasi user.")
+		return err
+	}
+	userID := candidates[0]
+
+	restMu.Lock()
+	data := getRestMap()
+	uRec := data[userID]
+	if uRec == nil {
+		uRec = restUserRecord{}
+	}
+
+	now := time.Now().UnixMilli()
+	lastTS := uRec[sel.ID]
+	sisa := time.Duration(lastTS+sel.Cooldown.Milliseconds()-now) * time.Millisecond
+
+	if sisa > 0 {
+		restMu.Unlock()
+		minut := int(math.Ceil(sisa.Minutes()))
+		_, err := c.Reply(ctx, fmt.Sprintf("⏳ Kamu masih kelelahan dari %s *%s*!\n\n_Tunggu *%d menit* lagi sebelum dapat istirahat ini._", sel.Emoji, sel.Name, minut))
 		return err
 	}
 
-	if hasil.Unlimited {
-		_, err := c.Reply(ctx, "⚡ Energi kamu tak terbatas — istirahat tidak diperlukan.")
+	res := energy.Restore(c.Evt, sel.Energy)
+	if !res.OK {
+		restMu.Unlock()
+		_, err := c.Reply(ctx, "❌ "+res.Err)
 		return err
 	}
 
-	if hasil.Penuh {
-		_, err := c.Reply(ctx, fmt.Sprintf("%s Energi kamu sudah penuh (*%d* ⚡).\n"+
-			"_Cooldown tidak dipakai, jadi bisa istirahat nanti saat benar-benar butuh._", hasil.Mode.Emoji, hasil.Bank))
+	if res.Penuh {
+		restMu.Unlock()
+		_, err := c.Reply(ctx, fmt.Sprintf("⚡ Energi kamu sudah penuh (*%d ⚡*)! Tidak perlu istirahat lagi saat ini.", res.Bank))
 		return err
 	}
 
-	plafon := ""
-	if !hasil.PlafonTakHingga {
-		plafon = fmt.Sprintf("/%d", hasil.Plafon)
-	}
-	terbuang := ""
-	if hasil.Terbuang > 0 {
-		terbuang = fmt.Sprintf("\n_%d ⚡ terbuang karena sudah penuh._", hasil.Terbuang)
-	}
-	namaLower := strings.ToLower(hasil.Mode.Nama)
+	uRec[sel.ID] = now
+	data[userID] = uRec
+	saveRestMap(data)
+	restMu.Unlock()
 
-	_, err := c.Reply(ctx, fmt.Sprintf("%s *%s selesai*\n\n"+
-		"⚡ Energi +%d\n"+
-		"Sekarang: *%d%s* ⚡%s\n\n"+
-		"Bisa %s lagi dalam %s.\n"+
-		"_Mau lebih cepat? Makan hasil panen: %smakan_",
-		hasil.Mode.Emoji, hasil.Mode.Nama, hasil.Tambah, hasil.Bank, plafon, terbuang,
-		namaLower, econ.FormatDurasi(hasil.Cooldown), mp))
+	_, err := c.Reply(ctx, fmt.Sprintf("%s *%s Berhasil!*\n\n"+
+		"⚡ Energi bertambah: *+%d ⚡*\n"+
+		"🔋 Total energi sekarang: *%d ⚡*\n\n"+
+		"_Cooldown mode ini: %v_", sel.Emoji, sel.Name, res.Tambah, res.Bank, sel.Cooldown))
 	return err
 }

@@ -270,3 +270,31 @@ func TopUsers() []UserEntry {
 	}
 	return out
 }
+
+type Overview struct {
+	TotalUsers  int   `json:"totalUsers"`
+	TotalGroups int   `json:"totalGroups"`
+	TotalChats  int64 `json:"totalChats"`
+	TotalCmds   int64 `json:"totalCmds"`
+}
+
+// GetOverview mengembalikan ringkasan statistik total user, grup, chat, dan command.
+func GetOverview() Overview {
+	mu.Lock()
+	defer mu.Unlock()
+	s := load()
+	var chats, cmds int64
+	for _, c := range s.Users {
+		if c != nil {
+			chats += c.Chats
+			cmds += c.Cmds
+		}
+	}
+	return Overview{
+		TotalUsers:  len(s.Users),
+		TotalGroups: len(s.Groups),
+		TotalChats:  chats,
+		TotalCmds:   cmds,
+	}
+}
+

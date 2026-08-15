@@ -8,16 +8,11 @@ import (
 
 	"rbot/brain/command"
 	"rbot/brain/config"
-	"rbot/brain/econ"
 	"rbot/brain/energy"
 	"rbot/brain/premium"
 )
 
-// energi.go: cek sisa energi + cara mengisinya. Port energi.js. Command info
-// (tidak menarik energi). Member grup official dilihat lewat command.MemberGrupHook
-// (nil-safe: grupofficial belum diport → dianggap bukan member).
-
-// heavyEnergi adalah fitur berat yang biayanya ditampilkan (urutan seperti Node).
+// energi.go: cek sisa energi + cara mengisinya.
 var heavyEnergi = []string{"hd", "smooth", "ai", "play", "download", "sticker"}
 
 func init() {
@@ -45,9 +40,7 @@ func energiHandler(ctx context.Context, c *command.Ctx) error {
 	}
 
 	if e.Unlimited {
-		_, err := c.Reply(ctx, fmt.Sprintf("⚡ *Energi tak terbatas* — semua fitur bebas dipakai.\n\n"+
-			"_Nanti saat mode energi diaktifkan: tiap user dapat jatah harian, "+
-			"isi ulang lewat %sistirahat atau %smakan hasil tani/ternak._", mp, mp))
+		_, err := c.Reply(ctx, "⚡ *Energi tak terbatas* — semua fitur bebas dipakai.")
 		return err
 	}
 
@@ -91,36 +84,13 @@ func energiHandler(ctx context.Context, c *command.Ctx) error {
 		}
 		costLines = append(costLines, fmt.Sprintf("• %s%s —%s %d ⚡", mp, name, tanda, bayar))
 	}
-	baris = append(baris, "", "*Biaya per fitur:*", strings.Join(costLines, "\n"))
-
-	var restLines []string
-	for _, m := range econ.StatusRest(c.Evt) {
-		status := "✅ siap"
-		if !m.Siap {
-			status = "⏳ " + econ.FormatDurasi(m.Sisa)
-		}
-		restLines = append(restLines, fmt.Sprintf("%s *%s%s* — %s", m.Emoji, mp, m.ID, status))
-	}
-
-	makanan := econ.DaftarMakanan(c.Evt)
-	if len(makanan) > 4 {
-		makanan = makanan[:4]
-	}
-	makanLine := fmt.Sprintf("_Kulkas kosong — panen dulu di %stani / %sternak_", mp, mp)
-	if len(makanan) > 0 {
-		var ml []string
-		for _, m := range makanan {
-			ml = append(ml, fmt.Sprintf("%s %s ×%d — +%d ⚡", m.Emoji, m.ID, m.Jumlah, m.EnergyRestore))
-		}
-		makanLine = strings.Join(ml, "\n")
-	}
-	baris = append(baris, "", "*Cara isi ulang:*", strings.Join(restLines, "\n"), "", "*🍽️ Makanan kamu:*", makanLine)
+	baris = append(baris, "", fmt.Sprintf("💤 *Isi Ulang Energi:* Ketik *%sistirahat* (pilihan: nap, tidur, nyenyak)", mp))
 
 	if !e.Premium {
 		baris = append(baris, "", fmt.Sprintf("💎 Mau %d ⚡/hari yang ditumpuk? Ketik *%spremium*.", config.C.Energy.PremiumDaily(), mp))
 	}
 	if url := config.C.GrupOfficial.Invite; !member && url != "" {
-		baris = append(baris, "", fmt.Sprintf("🎁 Join grup official buat hemat energi + hadiah:\n%s", url))
+		baris = append(baris, "", fmt.Sprintf("🎁 Join grup official buat hemat energi:\n%s", url))
 	}
 
 	_, err := c.Reply(ctx, strings.Join(baris, "\n"))

@@ -27,6 +27,7 @@ import (
 	"rbot/brain/settings"
 	"rbot/brain/stats"
 	"rbot/brain/store"
+	"rbot/brain/web"
 	_ "rbot/cmd"
 )
 
@@ -83,6 +84,8 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("muat settings: %w", err)
 	}
 
+	web.Start(ctx)
+
 	level := strings.ToUpper(config.C.LogLevel)
 	if level == "" || level == "SILENT" {
 		level = "ERROR"
@@ -105,6 +108,7 @@ func run(ctx context.Context) error {
 	}
 	clientLog := waLog.Stdout("Client", level, true)
 	client := whatsmeow.NewClient(device, clientLog)
+	web.SetWhatsAppClient(client)
 	command.ErrorHook = forwardCommandError
 	var notifyOnce sync.Once
 	client.AddEventHandler(func(rawEvt any) {
@@ -172,6 +176,7 @@ func run(ctx context.Context) error {
 		if len(code) == 8 {
 			pretty = code[:4] + "-" + code[4:]
 		}
+		web.SetPairingCode(pretty)
 		fmt.Println("==============================")
 		fmt.Println(" Kode Pairing WhatsApp:", pretty)
 		fmt.Println(" Buka WhatsApp di HP > Perangkat Tertaut > Tautkan dengan nomor telepon")

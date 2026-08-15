@@ -1360,6 +1360,7 @@
     }
 
     function applyMetricsData(d) {
+      if (!d) return;
       cachedStatusData = d;
 
       if (wsMetrics && wsMetrics.readyState === WebSocket.OPEN) {
@@ -1367,12 +1368,14 @@
       }
 
       // Overview Metrics
-      document.getElementById('metricChats').textContent = (d.stats.totalChats || 0).toLocaleString();
-      document.getElementById('metricUsers').textContent = (d.stats.totalUsers || 0).toLocaleString();
-      document.getElementById('metricRam').textContent = d.system.allocMb + ' MB';
-      document.getElementById('metricRamSub').textContent = `Sys: ${d.system.sysMb} MB`;
-      document.getElementById('metricUptime').textContent = formatSeconds(d.bot.uptime);
-      document.getElementById('metricUptimeSub').textContent = `CPU: ${d.system.cpuPct || '1.0'}%`;
+      const totalChats = (d.stats && d.stats.totalChats) ? d.stats.totalChats : 0;
+      const totalUsers = (d.stats && d.stats.totalUsers) ? d.stats.totalUsers : 0;
+      document.getElementById('metricChats').textContent = totalChats.toLocaleString();
+      document.getElementById('metricUsers').textContent = totalUsers.toLocaleString();
+      document.getElementById('metricRam').textContent = (d.system && d.system.allocMb ? d.system.allocMb : '0') + ' MB';
+      document.getElementById('metricRamSub').textContent = `Sys: ${d.system && d.system.sysMb ? d.system.sysMb : '0'} MB`;
+      document.getElementById('metricUptime').textContent = formatSeconds(d.bot && d.bot.uptime ? d.bot.uptime : 0);
+      document.getElementById('metricUptimeSub').textContent = `CPU: ${d.system && d.system.cpuPct ? d.system.cpuPct : '1.0'}%`;
 
       // 24h Bar Chart
       renderHourlyChart(d.hourlyMessages || []);
@@ -1386,7 +1389,7 @@
       renderAuditTable(d.auditLogs || []);
 
       // Config View
-      document.getElementById('configView').textContent = JSON.stringify(d.config, null, 2);
+      document.getElementById('configView').textContent = JSON.stringify(d.config || {}, null, 2);
     }
 
     function toggleMobileDrawer() {
@@ -1423,13 +1426,33 @@
 
     function switchNav(viewId, el) {
       document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+      document.querySelectorAll('.bottom-nav-btn').forEach(b => b.classList.remove('active'));
       document.querySelectorAll('.view-container').forEach(v => v.classList.remove('active'));
 
-      if (el && el.classList.contains('nav-item')) el.classList.add('active');
-      document.getElementById('view-' + viewId).classList.add('active');
+      document.querySelectorAll('.sidebar-nav .nav-item').forEach(i => {
+        if (i.getAttribute('onclick') && i.getAttribute('onclick').includes(`'${viewId}'`)) {
+          i.classList.add('active');
+        }
+      });
+
+      document.querySelectorAll('.bottom-appbar .bottom-nav-btn').forEach(b => {
+        if (b.getAttribute('onclick') && b.getAttribute('onclick').includes(`'${viewId}'`)) {
+          b.classList.add('active');
+        }
+      });
+
+      const targetView = document.getElementById('view-' + viewId);
+      if (targetView) targetView.classList.add('active');
 
       if (viewId === 'terminal') {
-        initTerminal();
+        if (!term) {
+          initTerminal();
+        } else if (fitAddon) {
+          setTimeout(() => {
+            fitAddon.fit();
+            sendResize();
+          }, 150);
+        }
       }
     }
 
@@ -1675,6 +1698,10 @@
     }
 
     function downloadLogs() {
+      if (!rawLogs || rawLogs.length === 0) {
+        showToast('Belum ada log untuk didownload', 'warning');
+        return;
+      }
       const text = rawLogs.join('\n');
       const blob = new Blob([text], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
@@ -1880,8 +1907,41 @@
 
     function copyConfigJson() {
       const json = document.getElementById('configView').textContent;
-      navigator.clipboard.writeText(json);
-      showToast('Config JSON disalin!', 'success');
+      if (!json) {
+        showToast('Tidak ada data config', 'warning');
+        return;
+      }
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        navigator.clipboard.writeText(json).then(() => {
+          showToast('Config JSON disalin!', 'success');
+        }).catch(() => {
+          fallbackCopyText(json);
+        });
+      } else {
+        fallbackCopyText(json);
+      }
+    }
+
+    function fallbackCopyText(text) {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.top = '-9999px';
+      textarea.style.left = '-9999px';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      try {
+        const successful = document.execCommand('copy');
+        if (successful) {
+          showToast('Config JSON disalin!', 'success');
+        } else {
+          showToast('Gagal menyalin text', 'error');
+        }
+      } catch (err) {
+        showToast('Gagal menyalin text', 'error');
+      }
+      document.body.removeChild(textarea);
     }
 
     function formatSeconds(sec) {

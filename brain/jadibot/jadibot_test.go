@@ -123,3 +123,21 @@ func TestStartPairingInvalidPhone(t *testing.T) {
 		t.Fatalf("expected error containing 'nomor telepon tidak valid', got: %v", err)
 	}
 }
+
+func TestNormalizePhone(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"081234567890", "6281234567890"},
+		{"+62 812-3456-7890", "6281234567890"},
+		{"6281234567890", "6281234567890"},
+	}
+
+	for _, tt := range tests {
+		got := NormalizePhone(tt.input)
+		if got != tt.expected {
+			t.Errorf("NormalizePhone(%q) = %q; expected %q", tt.input, got, tt.expected)
+		}
+	}
+}

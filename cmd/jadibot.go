@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"rbot/brain/command"
 	"rbot/brain/jadibot"
@@ -22,8 +21,11 @@ func init() {
 			}
 
 			phone := c.Sender().User
-			if len(c.Args) > 0 && strings.TrimSpace(c.Args[0]) != "" {
-				phone = strings.TrimSpace(c.ArgStr())
+			if len(c.Args) > 0 {
+				argPhone := jadibot.NormalizePhone(c.ArgStr())
+				if len(argPhone) >= 10 {
+					phone = argPhone
+				}
 			}
 
 			code, err := jadibot.StartPairing(ctx, phone, c.Sender())

@@ -109,10 +109,19 @@ func (m *Manager) List() []SubBotInfo {
 	return out
 }
 
+// NormalizePhone membersihkan karakter non-angka dan mengubah awalan '0' menjadi '62' (format internasional).
+func NormalizePhone(phone string) string {
+	digits := config.Digits(phone)
+	if strings.HasPrefix(digits, "0") {
+		return "62" + digits[1:]
+	}
+	return digits
+}
+
 // StartPairing membersihkan nomor, mengecek kuota max jadibot, membuat container SQLite,
 // menghubungkan client whatsmeow, dan meminta kode pairing.
 func (m *Manager) StartPairing(ctx context.Context, phone string, senderJID types.JID) (string, error) {
-	phoneDigits := config.Digits(phone)
+	phoneDigits := NormalizePhone(phone)
 	if phoneDigits == "" {
 		return "", errors.New("nomor telepon tidak valid")
 	}
@@ -135,6 +144,11 @@ func (m *Manager) StartPairing(ctx context.Context, phone string, senderJID type
 	}
 
 	dbPath := filepath.Join(dir, phoneDigits+".db")
+	// Hapus file DB lama bila ada bekas percobaan pairing yang belum logged-in
+	_ = os.Remove(dbPath)
+	_ = os.Remove(dbPath + "-shm")
+	_ = os.Remove(dbPath + "-wal")
+
 	dsn := "file:" + filepath.ToSlash(dbPath) + "?_foreign_keys=on"
 
 	level := strings.ToUpper(config.C.LogLevel)
@@ -175,10 +189,14 @@ func (m *Manager) StartPairing(ctx context.Context, phone string, senderJID type
 		return "", fmt.Errorf("gagal menghubungkan client: %w", err)
 	}
 
+	// Beri jeda agar handshake websocket tersambung sempurna sebelum meminta kode pairing
+	time.Sleep(1500 * time.Millisecond)
+
 	code, err := client.PairPhone(ctx, phoneDigits, true, whatsmeow.PairClientChrome, "Chrome (Linux)")
 	if err != nil {
 		client.Disconnect()
 		_ = container.Close()
+		_ = os.Remove(dbPath)
 		return "", fmt.Errorf("gagal mendapatkan kode pairing: %w", err)
 	}
 

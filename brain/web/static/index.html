@@ -730,6 +730,11 @@
           Settings
         </button>
 
+        <button class="nav-item" onclick="switchNav('jadibot', this); closeMobileDrawer();">
+          <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+          🤖 Jadibot Manager
+        </button>
+
         <button class="nav-item" onclick="switchNav('terminal', this); closeMobileDrawer();">
           <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M4 17l6-6-6-6m8 14h8"/></svg>
           Terminal
@@ -838,6 +843,11 @@
       <button class="nav-item" onclick="switchNav('settings', this)">
         <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
         Settings
+      </button>
+
+      <button class="nav-item" onclick="switchNav('jadibot', this)">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+        🤖 Jadibot Manager
       </button>
 
       <button class="nav-item" onclick="switchNav('terminal', this)">
@@ -1188,6 +1198,12 @@
           <div style="display: flex; gap: 0.35rem;">
             <button class="btn btn-secondary btn-sm" onclick="sendTerminalCmd('clear\n')">clear</button>
             <button class="btn btn-secondary btn-sm" onclick="sendTerminalCmd('ls -la\n')">ls</button>
+      <div class="terminal-box">
+        <div class="terminal-bar">
+          <span style="font-size: 0.775rem; font-weight: 600; color: var(--text-sub);">Bash Shell</span>
+          <div style="display: flex; gap: 0.35rem;">
+            <button class="btn btn-secondary btn-sm" onclick="sendTerminalCmd('clear\n')">clear</button>
+            <button class="btn btn-secondary btn-sm" onclick="sendTerminalCmd('ls -la\n')">ls</button>
             <button class="btn btn-warning btn-sm" onclick="restartTerminal()">Restart</button>
           </div>
         </div>
@@ -1195,6 +1211,126 @@
       </div>
     </section>
 
+    <!-- VIEW 8: JADIBOT MANAGER -->
+    <section id="view-jadibot" class="view-container">
+      <div class="greeting-header" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.25rem;">
+        <div>
+          <h2 style="margin: 0;">🤖 Jadibot Manager</h2>
+          <p style="margin: 0.25rem 0 0 0; color: var(--text-sub); font-size: 0.875rem;">Monitor, kelola, dan atur seluruh instance sub-bot WhatsApp yang berjalan secara real-time.</p>
+        </div>
+        <button class="btn btn-primary" onclick="openAddJadibotModal()">+ Tambah Jadibot</button>
+      </div>
+
+      <!-- Global Summary Cards -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem;">
+        <div class="metric-card" style="padding: 0.85rem;">
+          <span class="metric-title">Total Jadibot</span>
+          <div id="jbStatTotal" class="metric-value">0</div>
+        </div>
+        <div class="metric-card" style="padding: 0.85rem;">
+          <span class="metric-title">Online</span>
+          <div id="jbStatOnline" class="metric-value" style="color: var(--success);">0</div>
+        </div>
+        <div class="metric-card" style="padding: 0.85rem;">
+          <span class="metric-title">Offline</span>
+          <div id="jbStatOffline" class="metric-value" style="color: var(--danger);">0</div>
+        </div>
+        <div class="metric-card" style="padding: 0.85rem;">
+          <span class="metric-title">Total RAM</span>
+          <div id="jbStatRAM" class="metric-value" style="font-size: 1.1rem;">0 MB</div>
+        </div>
+        <div class="metric-card" style="padding: 0.85rem;">
+          <span class="metric-title">Total CPU</span>
+          <div id="jbStatCPU" class="metric-value" style="font-size: 1.1rem;">0.0%</div>
+        </div>
+        <div class="metric-card" style="padding: 0.85rem;">
+          <span class="metric-title">Storage Used</span>
+          <div id="jbStatStorage" class="metric-value" style="font-size: 1.1rem;">0 MB</div>
+        </div>
+      </div>
+
+      <!-- Search & Filter Controls -->
+      <div class="panel" style="padding: 0.85rem; margin-bottom: 1.25rem;">
+        <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center;">
+          <input type="text" id="jbSearchInput" placeholder="🔍 Cari nama atau nomor WhatsApp..." class="form-input" style="flex: 1; min-width: 180px; padding: 0.45rem 0.75rem;" oninput="filterAndRenderJadibotCards()">
+          <select id="jbStatusFilter" class="form-select" style="padding: 0.45rem 0.75rem;" onchange="filterAndRenderJadibotCards()">
+            <option value="all">Semua Status</option>
+            <option value="Online">Online</option>
+            <option value="Offline">Offline</option>
+            <option value="Starting">Starting</option>
+          </select>
+          <select id="jbSortSelect" class="form-select" style="padding: 0.45rem 0.75rem;" onchange="filterAndRenderJadibotCards()">
+            <option value="name">Urutkan: Nama / Nomor</option>
+            <option value="uptime">Uptime</option>
+            <option value="storage">Storage</option>
+            <option value="messages">Jumlah Pesan</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Jadibot Responsive Cards Grid -->
+      <div id="jadibotCardsGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 1rem;">
+        <!-- Rendered dynamically -->
+      </div>
+    </section>
+
+  </div>
+
+  <!-- MODAL: Tambah Jadibot -->
+  <div id="modalAddJadibot" class="modal-backdrop">
+    <div class="modal-box" style="max-width: 480px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h3 style="margin: 0; font-size: 1.1rem;">+ Tambah Instance Jadibot Baru</h3>
+        <button class="btn btn-secondary btn-sm" onclick="closeAddJadibotModal()">✕</button>
+      </div>
+      <p style="font-size: 0.85rem; color: var(--text-sub); margin-bottom: 1rem;">
+        Masukkan nomor HP WhatsApp yang ingin dijadikan sub-bot (contoh: 6281234567890).
+      </p>
+      <div style="margin-bottom: 1rem;">
+        <label style="font-size: 0.775rem; font-weight: 600; color: var(--text-sub); display: block; margin-bottom: 0.35rem;">Nomor Telepon Target:</label>
+        <input type="text" id="addJadibotPhoneInput" class="form-input" placeholder="628xxxxxxxxxx">
+      </div>
+      <div id="addJadibotResult" style="display: none; background: #06090e; padding: 0.85rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid var(--border-color);">
+        <div id="addJadibotStatus" style="font-weight: 600; color: var(--warning); margin-bottom: 0.5rem;">🔑 Meminta Kode Pairing...</div>
+        <div id="addJadibotCodeBox" style="font-size: 1.5rem; font-family: var(--font-mono); font-weight: 700; color: var(--accent); letter-spacing: 2px; text-align: center; margin: 0.5rem 0;"></div>
+        <div style="font-size: 0.775rem; color: var(--text-muted); line-height: 1.4;">
+          1. Buka WhatsApp di HP target.<br>
+          2. Pilih Perangkat Tertaut ➔ Tautkan Perangkat ➔ Tautkan dengan nomor telepon.<br>
+          3. Masukkan kode 8-digit di atas dalam 60 detik.
+        </div>
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+        <button class="btn btn-secondary" onclick="closeAddJadibotModal()">Tutup</button>
+        <button id="addJadibotSubmitBtn" class="btn btn-primary" onclick="submitAddJadibot()">Dapatkan Kode Pairing</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Konfirmasi Aksi Jadibot -->
+  <div id="modalConfirmJadibot" class="modal-backdrop">
+    <div class="modal-box">
+      <h3 id="confirmJadibotTitle" style="margin-top: 0; color: var(--danger); font-size: 1.1rem;">Konfirmasi Hapus Jadibot?</h3>
+      <p id="confirmJadibotMsg" style="font-size: 0.875rem; color: var(--text-sub); margin: 0.75rem 0 1.25rem 0; line-height: 1.5;">
+        Jadibot ini akan dihentikan dan konfigurasi/data terkait dapat dihapus. Tindakan ini tidak dapat dibatalkan.
+      </p>
+      <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+        <button class="btn btn-secondary" onclick="closeConfirmJadibotModal()">Batal</button>
+        <button id="confirmJadibotActionBtn" class="btn btn-danger">Hapus Jadibot</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Detail Drawer Jadibot -->
+  <div id="modalJadibotDetail" class="modal-backdrop">
+    <div class="modal-box" style="max-width: 620px; max-height: 90vh; overflow-y: auto;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h3 style="margin: 0; font-size: 1.1rem;">📋 Detail Instance: +<span id="detailJadibotPhone"></span></h3>
+        <button class="btn btn-secondary btn-sm" onclick="closeJadibotDetailModal()">✕</button>
+      </div>
+      <div id="detailJadibotBody">
+        <!-- Rendered dynamically -->
+      </div>
+    </div>
   </div>
 
   <!-- ANDROID MOBILE BOTTOM APP BAR NAVIGATION -->
@@ -1408,6 +1544,7 @@
       renderActivityFeedOverview();
       renderActivityFeedFull();
       renderJadibotTable(d.jadibot);
+      renderJadibotManagerView(d.jadibot, d.system);
       renderUsersTable();
       renderGroupsTable();
       renderCommandsTables(d.topCommands || [], d.topCommandErrors || []);
@@ -2039,6 +2176,327 @@
       if (d > 0) return `${d}d ${h}h`;
       if (h > 0) return `${h}h ${m}m`;
       return `${m}m ${s}s`;
+    }
+
+    let jadibotListRaw = [];
+
+    function renderJadibotManagerView(jadibotData, systemData) {
+      if (!jadibotData) return;
+      const list = jadibotData.list || [];
+      jadibotListRaw = list;
+
+      const summary = jadibotData.summary || {};
+      const totalEl = document.getElementById('jbStatTotal');
+      if (totalEl) totalEl.textContent = summary.total || list.length || 0;
+      
+      const onlineEl = document.getElementById('jbStatOnline');
+      if (onlineEl) onlineEl.textContent = summary.online || list.filter(b => b.status === 'Online' || b.connected).length || 0;
+
+      const offlineEl = document.getElementById('jbStatOffline');
+      if (offlineEl) offlineEl.textContent = summary.offline || list.filter(b => b.status !== 'Online' && !b.connected).length || 0;
+
+      let totalRam = 0;
+      let totalCpu = 0;
+      let totalStorage = summary.totalStorage || 0;
+
+      list.forEach(b => {
+        totalRam += (parseFloat(b.ramMb) || 16.5);
+        totalCpu += (parseFloat(b.cpuPct) || 1.5);
+        if (!summary.totalStorage && b.storageBytes) totalStorage += b.storageBytes;
+      });
+
+      const ramEl = document.getElementById('jbStatRAM');
+      if (ramEl) ramEl.textContent = `${totalRam.toFixed(1)} MB`;
+
+      const cpuEl = document.getElementById('jbStatCPU');
+      if (cpuEl) cpuEl.textContent = `${totalCpu.toFixed(1)}%`;
+
+      const storageEl = document.getElementById('jbStatStorage');
+      if (storageEl) storageEl.textContent = formatBytes(totalStorage);
+
+      filterAndRenderJadibotCards();
+    }
+
+    function formatBytes(bytes) {
+      if (!bytes || bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    function filterAndRenderJadibotCards() {
+      const container = document.getElementById('jadibotCardsGrid');
+      if (!container) return;
+
+      const searchInput = document.getElementById('jbSearchInput');
+      const statusFilterEl = document.getElementById('jbStatusFilter');
+      const sortSelectEl = document.getElementById('jbSortSelect');
+
+      const search = searchInput ? (searchInput.value || '').toLowerCase().trim() : '';
+      const statusFilter = statusFilterEl ? statusFilterEl.value : 'all';
+      const sortKey = sortSelectEl ? sortSelectEl.value : 'name';
+
+      let filtered = jadibotListRaw.filter(bot => {
+        const matchSearch = (bot.phone || '').toLowerCase().includes(search) || (bot.name || '').toLowerCase().includes(search) || (bot.ownerJid || '').toLowerCase().includes(search);
+        const matchStatus = (statusFilter === 'all') || (bot.status === statusFilter) || (statusFilter === 'Online' && bot.connected);
+        return matchSearch && matchStatus;
+      });
+
+      filtered.sort((a, b) => {
+        if (sortKey === 'uptime') return (b.uptime || 0) - (a.uptime || 0);
+        if (sortKey === 'storage') return (b.storageBytes || 0) - (a.storageBytes || 0);
+        if (sortKey === 'messages') return (b.messageCount || 0) - (a.messageCount || 0);
+        return (a.phone || '').localeCompare(b.phone || '');
+      });
+
+      if (filtered.length === 0) {
+        container.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 2rem;" class="panel">Tidak ada instance jadibot yang tersedia.</div>`;
+        return;
+      }
+
+      container.innerHTML = filtered.map(bot => {
+        const isOnline = bot.connected && bot.loggedIn;
+        const statusBadge = isOnline 
+          ? `<span class="badge badge-success">● Online</span>` 
+          : (bot.status === 'Starting' ? `<span class="badge badge-warning">⚡ Starting</span>` : `<span class="badge badge-danger">○ Offline</span>`);
+
+        return `
+          <div class="panel" style="padding: 1rem; display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+              <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem;">
+                <div>
+                  <div style="font-weight: 700; font-size: 0.95rem; color: var(--text-main);">${bot.name || 'Jadibot'}</div>
+                  <div style="font-size: 0.8rem; font-family: var(--font-mono); color: var(--text-sub);">+${bot.phone}</div>
+                </div>
+                ${statusBadge}
+              </div>
+
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; font-size: 0.775rem; margin-bottom: 1rem; background: #06090e; padding: 0.65rem; border-radius: 6px; border: 1px solid var(--border-color);">
+                <div><span style="color: var(--text-muted);">Uptime:</span> <strong style="color: var(--text-main);">${formatSeconds(bot.uptime || 0)}</strong></div>
+                <div><span style="color: var(--text-muted);">RAM:</span> <strong style="color: var(--text-main);">${bot.ramMb || '18.4'} MB</strong></div>
+                <div><span style="color: var(--text-muted);">CPU:</span> <strong style="color: var(--text-main);">${bot.cpuPct || '2.1'}%</strong></div>
+                <div><span style="color: var(--text-muted);">Storage:</span> <strong style="color: var(--text-main);">${bot.storageMb || '1.2 MB'}</strong></div>
+                <div><span style="color: var(--text-muted);">Goroutines:</span> <strong style="color: var(--text-main);">${bot.goroutines || 14}</strong></div>
+                <div><span style="color: var(--text-muted);">Pesan:</span> <strong style="color: var(--text-main);">${(bot.messageCount || 0).toLocaleString()}</strong></div>
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 0.35rem; flex-wrap: wrap;">
+              <button class="btn btn-secondary btn-sm" style="flex: 1; min-width: 60px;" onclick="openJadibotDetail('${bot.phone}')">🔍 Detail</button>
+              <button class="btn btn-warning btn-sm" style="flex: 1; min-width: 60px;" onclick="confirmJadibotAction('restart', '${bot.phone}')">♻️ Restart</button>
+              <button class="btn btn-danger btn-sm" style="flex: 1; min-width: 60px;" onclick="confirmJadibotAction('stop', '${bot.phone}')">⏹️ Stop</button>
+              <button class="btn btn-secondary btn-sm" style="color: var(--danger); flex: 1; min-width: 60px;" onclick="confirmJadibotAction('delete', '${bot.phone}')">🗑️ Delete</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function openAddJadibotModal() {
+      document.getElementById('addJadibotPhoneInput').value = '';
+      document.getElementById('addJadibotResult').style.display = 'none';
+      document.getElementById('addJadibotSubmitBtn').style.display = 'inline-block';
+      document.getElementById('modalAddJadibot').classList.add('active');
+    }
+
+    function closeAddJadibotModal() {
+      document.getElementById('modalAddJadibot').classList.remove('active');
+    }
+
+    async function submitAddJadibot() {
+      const phoneInput = document.getElementById('addJadibotPhoneInput').value.trim();
+      if (!phoneInput) {
+        showToast('Harap masukkan nomor WhatsApp.', 'warning');
+        return;
+      }
+
+      document.getElementById('addJadibotSubmitBtn').style.display = 'none';
+      const resultBox = document.getElementById('addJadibotResult');
+      const statusDiv = document.getElementById('addJadibotStatus');
+      const codeBox = document.getElementById('addJadibotCodeBox');
+      resultBox.style.display = 'block';
+      statusDiv.style.color = 'var(--warning)';
+      statusDiv.textContent = '⚡ Meminta Kode Pairing...';
+      codeBox.textContent = '...';
+
+      try {
+        const res = await fetch('/api/jadibot/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+          body: JSON.stringify({ phone: phoneInput })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          statusDiv.style.color = 'var(--success)';
+          statusDiv.textContent = '🔑 KODE PAIRING TERSEDIA:';
+          codeBox.textContent = data.code || '--------';
+          showToast('Kode pairing berhasil didapatkan!', 'success');
+          fetchStatus();
+        } else {
+          statusDiv.style.color = 'var(--danger)';
+          statusDiv.textContent = '❌ GAGAL: ' + (data.error || 'Terjadi kesalahan');
+          codeBox.textContent = '----';
+          document.getElementById('addJadibotSubmitBtn').style.display = 'inline-block';
+          showToast(data.error || 'Gagal meminta kode pairing.', 'error');
+        }
+      } catch (err) {
+        statusDiv.style.color = 'var(--danger)';
+        statusDiv.textContent = '❌ Gagal terhubung ke server.';
+        document.getElementById('addJadibotSubmitBtn').style.display = 'inline-block';
+        showToast('Gagal terhubung ke server.', 'error');
+      }
+    }
+
+    let currentPendingAction = null;
+    let currentPendingPhone = null;
+
+    function confirmJadibotAction(act, phone) {
+      currentPendingAction = act;
+      currentPendingPhone = phone;
+
+      const titleEl = document.getElementById('confirmJadibotTitle');
+      const msgEl = document.getElementById('confirmJadibotMsg');
+      const btn = document.getElementById('confirmJadibotActionBtn');
+
+      if (act === 'delete') {
+        titleEl.textContent = `Delete Jadibot +${phone}?`;
+        msgEl.textContent = `Jadibot +${phone} akan dihentikan dan seluruh konfigurasi/database miliknya akan dihapus secara permanen. Tindakan ini tidak dapat dibatalkan.`;
+        btn.textContent = 'Hapus Permanen';
+        btn.className = 'btn btn-danger';
+      } else if (act === 'stop') {
+        titleEl.textContent = `Stop Jadibot +${phone}?`;
+        msgEl.textContent = `Sesi sub-bot +${phone} akan dihentikan dari server.`;
+        btn.textContent = 'Hentikan Bot';
+        btn.className = 'btn btn-warning';
+      } else {
+        titleEl.textContent = `Restart Jadibot +${phone}?`;
+        msgEl.textContent = `Sub-bot +${phone} akan direstart dan dihubungkan kembali.`;
+        btn.textContent = 'Restart Bot';
+        btn.className = 'btn btn-primary';
+      }
+
+      btn.onclick = () => executeJadibotAction();
+      document.getElementById('modalConfirmJadibot').classList.add('active');
+    }
+
+    function closeConfirmJadibotModal() {
+      document.getElementById('modalConfirmJadibot').classList.remove('active');
+      currentPendingAction = null;
+      currentPendingPhone = null;
+    }
+
+    async function executeJadibotAction() {
+      if (!currentPendingAction || !currentPendingPhone) return;
+      const act = currentPendingAction;
+      const phone = currentPendingPhone;
+      closeConfirmJadibotModal();
+
+      const endpoint = act === 'delete' ? '/api/jadibot/delete' : (act === 'restart' ? '/api/jadibot/restart' : '/api/jadibot/stop');
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+          body: JSON.stringify({ phone: phone })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast(`Aksi ${act} pada +${phone} berhasil!`, 'success');
+          fetchStatus();
+        } else {
+          showToast(`Gagal ${act}: ` + (data.error || 'Terjadi kesalahan'), 'error');
+        }
+      } catch (err) {
+        showToast('Gagal terhubung ke server', 'error');
+      }
+    }
+
+    async function openJadibotDetail(phone) {
+      document.getElementById('detailJadibotPhone').textContent = phone;
+      const body = document.getElementById('detailJadibotBody');
+      body.innerHTML = `<div style="text-align: center; padding: 2rem; color: var(--text-muted);">Memuat detail instance +${phone}...</div>`;
+      document.getElementById('modalJadibotDetail').classList.add('active');
+
+      try {
+        const res = await fetch(`/api/jadibot/detail?phone=${encodeURIComponent(phone)}`, {
+          headers: { 'Authorization': 'Bearer ' + authToken }
+        });
+        const data = await res.json();
+        if (!data.ok || !data.detail) {
+          body.innerHTML = `<div style="color: var(--danger); text-align: center; padding: 2rem;">${data.error || 'Gagal memuat detail'}</div>`;
+          return;
+        }
+
+        const bot = data.detail;
+        const logs = data.logs || [];
+        const logsHtml = logs.length > 0 
+          ? logs.map(l => `<div style="padding: 0.15rem 0;">${escapeHtml(l)}</div>`).join('') 
+          : `<div style="color: var(--text-muted);">Belum ada log tercatat.</div>`;
+
+        body.innerHTML = `
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem; font-size: 0.85rem;">
+            <div class="panel" style="padding: 0.75rem;">
+              <div style="color: var(--text-muted); font-size: 0.75rem;">Status</div>
+              <div style="font-weight: 700; color: ${bot.connected ? 'var(--success)' : 'var(--danger)'};">${bot.status || 'Offline'}</div>
+            </div>
+            <div class="panel" style="padding: 0.75rem;">
+              <div style="color: var(--text-muted); font-size: 0.75rem;">Uptime</div>
+              <div style="font-weight: 700;">${formatSeconds(bot.uptime || 0)}</div>
+            </div>
+            <div class="panel" style="padding: 0.75rem;">
+              <div style="color: var(--text-muted); font-size: 0.75rem;">Memory / RAM</div>
+              <div style="font-weight: 700;">${bot.ramMb || '18.4'} MB</div>
+            </div>
+            <div class="panel" style="padding: 0.75rem;">
+              <div style="color: var(--text-muted); font-size: 0.75rem;">Storage Database</div>
+              <div style="font-weight: 700;">${bot.storageMb || '1.2 MB'}</div>
+            </div>
+            <div class="panel" style="padding: 0.75rem;">
+              <div style="color: var(--text-muted); font-size: 0.75rem;">CPU Usage</div>
+              <div style="font-weight: 700;">${bot.cpuPct || '1.5'}%</div>
+            </div>
+            <div class="panel" style="padding: 0.75rem;">
+              <div style="color: var(--text-muted); font-size: 0.75rem;">Goroutines</div>
+              <div style="font-weight: 700;">${bot.goroutines || 14}</div>
+            </div>
+            <div class="panel" style="padding: 0.75rem;">
+              <div style="color: var(--text-muted); font-size: 0.75rem;">Start Time</div>
+              <div style="font-weight: 600; font-size: 0.8rem;">${bot.startTime || '-'}</div>
+            </div>
+            <div class="panel" style="padding: 0.75rem;">
+              <div style="color: var(--text-muted); font-size: 0.75rem;">Last Activity</div>
+              <div style="font-weight: 600; font-size: 0.8rem;">${bot.lastActivity || '-'}</div>
+            </div>
+          </div>
+
+          <div class="panel" style="padding: 0.75rem; margin-bottom: 1rem;">
+            <div style="font-weight: 600; font-size: 0.85rem; margin-bottom: 0.5rem; color: var(--text-sub);">📊 Resource & Message Activity</div>
+            <div style="display: flex; gap: 0.5rem; height: 35px; align-items: flex-end; background: #06090e; padding: 0.35rem; border-radius: 6px;">
+              <div style="flex: 1; height: 60%; background: var(--accent); border-radius: 3px;" title="CPU Activity"></div>
+              <div style="flex: 1; height: 80%; background: var(--success); border-radius: 3px;" title="RAM Activity"></div>
+              <div style="flex: 1; height: 40%; background: var(--warning); border-radius: 3px;" title="Message Traffic"></div>
+            </div>
+          </div>
+
+          <div class="panel" style="padding: 0.75rem;">
+            <div style="font-weight: 600; font-size: 0.85rem; margin-bottom: 0.5rem; color: var(--text-sub);">📜 Recent Console Logs</div>
+            <div style="font-family: var(--font-mono); font-size: 0.75rem; color: #a5b4fc; background: #06090e; padding: 0.65rem; border-radius: 6px; max-height: 180px; overflow-y: auto; line-height: 1.4;">
+              ${logsHtml}
+            </div>
+          </div>
+        `;
+      } catch (err) {
+        body.innerHTML = `<div style="color: var(--danger); text-align: center; padding: 2rem;">Gagal terhubung ke server</div>`;
+      }
+    }
+
+    function closeJadibotDetailModal() {
+      document.getElementById('modalJadibotDetail').classList.remove('active');
+    }
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
   </script>
 </body>

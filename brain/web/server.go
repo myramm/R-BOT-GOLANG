@@ -409,9 +409,10 @@ func BuildStatusPayload() map[string]any {
 		},
 		"stats":            overview,
 		"jadibot": map[string]any{
-			"count": jadibot.Count(),
-			"max":   config.C.MaxJadibot,
-			"list":  jadibot.GetWebList(),
+			"count":   jadibot.Count(),
+			"max":     config.C.MaxJadibot,
+			"summary": jadibot.GetGlobalWebSummary(),
+			"list":    jadibot.GetWebList(),
 		},
 		"topUsers":         stats.TopUsers(),
 		"topGroups":        stats.TopGroups(),
@@ -453,7 +454,11 @@ func Start(ctx context.Context) {
 	mux.HandleFunc("/api/audit-logs", handleAuditLogs)
 	mux.HandleFunc("/api/restart", handleRestart)
 	mux.HandleFunc("/api/stop", handleStop)
+	mux.HandleFunc("/api/jadibot/start", handleJadibotStart)
 	mux.HandleFunc("/api/jadibot/stop", handleJadibotStop)
+	mux.HandleFunc("/api/jadibot/restart", handleJadibotRestart)
+	mux.HandleFunc("/api/jadibot/delete", handleJadibotDelete)
+	mux.HandleFunc("/api/jadibot/detail", handleJadibotDetail)
 	mux.HandleFunc("/api/kill", handleKill)
 	mux.HandleFunc("/api/reload", handleReload)
 	mux.HandleFunc("/api/broadcast", handleBroadcast)
@@ -976,6 +981,142 @@ func handleJadibotStop(w http.ResponseWriter, r *http.Request) {
 	}
 
 	RecordAudit(r, "JADIBOT", "Menghentikan sub-bot "+req.Phone)
+	BroadcastMetricsNow()
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+}
+
+func handleJadibotStart(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Phone string `json:"phone"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Phone == "" {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	code, err := jadibot.StartPairing(r.Context(), req.Phone, types.JID{})
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	RecordAudit(r, "JADIBOT_START", "Memulai pairing sub-bot "+req.Phone)
+	BroadcastMetricsNow()
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "code": code, "phone": req.Phone})
+}
+
+func handleJadibotRestart(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Phone string `json:"phone"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Phone == "" {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	if err := jadibot.Restart(r.Context(), req.Phone); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	RecordAudit(r, "JADIBOT_RESTART", "Merestart sub-bot "+req.Phone)
+	BroadcastMetricsNow()
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+}
+
+func handleJadibotDelete(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Phone string `json:"phone"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Phone == "" {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	if err := jadibot.Delete(r.Context(), req.Phone); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	RecordAudit(r, "JADIBOT_DELETE", "Menghapus sub-bot "+req.Phone)
+	BroadcastMetricsNow()
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+}
+
+func handleJadibotDetail(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	phone := r.URL.Query().Get("phone")
+	if phone == "" {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	list := jadibot.GetWebList()
+	var detail map[string]any
+	for _, item := range list {
+		if p, ok := item["phone"].(string); ok && p == phone {
+			detail = item
+			break
+		}
+	}
+
+	if detail == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Jadibot tidak ditemukan"})
+		return
+	}
+
+	recentLogs := Broadcaster.GetRecentLogs()
+	if len(recentLogs) > 25 {
+		recentLogs = recentLogs[len(recentLogs)-25:]
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":     true,
+		"detail": detail,
+		"logs":   recentLogs,
+	})
 }

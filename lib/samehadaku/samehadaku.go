@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -271,7 +272,7 @@ func GetEpisodeDownloads(ctx context.Context, epURL string) (*EpisodeDownload, e
 	}, nil
 }
 
-// ResolveDirectLink mencoba mengekstrak link unduhan langsung dari provider (Pixeldrain, Mediafire, Krakenfiles, dll).
+// ResolveDirectLink mencoba mengekstrak link unduhan langsung dari provider (Pixeldrain, Mediafire, Krakenfiles, Filedon, dll).
 func ResolveDirectLink(ctx context.Context, server, pageURL string) string {
 	srvLower := strings.ToLower(server)
 
@@ -341,6 +342,84 @@ func ResolveDirectLink(ctx context.Context, server, pageURL string) string {
 								}
 								if json.NewDecoder(postResp.Body).Decode(&kRes) == nil && kRes.URL != "" {
 									return kRes.URL
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 4. Filedon: Extract Inertia version + XSRF token, then POST /download/{slug}
+	if strings.Contains(srvLower, "filedon") || strings.Contains(pageURL, "filedon.co") || strings.Contains(pageURL, "filedon.com") {
+		reFiledon := regexp.MustCompile(`filedon\.(?:co|com)/view/([a-zA-Z0-9]+)`)
+		if m := reFiledon.FindStringSubmatch(pageURL); len(m) > 1 {
+			slug := m[1]
+			viewURL := fmt.Sprintf("https://filedon.co/view/%s", slug)
+
+			jar, _ := cookiejar.New(nil)
+			client := &http.Client{Timeout: 12 * time.Second, Jar: jar}
+
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, viewURL, nil)
+			if err == nil {
+				req.Header.Set("User-Agent", UserAgent)
+				req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+
+				resp, err := client.Do(req)
+				if err == nil {
+					defer resp.Body.Close()
+					doc, err := goquery.NewDocumentFromReader(resp.Body)
+					if err == nil {
+						dataPage := doc.Find("[data-page]").AttrOr("data-page", "")
+						var version string
+						if dataPage != "" {
+							var inertiaData struct {
+								Version string `json:"version"`
+							}
+							_ = json.Unmarshal([]byte(dataPage), &inertiaData)
+							version = inertiaData.Version
+						}
+
+						var xsrfToken string
+						u, _ := url.Parse("https://filedon.co")
+						for _, c := range jar.Cookies(u) {
+							if c.Name == "XSRF-TOKEN" {
+								xsrfToken, _ = url.QueryUnescape(c.Value)
+								break
+							}
+						}
+
+						dlPostURL := fmt.Sprintf("https://filedon.co/download/%s", slug)
+						postReq, pErr := http.NewRequestWithContext(ctx, http.MethodPost, dlPostURL, strings.NewReader("{}"))
+						if pErr == nil {
+							postReq.Header.Set("User-Agent", UserAgent)
+							postReq.Header.Set("X-Inertia", "true")
+							if version != "" {
+								postReq.Header.Set("X-Inertia-Version", version)
+							}
+							if xsrfToken != "" {
+								postReq.Header.Set("X-XSRF-TOKEN", xsrfToken)
+							}
+							postReq.Header.Set("X-Requested-With", "XMLHttpRequest")
+							postReq.Header.Set("Referer", viewURL)
+							postReq.Header.Set("Content-Type", "application/json")
+							postReq.Header.Set("Accept", "text/html, application/xhtml+xml, application/json")
+
+							postResp, pDoErr := client.Do(postReq)
+							if pDoErr == nil {
+								defer postResp.Body.Close()
+								var filedonRes struct {
+									Props struct {
+										Flash struct {
+											DownloadURL string `json:"download_url"`
+										} `json:"flash"`
+									} `json:"props"`
+								}
+								if json.NewDecoder(postResp.Body).Decode(&filedonRes) == nil {
+									if filedonRes.Props.Flash.DownloadURL != "" {
+										return filedonRes.Props.Flash.DownloadURL
+									}
 								}
 							}
 						}

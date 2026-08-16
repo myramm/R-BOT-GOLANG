@@ -6,8 +6,11 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -91,33 +94,38 @@ func qcHandler(ctx context.Context, c *command.Ctx) error {
 
 	pngBytes, err := fetchQuotlyPNG(processCtx, text, targetName, avatarURL)
 	if err != nil {
+		log.Printf("[rbot] QC error (fetchQuotlyPNG): %v", err)
 		c.React(ctx, "❌")
-		_, replyErr := c.Reply(ctx, "❌ Gagal membuat quote sticker: "+err.Error())
-		return replyErr
+		c.Reply(ctx, "❌ Gagal membuat quote sticker: "+err.Error())
+		return err
 	}
 
 	webp, err := stickerEncode(processCtx, pngBytes, false)
 	if err != nil {
+		log.Printf("[rbot] QC error (stickerEncode): %v", err)
 		c.React(ctx, "❌")
-		_, replyErr := c.Reply(ctx, "❌ Gagal membuat stiker: "+err.Error())
-		return replyErr
+		c.Reply(ctx, "❌ Gagal membuat stiker: "+err.Error())
+		return err
 	}
 
 	thumbnail, thumbnailErr := stickerThumbnail(processCtx, webp)
 	if thumbnailErr != nil {
+		log.Printf("[rbot] QC error (stickerThumbnail): %v", thumbnailErr)
 		c.React(ctx, "❌")
-		_, replyErr := c.Reply(ctx, "❌ Gagal membuat thumbnail stiker: "+thumbnailErr.Error())
-		return replyErr
+		c.Reply(ctx, "❌ Gagal membuat thumbnail stiker: "+thumbnailErr.Error())
+		return thumbnailErr
 	}
 
 	webp, err = stickerAddExifContext(processCtx, webp, config.C.Sticker.Packname, config.C.Sticker.Author)
 	if err != nil {
+		log.Printf("[rbot] QC error (stickerAddExifContext): %v", err)
 		c.React(ctx, "❌")
-		_, replyErr := c.Reply(ctx, "❌ Gagal memasang metadata stiker: "+err.Error())
-		return replyErr
+		c.Reply(ctx, "❌ Gagal memasang metadata stiker: "+err.Error())
+		return err
 	}
 
 	if err := c.SendStickerBytesWithThumbnail(ctx, webp, thumbnail); err != nil {
+		log.Printf("[rbot] QC error (SendStickerBytesWithThumbnail): %v", err)
 		c.React(ctx, "❌")
 		return err
 	}
@@ -156,7 +164,21 @@ func extractQCTarget(c *command.Ctx) (string, types.JID, string) {
 }
 
 func fetchQuotlyPNG(ctx context.Context, text, name, avatarURL string) ([]byte, error) {
+	// 1. Coba Popcat Quote API terlebih dahulu
+	popcatURL := fmt.Sprintf("https://api.popcat.xyz/quote?text=%s&name=%s&image=%s",
+		url.QueryEscape(text), url.QueryEscape(name), url.QueryEscape(avatarURL))
+
+	imgData, err := httpx.GetBytes(ctx, popcatURL, 15*time.Second, 10*1024*1024)
+	if err == nil && len(imgData) > 0 && (bytes.HasPrefix(imgData, []byte("\x89PNG")) || bytes.HasPrefix(imgData, []byte("RIFF"))) {
+		return imgData, nil
+	} else if err != nil {
+		log.Printf("[rbot] qc endpoint %s error: %v", popcatURL, err)
+	}
+
+	// 2. Fallback ke endpoint Quotly JSON
 	endpoints := []string{
+		"https://quote.yuri.ly/generate",
+		"https://bot.lyo.su/quote/generate",
 		"https://bot.lyrical.tokyo/api/quote",
 		"https://quote.btch.bz/generate",
 		"https://qc.botcazx.my.id/generate",
@@ -188,6 +210,7 @@ func fetchQuotlyPNG(ctx context.Context, text, name, avatarURL string) ([]byte, 
 
 	bodyBytes, err := json.Marshal(reqPayload)
 	if err != nil {
+		log.Printf("[rbot] qc payload marshal error: %v", err)
 		return nil, err
 	}
 
@@ -196,6 +219,7 @@ func fetchQuotlyPNG(ctx context.Context, text, name, avatarURL string) ([]byte, 
 			"Content-Type": "application/json",
 		})
 		if err != nil {
+			log.Printf("[rbot] qc endpoint %s request error: %v", ep, err)
 			continue
 		}
 
@@ -204,6 +228,12 @@ func fetchQuotlyPNG(ctx context.Context, text, name, avatarURL string) ([]byte, 
 		_ = resp.Body.Close()
 
 		if readErr != nil || len(respBytes) == 0 {
+			log.Printf("[rbot] qc endpoint %s read error (readErr: %v, len: %d)", ep, readErr, len(respBytes))
+			continue
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			log.Printf("[rbot] qc endpoint %s status %d: %s", ep, resp.StatusCode, string(respBytes))
 			continue
 		}
 
@@ -228,6 +258,8 @@ func fetchQuotlyPNG(ctx context.Context, text, name, avatarURL string) ([]byte, 
 				pngBytes, b64Err := base64.StdEncoding.DecodeString(rawImage)
 				if b64Err == nil && len(pngBytes) > 0 {
 					return pngBytes, nil
+				} else {
+					log.Printf("[rbot] qc endpoint %s base64 decode error: %v", ep, b64Err)
 				}
 			}
 
@@ -235,10 +267,20 @@ func fetchQuotlyPNG(ctx context.Context, text, name, avatarURL string) ([]byte, 
 			if qResp.Result.URL != "" {
 				if imgData, getErr := httpx.GetBytes(ctx, qResp.Result.URL, 15*time.Second, 5*1024*1024); getErr == nil && len(imgData) > 0 {
 					return imgData, nil
+				} else {
+					log.Printf("[rbot] qc endpoint %s image URL fetch error: %v", ep, getErr)
 				}
 			}
+		} else {
+			log.Printf("[rbot] qc endpoint %s json unmarshal error: %v", ep, err)
 		}
 	}
 
 	return nil, errors.New("seluruh Quotly API server tidak merespon/gagal menghasilkan gambar")
 }
+
+// ExportFetchQuotlyPNG diekspor khusus untuk unit test.
+func ExportFetchQuotlyPNG(ctx context.Context, text, name, avatarURL string) ([]byte, error) {
+	return fetchQuotlyPNG(ctx, text, name, avatarURL)
+}
+

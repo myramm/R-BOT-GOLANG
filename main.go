@@ -23,6 +23,7 @@ import (
 
 	"rbot/brain/command"
 	"rbot/brain/config"
+	"rbot/brain/jadibot"
 	"rbot/brain/lifecycle"
 	"rbot/brain/settings"
 	"rbot/brain/stats"
@@ -188,6 +189,7 @@ func run(ctx context.Context) error {
 	}
 
 	log.Printf("[rbot] %d command terdaftar", command.Count())
+	jadibot.Init(ctx)
 	// Tunggu sinyal OS (ctx) atau permintaan restart dari command. Keduanya
 	// membuat run() kembali normal sehingga defer (tutup sesi & store) dijalankan;
 	// main() yang memutuskan re-exec bila restart yang memicu.

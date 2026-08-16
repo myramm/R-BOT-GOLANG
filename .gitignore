@@ -38,3 +38,8 @@ data/
 *.log
 .DS_Store
 .agent/
+.agents/
+.playwright-mcp/
+everything-claude-code/
+skills-lock.json
+

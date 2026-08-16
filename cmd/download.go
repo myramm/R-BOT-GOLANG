@@ -24,16 +24,21 @@ const (
 	audioDocThreshold = 32 * 1024 * 1024 // default; audio > ini dikirim sebagai document
 )
 
-var reHTTP = regexp.MustCompile(`(?i)^https?://`)
-var reFileUnsafe = regexp.MustCompile(`[\\/:*?"<>|]+`)
-var reSpaces = regexp.MustCompile(`\s+`)
+var (
+	reHTTP          = regexp.MustCompile(`(?i)^https?://`)
+	reURL           = regexp.MustCompile(`(?i)https?://[^\s<>"'\(\)]+`)
+	reTrailingPunct = regexp.MustCompile(`[.,!?;:]+$`)
+	reFormatOption  = regexp.MustCompile(`(?i)^(mp3|audio|sound|music|hd|sd|video)$`)
+	reFileUnsafe    = regexp.MustCompile(`[\\/:*?"<>|]+`)
+	reSpaces        = regexp.MustCompile(`\s+`)
+)
 
 func init() {
 	command.Register(&command.Command{
 		Name:        "download",
 		Category:    "Downloader",
 		Alias:       []string{"dl"},
-		Description: "Download video/foto/lagu dari TikTok, Instagram, YouTube, Spotify, Facebook, X, Threads, Pinterest. Contoh: .download <link>  •  YouTube jadi mp3: .download <link> mp3",
+		Description: "Download video/foto/lagu dari TikTok, Instagram, YouTube, Spotify, Facebook, X, Threads, Pinterest. Contoh: .download <link> • .download <link> mp3 • atau Reply pesan berisi link lalu ketik .dl",
 		Handler:     downloadHandler,
 	})
 }
@@ -46,13 +51,63 @@ func audioDocThresholdBytes() int64 {
 	return audioDocThreshold
 }
 
-func downloadHandler(ctx context.Context, c *command.Ctx) error {
-	url := ""
-	if len(c.Args) > 0 {
-		url = strings.TrimSpace(c.Args[0])
+func extractURLAndArg(c *command.Ctx) (string, string) {
+	var targetURL string
+	var extraArg string
+
+	// 1. Cari URL di c.Args lebih dulu
+	for _, arg := range c.Args {
+		if loc := reURL.FindString(arg); loc != "" {
+			targetURL = loc
+			break
+		}
 	}
-	if url == "" || !reHTTP.MatchString(url) {
-		_, err := c.Reply(ctx, "Kasih link-nya. Contoh:\n.download https://vt.tiktok.com/xxxx\n.download <link youtube> mp3")
+
+	// 2. Jika tak ada di c.Args, cari di c.Text secara penuh
+	if targetURL == "" && c.Text != "" {
+		if loc := reURL.FindString(c.Text); loc != "" {
+			targetURL = loc
+		}
+	}
+
+	// 3. Jika belum ada, cari di Quoted Message (Reply link)
+	if targetURL == "" {
+		if ci := c.ContextInfo(); ci != nil {
+			if quoted := ci.GetQuotedMessage(); quoted != nil {
+				quotedText := command.ExtractText(quoted)
+				if loc := reURL.FindString(quotedText); loc != "" {
+					targetURL = loc
+				}
+			}
+		}
+	}
+
+	if targetURL != "" {
+		targetURL = reTrailingPunct.ReplaceAllString(targetURL, "")
+	}
+
+	// 4. Cari opsi format (seperti "mp3" atau argumen kedua) di c.Args
+	for _, arg := range c.Args {
+		cleanArg := strings.TrimSpace(arg)
+		if cleanArg == "" || strings.Contains(targetURL, cleanArg) {
+			continue
+		}
+		if reFormatOption.MatchString(cleanArg) {
+			extraArg = cleanArg
+			break
+		}
+		if extraArg == "" {
+			extraArg = cleanArg
+		}
+	}
+
+	return targetURL, extraArg
+}
+
+func downloadHandler(ctx context.Context, c *command.Ctx) error {
+	url, arg := extractURLAndArg(c)
+	if url == "" {
+		_, err := c.Reply(ctx, "Kasih atau reply link yang mau didownload.\n\nContoh:\n• .dl https://vt.tiktok.com/xxxx\n• Reply pesan berisi link lalu ketik .dl\n• YouTube ke MP3: .dl <link youtube> mp3 (atau reply link dengan .dl mp3)")
 		return err
 	}
 	platform := kamino.Detect(url)
@@ -63,10 +118,6 @@ func downloadHandler(ctx context.Context, c *command.Ctx) error {
 
 	c.React(ctx, "⏳")
 
-	arg := ""
-	if len(c.Args) > 1 {
-		arg = c.Args[1]
-	}
 	data, err := kamino.Resolve(ctx, url, platform, arg)
 	if err != nil {
 		c.React(ctx, "❌")

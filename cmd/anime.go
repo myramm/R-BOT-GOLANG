@@ -103,6 +103,20 @@ func isPremiumQuality(quality string) bool {
 	return strings.Contains(q, "1080") || strings.Contains(q, "fullhd") || strings.Contains(q, "x265") || strings.Contains(q, "2k") || strings.Contains(q, "4k")
 }
 
+func isQualityBroken(q samehadaku.QualityGroup) bool {
+	if len(q.Links) == 0 {
+		return true
+	}
+	validCount := 0
+	for _, l := range q.Links {
+		u := strings.TrimSpace(l.URL)
+		if u != "" && u != "#" && !strings.HasPrefix(u, "javascript:") {
+			validCount++
+		}
+	}
+	return validCount == 0
+}
+
 func isBatchInput(s string) bool {
 	s = strings.ToLower(strings.TrimSpace(s))
 	return s == "batch" || s == "b" || s == "0"
@@ -391,6 +405,13 @@ func handleAnimeSessionReply(ctx context.Context, client *whatsmeow.Client, evt 
 
 		selectedQual := epData.Qualities[choiceNum-1]
 
+		// Cek jika kualitas ini rusak / tidak memiliki link aktif
+		if isQualityBroken(selectedQual) {
+			c.React(ctx, "❌")
+			_, _ = c.Reply(ctx, fmt.Sprintf("⚠️ *Kualitas %s Tidak Tersedia (Link Rusak)!*\n\nSeluruh provider download untuk kualitas ini sedang tidak aktif atau rusak di server. Silakan pilih nomor kualitas yang lain.", selectedQual.Quality))
+			return true
+		}
+
 		// Batasan Premium: 1080p, FULLHD, x265 hanya untuk Premium Only
 		if isPremiumQuality(selectedQual.Quality) && !premium.IsPremium(evt) {
 			mp := config.MainPrefix()
@@ -582,7 +603,9 @@ func formatQualityChoices(ep *samehadaku.EpisodeDownload, evt *events.Message) s
 
 	for i, q := range ep.Qualities {
 		badge := ""
-		if isPremiumQuality(q.Quality) {
+		if isQualityBroken(q) {
+			badge = " ⚠️ (Link Rusak)"
+		} else if isPremiumQuality(q.Quality) {
 			if isPremUser {
 				badge = " ✨ [PREMIUM]"
 			} else {

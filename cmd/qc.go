@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -31,9 +32,12 @@ func init() {
 }
 
 type quotlyFrom struct {
-	ID    int         `json:"id"`
-	Name  string      `json:"name"`
-	Photo quotlyPhoto `json:"photo"`
+	ID        int         `json:"id"`
+	Name      string      `json:"name"`
+	FirstName string      `json:"first_name,omitempty"`
+	LastName  string      `json:"last_name,omitempty"`
+	Username  string      `json:"username,omitempty"`
+	Photo     quotlyPhoto `json:"photo"`
 }
 
 type quotlyPhoto struct {
@@ -41,10 +45,10 @@ type quotlyPhoto struct {
 }
 
 type quotlyMessage struct {
-	Entities     []any       `json:"entities"`
-	Avatar       bool        `json:"avatar"`
-	From         quotlyFrom  `json:"from"`
-	Text         string      `json:"text"`
+	Entities     []any          `json:"entities"`
+	Avatar       bool           `json:"avatar"`
+	From         quotlyFrom     `json:"from"`
+	Text         string         `json:"text"`
 	ReplyMessage map[string]any `json:"replyMessage"`
 }
 
@@ -61,7 +65,9 @@ type quotlyRequest struct {
 type quotlyResponse struct {
 	Result struct {
 		Image string `json:"image"`
+		URL   string `json:"url"`
 	} `json:"result"`
+	Image string `json:"image"`
 }
 
 func qcHandler(ctx context.Context, c *command.Ctx) error {
@@ -152,7 +158,9 @@ func extractQCTarget(c *command.Ctx) (string, types.JID, string) {
 func fetchQuotlyPNG(ctx context.Context, text, name, avatarURL string) ([]byte, error) {
 	endpoints := []string{
 		"https://bot.lyrical.tokyo/api/quote",
+		"https://quote.btch.bz/generate",
 		"https://qc.botcazx.my.id/generate",
+		"https://quotly.maba.workers.dev/generate",
 	}
 
 	reqPayload := quotlyRequest{
@@ -167,9 +175,10 @@ func fetchQuotlyPNG(ctx context.Context, text, name, avatarURL string) ([]byte, 
 				Entities: []any{},
 				Avatar:   true,
 				From: quotlyFrom{
-					ID:    1,
-					Name:  name,
-					Photo: quotlyPhoto{URL: avatarURL},
+					ID:        1,
+					Name:      name,
+					FirstName: name,
+					Photo:     quotlyPhoto{URL: avatarURL},
 				},
 				Text:         text,
 				ReplyMessage: map[string]any{},
@@ -183,29 +192,51 @@ func fetchQuotlyPNG(ctx context.Context, text, name, avatarURL string) ([]byte, 
 	}
 
 	for _, ep := range endpoints {
-		resp, err := httpx.Do(ctx, http.MethodPost, ep, bytes.NewReader(bodyBytes), 20*time.Second, map[string]string{
+		resp, err := httpx.Do(ctx, http.MethodPost, ep, bytes.NewReader(bodyBytes), 15*time.Second, map[string]string{
 			"Content-Type": "application/json",
 		})
 		if err != nil {
 			continue
 		}
 
-		var qResp quotlyResponse
-		decodeErr := json.NewDecoder(resp.Body).Decode(&qResp)
+		contentType := strings.ToLower(resp.Header.Get("Content-Type"))
+		respBytes, readErr := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 
-		if decodeErr != nil || qResp.Result.Image == "" {
+		if readErr != nil || len(respBytes) == 0 {
 			continue
 		}
 
-		rawImage := qResp.Result.Image
-		if idx := strings.Index(rawImage, ","); idx >= 0 {
-			rawImage = rawImage[idx+1:]
+		// Bila endpoint mengembalikan biner gambar langsung (image/png, image/webp, dsb)
+		if strings.HasPrefix(contentType, "image/") || bytes.HasPrefix(respBytes, []byte("\x89PNG")) || bytes.HasPrefix(respBytes, []byte("RIFF")) {
+			return respBytes, nil
 		}
 
-		pngBytes, b64Err := base64.StdEncoding.DecodeString(rawImage)
-		if b64Err == nil && len(pngBytes) > 0 {
-			return pngBytes, nil
+		// Jika balasan berupa JSON
+		var qResp quotlyResponse
+		if err := json.Unmarshal(respBytes, &qResp); err == nil {
+			rawImage := qResp.Result.Image
+			if rawImage == "" {
+				rawImage = qResp.Image
+			}
+
+			if rawImage != "" {
+				if idx := strings.Index(rawImage, ","); idx >= 0 {
+					rawImage = rawImage[idx+1:]
+				}
+
+				pngBytes, b64Err := base64.StdEncoding.DecodeString(rawImage)
+				if b64Err == nil && len(pngBytes) > 0 {
+					return pngBytes, nil
+				}
+			}
+
+			// Bila JSON mengembalikan URL gambar
+			if qResp.Result.URL != "" {
+				if imgData, getErr := httpx.GetBytes(ctx, qResp.Result.URL, 15*time.Second, 5*1024*1024); getErr == nil && len(imgData) > 0 {
+					return imgData, nil
+				}
+			}
 		}
 	}
 

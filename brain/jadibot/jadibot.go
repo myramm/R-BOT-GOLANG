@@ -241,6 +241,9 @@ func (m *Manager) StartPairing(ctx context.Context, phone string, senderJID type
 		client.Disconnect()
 		_ = container.Close()
 		_ = os.Remove(dbPath)
+		if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "rate-overlimit") {
+			return "", errors.New("terlalu banyak permintaan kode pairing dalam waktu singkat (rate-limit WhatsApp). Silakan tunggu 5 - 10 menit sebelum meminta kode baru")
+		}
 		return "", fmt.Errorf("gagal mendapatkan kode pairing: %w", err)
 	}
 

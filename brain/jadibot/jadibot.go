@@ -332,7 +332,9 @@ func (m *Manager) Stop(ctx context.Context, target string, requester types.JID, 
 	if !isOwner {
 		sameOwner := sb.OwnerJID == requester ||
 			(sb.OwnerJID.ToNonAD() == requester.ToNonAD() && !sb.OwnerJID.IsEmpty()) ||
-			(sb.OwnerJID.User != "" && config.BareNumber(sb.OwnerJID.User) == config.BareNumber(requester.User))
+			(sb.OwnerJID.User != "" && config.BareNumber(sb.OwnerJID.User) == config.BareNumber(requester.User)) ||
+			(sb.JID.User != "" && config.BareNumber(sb.JID.User) == config.BareNumber(requester.User)) ||
+			(sb.Client != nil && sb.Client.Store != nil && sb.Client.Store.ID != nil && config.BareNumber(sb.Client.Store.ID.User) == config.BareNumber(requester.User))
 		if !sameOwner {
 			return errors.New("Anda bukan pembuat sub-bot ini")
 		}

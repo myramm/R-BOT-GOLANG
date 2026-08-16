@@ -43,6 +43,8 @@ type AnimeDetail struct {
 	Genres      []string      `json:"genres"`
 	Episodes    []EpisodeInfo `json:"episodes"`
 	TotalEp     int           `json:"total_ep"`
+	BatchURL    string        `json:"batch_url,omitempty"`
+	HasBatch    bool          `json:"has_batch"`
 }
 
 type DownloadLink struct {
@@ -61,6 +63,7 @@ type EpisodeDownload struct {
 	Title     string         `json:"title"`
 	URL       string         `json:"url"`
 	Qualities []QualityGroup `json:"qualities"`
+	IsBatch   bool           `json:"is_batch"`
 }
 
 func fetchDoc(ctx context.Context, targetURL string) (*goquery.Document, error) {
@@ -200,6 +203,10 @@ func GetDetail(ctx context.Context, animeURL string) (*AnimeDetail, error) {
 		episodes[i], episodes[j] = episodes[j], episodes[i]
 	}
 
+	// Extract batch URL if available
+	batchURL := doc.Find("a[href*='/batch/']").AttrOr("href", "")
+	hasBatch := batchURL != ""
+
 	return &AnimeDetail{
 		Title:    title,
 		URL:      animeURL,
@@ -210,10 +217,12 @@ func GetDetail(ctx context.Context, animeURL string) (*AnimeDetail, error) {
 		Genres:   genres,
 		Episodes: episodes,
 		TotalEp:  len(episodes),
+		BatchURL: batchURL,
+		HasBatch: hasBatch,
 	}, nil
 }
 
-// GetEpisodeDownloads mengambil link download per kualitas/format dari URL episode.
+// GetEpisodeDownloads mengambil link download per kualitas/format dari URL episode / batch.
 func GetEpisodeDownloads(ctx context.Context, epURL string) (*EpisodeDownload, error) {
 	doc, err := fetchDoc(ctx, epURL)
 	if err != nil {
@@ -221,9 +230,10 @@ func GetEpisodeDownloads(ctx context.Context, epURL string) (*EpisodeDownload, e
 	}
 
 	title := cleanText(doc.Find("h1.entry-title").Text())
+	isBatch := strings.Contains(epURL, "/batch/") || strings.Contains(strings.ToLower(title), "batch")
 	var qualities []QualityGroup
 
-	doc.Find(".download-eps ul li").Each(func(i int, s *goquery.Selection) {
+	doc.Find(".download-eps ul li, .list-download ul li, .download-batch ul li, .download-eps li").Each(func(i int, s *goquery.Selection) {
 		resRaw := strings.TrimSpace(s.Find("strong").Text())
 		var links []DownloadLink
 
@@ -257,6 +267,7 @@ func GetEpisodeDownloads(ctx context.Context, epURL string) (*EpisodeDownload, e
 		Title:     title,
 		URL:       epURL,
 		Qualities: qualities,
+		IsBatch:   isBatch,
 	}, nil
 }
 

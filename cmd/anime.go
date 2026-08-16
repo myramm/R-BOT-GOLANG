@@ -41,6 +41,7 @@ var (
 	sessMu        sync.Mutex
 	animeSessions = make(map[string]*animeSession)
 	reEpURL       = regexp.MustCompile(`(?i)https?://[^\s]+/.*-episode-\d+/?`)
+	reBatchURL    = regexp.MustCompile(`(?i)https?://[^\s]+/batch/.*-batch/?`)
 )
 
 const maxAnimeDocBytes = 2 * 1024 * 1024 * 1024 // 2GB batas dokumen WhatsApp
@@ -50,7 +51,7 @@ func init() {
 		Name:        "anime",
 		Category:    "Downloader",
 		Alias:       []string{"samehadaku", "animedl"},
-		Description: "Cari dan download anime per episode dari Samehadaku. Contoh: .anime bleach | .anime bleach 4 | .anime <link episode>",
+		Description: "Cari dan download anime per episode / BATCH dari Samehadaku. Contoh: .anime bleach | .anime bleach 4 | .anime bleach batch | .anime <link episode/batch>",
 		Handler:     animeHandler,
 	})
 
@@ -102,22 +103,27 @@ func isPremiumQuality(quality string) bool {
 	return strings.Contains(q, "1080") || strings.Contains(q, "fullhd") || strings.Contains(q, "x265") || strings.Contains(q, "2k") || strings.Contains(q, "4k")
 }
 
+func isBatchInput(s string) bool {
+	s = strings.ToLower(strings.TrimSpace(s))
+	return s == "batch" || s == "b" || s == "0"
+}
+
 func animeHandler(ctx context.Context, c *command.Ctx) error {
 	argStr := strings.TrimSpace(c.ArgStr())
 	if argStr == "" {
-		_, err := c.Reply(ctx, "Masukkan judul anime atau link episode Samehadaku.\n\n*Contoh:*\n• `.anime bleach` (Cari & pilih episode)\n• `.anime bleach 4` (Langsung ke episode 4)\n• `.anime https://v2.samehadaku.how/...-episode-4/`")
+		_, err := c.Reply(ctx, "Masukkan judul anime atau link episode Samehadaku.\n\n*Contoh:*\n• `.anime bleach` (Cari & pilih episode)\n• `.anime bleach 4` (Langsung ke episode 4)\n• `.anime bleach batch` (Download Batch 1 Season)\n• `.anime <link episode/batch>`")
 		return err
 	}
 
 	key := getSessionKey(c.Evt)
 
-	// Case 1: Direct link episode Samehadaku
-	if reEpURL.MatchString(argStr) {
+	// Case 1: Direct link episode / batch Samehadaku
+	if reEpURL.MatchString(argStr) || reBatchURL.MatchString(argStr) {
 		c.React(ctx, "⏳")
 		epData, err := samehadaku.GetEpisodeDownloads(ctx, argStr)
 		if err != nil {
 			c.React(ctx, "❌")
-			_, e := c.Reply(ctx, fmt.Sprintf("Gagal mengambil link episode: %s", err.Error()))
+			_, e := c.Reply(ctx, fmt.Sprintf("Gagal mengambil link download: %s", err.Error()))
 			return e
 		}
 		c.React(ctx, "✅")
@@ -129,8 +135,50 @@ func animeHandler(ctx context.Context, c *command.Ctx) error {
 		return err
 	}
 
-	// Case 2: Judul + Nomor Episode (contoh: .anime bleach 4)
+	// Case 2: Judul + "batch" (contoh: .anime bleach batch)
 	args := strings.Fields(argStr)
+	if len(args) >= 2 && isBatchInput(args[len(args)-1]) {
+		query := strings.Join(args[:len(args)-1], " ")
+		c.React(ctx, "⏳")
+
+		results, err := samehadaku.Search(ctx, query)
+		if err != nil || len(results) == 0 {
+			c.React(ctx, "❌")
+			_, e := c.Reply(ctx, fmt.Sprintf("Anime '%s' tidak ditemukan.", query))
+			return e
+		}
+
+		detail, err := samehadaku.GetDetail(ctx, results[0].Link)
+		if err != nil {
+			c.React(ctx, "❌")
+			_, e := c.Reply(ctx, "Gagal mengambil detail anime.")
+			return e
+		}
+
+		if !detail.HasBatch || detail.BatchURL == "" {
+			c.React(ctx, "❌")
+			_, e := c.Reply(ctx, fmt.Sprintf("Maaf, Batch Download belum tersedia untuk '%s'. Silakan download per episode.", detail.Title))
+			return e
+		}
+
+		epData, err := samehadaku.GetEpisodeDownloads(ctx, detail.BatchURL)
+		if err != nil {
+			c.React(ctx, "❌")
+			_, e := c.Reply(ctx, fmt.Sprintf("Gagal memuat Batch download: %s", err.Error()))
+			return e
+		}
+
+		c.React(ctx, "✅")
+		saveSession(key, &animeSession{
+			Step:          stepSelectQuality,
+			SelectedAnime: detail,
+			SelectedEp:    epData,
+		})
+		_, err = c.Reply(ctx, formatQualityChoices(epData, c.Evt))
+		return err
+	}
+
+	// Case 3: Judul + Nomor Episode (contoh: .anime bleach 4)
 	if len(args) >= 2 {
 		lastArg := args[len(args)-1]
 		if epNum, err := strconv.Atoi(lastArg); err == nil && epNum > 0 {
@@ -189,7 +237,7 @@ func animeHandler(ctx context.Context, c *command.Ctx) error {
 		}
 	}
 
-	// Case 3: Standard Search (.anime bleach)
+	// Case 4: Standard Search (.anime bleach)
 	c.React(ctx, "⏳")
 	results, err := samehadaku.Search(ctx, argStr)
 	if err != nil {
@@ -220,19 +268,16 @@ func handleAnimeSessionReply(ctx context.Context, client *whatsmeow.Client, evt 
 		return false
 	}
 
-	choiceNum, err := strconv.Atoi(strings.TrimSpace(text))
-	if err != nil || choiceNum <= 0 {
-		return false
-	}
-
 	c := &command.Ctx{Client: client, Evt: evt, Text: text}
+	cleanInput := strings.TrimSpace(text)
 
 	switch sess.Step {
 	case stepSelectAnime:
-		if choiceNum > len(sess.SearchResults) {
-			_, _ = c.Reply(ctx, fmt.Sprintf("Nomor tidak valid. Masukkan angka 1 - %d.", len(sess.SearchResults)))
-			return true
+		choiceNum, err := strconv.Atoi(cleanInput)
+		if err != nil || choiceNum <= 0 || choiceNum > len(sess.SearchResults) {
+			return false
 		}
+
 		selected := sess.SearchResults[choiceNum-1]
 		c.React(ctx, "⏳")
 
@@ -253,13 +298,48 @@ func handleAnimeSessionReply(ctx context.Context, client *whatsmeow.Client, evt 
 		return true
 
 	case stepSelectEpisode:
-		if sess.SelectedAnime == nil || len(sess.SelectedAnime.Episodes) == 0 {
+		if sess.SelectedAnime == nil {
 			clearSession(key)
 			return false
 		}
 		detail := sess.SelectedAnime
-		var targetEp *samehadaku.EpisodeInfo
 
+		// Cek jika user mengetik "batch" / "b" / "0"
+		if isBatchInput(cleanInput) {
+			if !detail.HasBatch || detail.BatchURL == "" {
+				_, _ = c.Reply(ctx, fmt.Sprintf("Maaf, Batch Download belum tersedia untuk '%s'. Silakan pilih nomor episode.", detail.Title))
+				return true
+			}
+
+			c.React(ctx, "⏳")
+			batchData, err := samehadaku.GetEpisodeDownloads(ctx, detail.BatchURL)
+			if err != nil {
+				c.React(ctx, "❌")
+				_, _ = c.Reply(ctx, fmt.Sprintf("Gagal memuat Batch download: %s", err.Error()))
+				clearSession(key)
+				return true
+			}
+			c.React(ctx, "✅")
+
+			sess.Step = stepSelectQuality
+			sess.SelectedEp = batchData
+			saveSession(key, sess)
+
+			_, _ = c.Reply(ctx, formatQualityChoices(batchData, evt))
+			return true
+		}
+
+		choiceNum, err := strconv.Atoi(cleanInput)
+		if err != nil || choiceNum <= 0 {
+			return false
+		}
+
+		if len(detail.Episodes) == 0 {
+			clearSession(key)
+			return false
+		}
+
+		var targetEp *samehadaku.EpisodeInfo
 		epNumStr := fmt.Sprintf("%d", choiceNum)
 		for _, ep := range detail.Episodes {
 			if ep.Number == epNumStr {
@@ -272,7 +352,7 @@ func handleAnimeSessionReply(ctx context.Context, client *whatsmeow.Client, evt 
 		}
 
 		if targetEp == nil {
-			_, _ = c.Reply(ctx, fmt.Sprintf("Episode %d tidak ditemukan. Pilih episode 1 - %d.", choiceNum, len(detail.Episodes)))
+			_, _ = c.Reply(ctx, fmt.Sprintf("Episode %d tidak ditemukan. Pilih episode 1 - %d atau ketik 'batch'.", choiceNum, len(detail.Episodes)))
 			return true
 		}
 
@@ -294,6 +374,11 @@ func handleAnimeSessionReply(ctx context.Context, client *whatsmeow.Client, evt 
 		return true
 
 	case stepSelectQuality:
+		choiceNum, err := strconv.Atoi(cleanInput)
+		if err != nil || choiceNum <= 0 {
+			return false
+		}
+
 		if sess.SelectedEp == nil || len(sess.SelectedEp.Qualities) == 0 {
 			clearSession(key)
 			return false
@@ -481,7 +566,11 @@ func formatAnimeDetailChoice(detail *samehadaku.AnimeDetail) string {
 		fmt.Fprintf(&b, " • ... s/d Episode %s\n", detail.Episodes[detail.TotalEp-1].Number)
 	}
 
-	fmt.Fprintf(&b, "\n👉 *Ketik nomor episode (1 - %d) yang ingin di-download.*", detail.TotalEp)
+	if detail.HasBatch {
+		fmt.Fprintf(&b, "\n📦 *Batch Download (1 Season Penuh):* Tersedia!\n👉 *Ketik 'batch' (atau 'b') untuk download 1 Season sekaligus.*")
+	}
+
+	fmt.Fprintf(&b, "\n\n👉 *Ketik nomor episode (1 - %d) untuk memilih episode.*", detail.TotalEp)
 	return b.String()
 }
 

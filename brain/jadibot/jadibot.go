@@ -132,11 +132,16 @@ func (m *Manager) StartPairing(ctx context.Context, phone string, senderJID type
 	}
 
 	m.mu.Lock()
-	if _, exists := m.bots[phoneDigits]; exists {
+	if bot, exists := m.bots[phoneDigits]; exists {
+		if bot.Client != nil && bot.Client.IsLoggedIn() {
+			m.mu.Unlock()
+			return "", fmt.Errorf("sub-bot dengan nomor %s sudah aktif", phoneDigits)
+		}
 		m.mu.Unlock()
-		return "", fmt.Errorf("sub-bot dengan nomor %s sudah aktif", phoneDigits)
+		_ = m.Stop(ctx, phoneDigits, types.JID{}, true)
+	} else {
+		m.mu.Unlock()
 	}
-	m.mu.Unlock()
 
 	dir := filepath.Join("session", "jadibot")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -174,10 +179,29 @@ func (m *Manager) StartPairing(ctx context.Context, phone string, senderJID type
 	clientLog := waLog.Stdout("JadibotClient-"+phoneDigits, level, true)
 	client := whatsmeow.NewClient(device, clientLog)
 
+	sb := &SubBot{
+		Client:      client,
+		Container:   container,
+		Phone:       phoneDigits,
+		OwnerJID:    senderJID,
+		ConnectedAt: time.Now(),
+	}
+
+	qrReady := make(chan struct{}, 1)
 	client.AddEventHandler(func(rawEvt interface{}) {
 		switch evt := rawEvt.(type) {
+		case *events.QR:
+			select {
+			case qrReady <- struct{}{}:
+			default:
+			}
 		case *events.Message:
 			command.Dispatch(ctx, client, evt, true)
+		case *events.Connected:
+			if client.Store != nil && client.Store.ID != nil {
+				sb.JID = *client.Store.ID
+			}
+			log.Printf("[jadibot] sub-bot %s terhubung sebagai %s", phoneDigits, client.Store.ID)
 		case *events.LoggedOut:
 			log.Printf("[jadibot] sub-bot %s logged out", phoneDigits)
 			_ = m.Stop(context.Background(), phoneDigits, types.JID{}, true)
@@ -189,8 +213,11 @@ func (m *Manager) StartPairing(ctx context.Context, phone string, senderJID type
 		return "", fmt.Errorf("gagal menghubungkan client: %w", err)
 	}
 
-	// Beri jeda agar handshake websocket tersambung sempurna sebelum meminta kode pairing
-	time.Sleep(1500 * time.Millisecond)
+	// Tunggu hingga event QR/koneksi websocket siap dari server WhatsApp sebelum meminta kode pairing
+	select {
+	case <-qrReady:
+	case <-time.After(3 * time.Second):
+	}
 
 	code, err := client.PairPhone(ctx, phoneDigits, true, whatsmeow.PairClientChrome, "Chrome (Linux)")
 	if err != nil {
@@ -200,18 +227,6 @@ func (m *Manager) StartPairing(ctx context.Context, phone string, senderJID type
 		return "", fmt.Errorf("gagal mendapatkan kode pairing: %w", err)
 	}
 
-	rawCode := strings.ReplaceAll(code, "-", "")
-	if len(rawCode) == 8 {
-		code = rawCode[:4] + "-" + rawCode[4:]
-	}
-
-	sb := &SubBot{
-		Client:      client,
-		Container:   container,
-		Phone:       phoneDigits,
-		OwnerJID:    senderJID,
-		ConnectedAt: time.Now(),
-	}
 	if device.ID != nil {
 		sb.JID = *device.ID
 	}

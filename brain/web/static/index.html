@@ -659,6 +659,10 @@
         margin-bottom: 1.25rem;
       }
 
+      .metrics-grid > .metric-card:last-child:nth-child(odd) {
+        grid-column: span 2;
+      }
+
       .metric-card {
         padding: 0.85rem;
       }
@@ -680,6 +684,13 @@
       .topbar-actions { display: none; }
 
       .terminal-box { height: 440px; }
+
+      .modal-box {
+        padding: 1.15rem;
+        max-width: 92vw;
+        max-height: 85vh;
+        overflow-y: auto;
+      }
     }
   </style>
 </head>

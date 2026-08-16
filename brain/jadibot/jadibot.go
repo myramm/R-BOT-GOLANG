@@ -33,12 +33,13 @@ type SubBotInfo struct {
 
 // SubBot merepresentasikan satu sesi sub-bot yang berjalan.
 type SubBot struct {
-	Client      *whatsmeow.Client
-	Container   *sqlstore.Container
-	Phone       string
-	JID         types.JID
-	OwnerJID    types.JID
-	ConnectedAt time.Time
+	Client       *whatsmeow.Client
+	Container    *sqlstore.Container
+	Phone        string
+	JID          types.JID
+	OwnerJID     types.JID
+	ConnectedAt  time.Time
+	MessageCount int64
 }
 
 // Manager mengelola map sub-bot aktif.
@@ -54,6 +55,11 @@ func NewManager() *Manager {
 	return &Manager{
 		bots: make(map[string]*SubBot),
 	}
+}
+
+// GetWebList mengembalikan list detail sub-bot untuk web monitoring dashboard.
+func GetWebList() []map[string]any {
+	return defaultManager.GetWebList()
 }
 
 // Count mengembalikan jumlah sub-bot aktif di default manager.
@@ -96,6 +102,33 @@ func (m *Manager) IsConnected(phone string) bool {
 		return false
 	}
 	return bot.Client.IsLoggedIn()
+}
+
+func (m *Manager) GetWebList() []map[string]any {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	out := make([]map[string]any, 0, len(m.bots))
+	for _, bot := range m.bots {
+		jidStr := bot.JID.String()
+		if jidStr == "" && bot.Client != nil && bot.Client.Store != nil && bot.Client.Store.ID != nil {
+			jidStr = bot.Client.Store.ID.String()
+		}
+
+		connected := bot.Client != nil && bot.Client.IsConnected()
+		loggedIn := bot.Client != nil && bot.Client.IsLoggedIn()
+
+		out = append(out, map[string]any{
+			"phone":        bot.Phone,
+			"jid":          jidStr,
+			"ownerJid":     bot.OwnerJID.String(),
+			"uptime":       int64(time.Since(bot.ConnectedAt).Seconds()),
+			"messageCount": bot.MessageCount,
+			"connected":    connected,
+			"loggedIn":     loggedIn,
+		})
+	}
+	return out
 }
 
 // Count mengembalikan jumlah sub-bot aktif.
@@ -213,6 +246,9 @@ func (m *Manager) StartPairing(ctx context.Context, phone string, senderJID type
 			default:
 			}
 		case *events.Message:
+			if sb != nil {
+				sb.MessageCount++
+			}
 			command.Dispatch(ctx, client, evt, true)
 		case *events.Connected:
 			if client.Store != nil && client.Store.ID != nil {
@@ -370,9 +406,20 @@ func (m *Manager) Init(ctx context.Context) {
 		clientLog := waLog.Stdout("JadibotClient-"+phoneDigits, level, true)
 		client := whatsmeow.NewClient(device, clientLog)
 
+		sb := &SubBot{
+			Client:      client,
+			Container:   container,
+			Phone:       phoneDigits,
+			JID:         *device.ID,
+			ConnectedAt: time.Now(),
+		}
+
 		client.AddEventHandler(func(rawEvt interface{}) {
 			switch evt := rawEvt.(type) {
 			case *events.Message:
+				if sb != nil {
+					sb.MessageCount++
+				}
 				command.Dispatch(ctx, client, evt, true)
 			case *events.LoggedOut:
 				log.Printf("[jadibot] sub-bot %s logged out", phoneDigits)
@@ -384,14 +431,6 @@ func (m *Manager) Init(ctx context.Context) {
 			log.Printf("[jadibot] gagal konek sub-bot %s: %v", phoneDigits, err)
 			_ = container.Close()
 			continue
-		}
-
-		sb := &SubBot{
-			Client:      client,
-			Container:   container,
-			Phone:       phoneDigits,
-			JID:         *device.ID,
-			ConnectedAt: time.Now(),
 		}
 
 		m.mu.Lock()

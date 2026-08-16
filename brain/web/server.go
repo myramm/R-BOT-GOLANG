@@ -27,9 +27,11 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"rbot/brain/config"
+	"rbot/brain/jadibot"
 	"rbot/brain/lifecycle"
 	"rbot/brain/settings"
 	"rbot/brain/stats"
+	"rbot/brain/store"
 )
 
 //go:embed static/index.html
@@ -175,9 +177,11 @@ func generateToken() string {
 
 func createSession() string {
 	token := generateToken()
+	exp := time.Now().Add(30 * 24 * time.Hour)
 	sessionsMu.Lock()
-	sessions[token] = time.Now().Add(24 * time.Hour)
+	sessions[token] = exp
 	sessionsMu.Unlock()
+	_ = store.Set("web_session_"+token, exp.Unix())
 	return token
 }
 
@@ -185,6 +189,7 @@ func removeSession(token string) {
 	sessionsMu.Lock()
 	delete(sessions, token)
 	sessionsMu.Unlock()
+	_ = store.Delete("web_session_" + token)
 }
 
 func validateToken(token string) bool {
@@ -194,9 +199,23 @@ func validateToken(token string) bool {
 	sessionsMu.RLock()
 	exp, ok := sessions[token]
 	sessionsMu.RUnlock()
+
 	if !ok {
+		var unixExp int64
+		found, err := store.Get("web_session_"+token, &unixExp)
+		if err == nil && found {
+			exp = time.Unix(unixExp, 0)
+			if time.Now().Before(exp) {
+				sessionsMu.Lock()
+				sessions[token] = exp
+				sessionsMu.Unlock()
+				return true
+			}
+			_ = store.Delete("web_session_" + token)
+		}
 		return false
 	}
+
 	if time.Now().After(exp) {
 		removeSession(token)
 		return false
@@ -389,6 +408,11 @@ func BuildStatusPayload() map[string]any {
 			"webPort":     config.C.Web.Port,
 		},
 		"stats":            overview,
+		"jadibot": map[string]any{
+			"count": jadibot.Count(),
+			"max":   config.C.MaxJadibot,
+			"list":  jadibot.GetWebList(),
+		},
 		"topUsers":         stats.TopUsers(),
 		"topGroups":        stats.TopGroups(),
 		"topCommands":      stats.TopCommands(),
@@ -429,6 +453,7 @@ func Start(ctx context.Context) {
 	mux.HandleFunc("/api/audit-logs", handleAuditLogs)
 	mux.HandleFunc("/api/restart", handleRestart)
 	mux.HandleFunc("/api/stop", handleStop)
+	mux.HandleFunc("/api/jadibot/stop", handleJadibotStop)
 	mux.HandleFunc("/api/kill", handleKill)
 	mux.HandleFunc("/api/reload", handleReload)
 	mux.HandleFunc("/api/broadcast", handleBroadcast)
@@ -923,4 +948,34 @@ func handleLogsWS(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+}
+
+func handleJadibotStop(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Phone string `json:"phone"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Phone == "" {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	if err := jadibot.Stop(r.Context(), req.Phone, types.JID{}, true); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	RecordAudit(r, "JADIBOT", "Menghentikan sub-bot "+req.Phone)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
 }

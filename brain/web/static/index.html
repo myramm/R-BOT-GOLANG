@@ -951,6 +951,30 @@
           <div class="feed-list" id="activityFeed">
             <div style="font-size: 0.8rem; color: var(--text-muted); text-align: center; padding: 1rem;">Memuat aktivitas...</div>
           </div>
+      <!-- Jadibot Sub-Bot Monitoring Panel -->
+      <div class="panel" style="margin-top: 1.25rem;">
+        <div class="panel-title">
+          <span>🧬 Jadibot (Sub-Bot Multi-Session)</span>
+          <span id="jadibotBadge" style="font-size: 0.75rem; background: var(--bg-card-hover); padding: 0.2rem 0.5rem; border-radius: 4px; color: var(--accent); font-weight: 600;">0 / 0 Sub-Bot</span>
+        </div>
+        <div class="table-responsive" style="margin-top: 0.5rem;">
+          <table>
+            <thead>
+              <tr>
+                <th>Nomor Sub-Bot</th>
+                <th>Pembuat (Owner)</th>
+                <th>Uptime</th>
+                <th>Pesan Diproses</th>
+                <th>Status</th>
+                <th style="text-align: right;">Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="jadibotTableBody">
+              <tr>
+                <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 1rem;">Belum ada sub-bot yang aktif saat ini.</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </section>
@@ -1383,6 +1407,7 @@
       // Feed Activity & Tables
       renderActivityFeedOverview();
       renderActivityFeedFull();
+      renderJadibotTable(d.jadibot);
       renderUsersTable();
       renderGroupsTable();
       renderCommandsTables(d.topCommands || [], d.topCommandErrors || []);
@@ -1481,6 +1506,68 @@
         const pct = Math.max(8, Math.round((val / max) * 100));
         return `<div title="Jam ${idx}: ${val} pesan" style="flex: 1; height: ${pct}%; background: var(--accent); opacity: ${idx === new Date().getHours() ? '1' : '0.5'}; border-radius: 3px; transition: height 0.3s ease;"></div>`;
       }).join('');
+    }
+
+    function renderJadibotTable(jadibotData) {
+      const tbody = document.getElementById('jadibotTableBody');
+      const badge = document.getElementById('jadibotBadge');
+      if (!jadibotData) return;
+
+      if (badge) {
+        badge.textContent = `${jadibotData.count || 0} / ${jadibotData.max || 0} Sub-Bot`;
+      }
+
+      if (!tbody) return;
+
+      const list = jadibotData.list || [];
+      if (list.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 1rem;">Belum ada sub-bot yang aktif saat ini.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = list.map(bot => {
+        const phone = bot.phone ? `+${bot.phone}` : '-';
+        const owner = bot.ownerJid ? bot.ownerJid.split('@')[0] : '-';
+        const uptime = formatSeconds(bot.uptime || 0);
+        const msgs = (bot.messageCount || 0).toLocaleString();
+        const status = bot.connected ? `<span style="color: var(--success); font-weight: 600;">🟢 Online</span>` : `<span style="color: var(--danger); font-weight: 600;">🔴 Terputus</span>`;
+
+        return `
+          <tr>
+            <td style="font-weight: 600;">${phone}</td>
+            <td>${owner}</td>
+            <td>${uptime}</td>
+            <td>${msgs} pesan</td>
+            <td>${status}</td>
+            <td style="text-align: right;">
+              <button class="btn btn-danger btn-sm" onclick="stopJadibotWeb('${bot.phone}')">Hentikan</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function stopJadibotWeb(phone) {
+      if (!confirm(`Hentikan dan hapus sesi sub-bot +${phone}?`)) return;
+      try {
+        const res = await fetch('/api/jadibot/stop', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + authToken
+          },
+          body: JSON.stringify({ phone: phone })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast(`Sub-bot +${phone} berhasil dihentikan`, 'success');
+          fetchStatus();
+        } else {
+          showToast(`Gagal menghentikan sub-bot: ${data.error}`, 'error');
+        }
+      } catch (err) {
+        showToast('Gagal menghubungi server.', 'error');
+      }
     }
 
     function addActivityEvent(text, meta) {

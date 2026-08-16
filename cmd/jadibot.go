@@ -36,14 +36,15 @@ func init() {
 			}
 
 			msg := fmt.Sprintf("🔑 *KODE PAIRING JADIBOT*\n\n"+
-				"Kode Anda: *%s*\n\n"+
+				"📱 *Nomor Target:* +%s\n"+
+				"🔑 *Kode Pairing:* *%s*\n\n"+
 				"*Langkah-langkah menyambungkan:*\n"+
-				"1. Buka WhatsApp di HP kamu\n"+
+				"1. Buka WhatsApp di HP nomor +%s\n"+
 				"2. Ketuk *Titik Tiga* (kanan atas) / *Pengaturan*\n"+
 				"3. Pilih *Perangkat Tertaut* (Linked Devices)\n"+
 				"4. Pilih *Tautkan Perangkat* -> *Tautkan dengan nomor telepon*\n"+
 				"5. Masukkan kode 8 digit di atas\n\n"+
-				"⏱️ _Kode berlaku selama ~60 detik. Jangan bagikan kode ini kepada siapa pun!_", code)
+				"⏱️ _Kode berlaku selama ~60 detik. Pastikan nomor HP sama persis!_", phone, code, phone)
 
 			_, err = c.Reply(ctx, msg)
 

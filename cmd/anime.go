@@ -16,6 +16,8 @@ import (
 	"go.mau.fi/whatsmeow/types/events"
 
 	"rbot/brain/command"
+	"rbot/brain/config"
+	"rbot/brain/premium"
 	"rbot/lib/samehadaku"
 )
 
@@ -95,6 +97,11 @@ func clearSession(key string) {
 	delete(animeSessions, key)
 }
 
+func isPremiumQuality(quality string) bool {
+	q := strings.ToLower(quality)
+	return strings.Contains(q, "1080") || strings.Contains(q, "fullhd") || strings.Contains(q, "x265") || strings.Contains(q, "2k") || strings.Contains(q, "4k")
+}
+
 func animeHandler(ctx context.Context, c *command.Ctx) error {
 	argStr := strings.TrimSpace(c.ArgStr())
 	if argStr == "" {
@@ -118,7 +125,7 @@ func animeHandler(ctx context.Context, c *command.Ctx) error {
 			Step:       stepSelectQuality,
 			SelectedEp: epData,
 		})
-		_, err = c.Reply(ctx, formatQualityChoices(epData))
+		_, err = c.Reply(ctx, formatQualityChoices(epData, c.Evt))
 		return err
 	}
 
@@ -177,7 +184,7 @@ func animeHandler(ctx context.Context, c *command.Ctx) error {
 				SelectedAnime: detail,
 				SelectedEp:    epData,
 			})
-			_, err = c.Reply(ctx, formatQualityChoices(epData))
+			_, err = c.Reply(ctx, formatQualityChoices(epData, c.Evt))
 			return err
 		}
 	}
@@ -283,7 +290,7 @@ func handleAnimeSessionReply(ctx context.Context, client *whatsmeow.Client, evt 
 		sess.SelectedEp = epData
 		saveSession(key, sess)
 
-		_, _ = c.Reply(ctx, formatQualityChoices(epData))
+		_, _ = c.Reply(ctx, formatQualityChoices(epData, evt))
 		return true
 
 	case stepSelectQuality:
@@ -298,13 +305,21 @@ func handleAnimeSessionReply(ctx context.Context, client *whatsmeow.Client, evt 
 		}
 
 		selectedQual := epData.Qualities[choiceNum-1]
+
+		// Batasan Premium: 1080p, FULLHD, x265 hanya untuk Premium Only
+		if isPremiumQuality(selectedQual.Quality) && !premium.IsPremium(evt) {
+			mp := config.MainPrefix()
+			c.React(ctx, "💎")
+			_, _ = c.Reply(ctx, fmt.Sprintf("💎 *Kualitas %s Khusus User Premium!*\n\nUser Free hanya dapat mengunduh kualitas *360p, 480p, dan 720p*.\n\nUpgrade ke Premium untuk membuka semua kualitas (1080p, FULLHD, x265):\nKetik *%spremium*", selectedQual.Quality, mp))
+			return true
+		}
+
 		c.React(ctx, "⏳")
 		clearSession(key)
 
 		_, _ = c.Reply(ctx, fmt.Sprintf("⏳ *Memproses %s (%s)...*\nProses download berjalan di background agar bot tetap responsif menerima pesan lain.", epData.Title, selectedQual.Quality))
 
 		// Jalankan pengunduhan & pengiriman secara asynchronous (goroutine)
-		// agar TIDAK MENETAP / MEMBOCORKAN THREAD EVENT LOOP BOT.
 		go func() {
 			bgCtx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 			defer cancel()
@@ -470,16 +485,25 @@ func formatAnimeDetailChoice(detail *samehadaku.AnimeDetail) string {
 	return b.String()
 }
 
-func formatQualityChoices(ep *samehadaku.EpisodeDownload) string {
+func formatQualityChoices(ep *samehadaku.EpisodeDownload, evt *events.Message) string {
+	isPremUser := premium.IsPremium(evt)
 	var b strings.Builder
 	fmt.Fprintf(&b, "🎬 *%s*\n", ep.Title)
 	fmt.Fprintf(&b, "Pilih Kualitas & Format Download:\n\n")
 
 	for i, q := range ep.Qualities {
-		fmt.Fprintf(&b, "%d. *%s* (%s)\n", i+1, q.Quality, q.Format)
+		badge := ""
+		if isPremiumQuality(q.Quality) {
+			if isPremUser {
+				badge = " ✨ [PREMIUM]"
+			} else {
+				badge = " 💎 [PREMIUM ONLY]"
+			}
+		}
+		fmt.Fprintf(&b, "%d. *%s* (%s)%s\n", i+1, q.Quality, q.Format, badge)
 	}
 
-	fmt.Fprintf(&b, "\n👉 *Ketik nomor kualitas (1 - %d) untuk mendapatkan link download / kirim file.*", len(ep.Qualities))
+	fmt.Fprintf(&b, "\n👉 *Ketik nomor kualitas (1 - %d) untuk memilih.*", len(ep.Qualities))
 	return b.String()
 }
 

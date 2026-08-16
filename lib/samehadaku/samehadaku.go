@@ -2,6 +2,7 @@ package samehadaku
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -259,7 +260,7 @@ func GetEpisodeDownloads(ctx context.Context, epURL string) (*EpisodeDownload, e
 	}, nil
 }
 
-// ResolveDirectLink mencoba mengekstrak link unduhan langsung dari provider (Pixeldrain, Mediafire, dll).
+// ResolveDirectLink mencoba mengekstrak link unduhan langsung dari provider (Pixeldrain, Mediafire, Krakenfiles, dll).
 func ResolveDirectLink(ctx context.Context, server, pageURL string) string {
 	srvLower := strings.ToLower(server)
 
@@ -285,6 +286,53 @@ func ResolveDirectLink(ctx context.Context, server, pageURL string) string {
 					dlBtn := doc.Find("#downloadButton, a.input.popsok, a[aria-label='Download file']").AttrOr("href", "")
 					if dlBtn != "" {
 						return dlBtn
+					}
+				}
+			}
+		}
+	}
+
+	// 3. Krakenfiles: Extract token from form and POST to /download/{id}
+	if strings.Contains(srvLower, "kraken") || strings.Contains(pageURL, "krakenfiles.com") {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, nil)
+		if err == nil {
+			req.Header.Set("User-Agent", UserAgent)
+			client := &http.Client{Timeout: 10 * time.Second}
+			resp, err := client.Do(req)
+			if err == nil {
+				defer resp.Body.Close()
+				doc, err := goquery.NewDocumentFromReader(resp.Body)
+				if err == nil {
+					form := doc.Find("form#dl-form, form[action*='/download/']").First()
+					actionPath := form.AttrOr("action", "")
+					token := form.Find("input[name='token']").AttrOr("value", "")
+
+					if actionPath != "" && token != "" {
+						if !strings.HasPrefix(actionPath, "http") {
+							actionPath = "https://krakenfiles.com" + actionPath
+						}
+						postData := url.Values{}
+						postData.Set("token", token)
+
+						postReq, pErr := http.NewRequestWithContext(ctx, http.MethodPost, actionPath, strings.NewReader(postData.Encode()))
+						if pErr == nil {
+							postReq.Header.Set("User-Agent", UserAgent)
+							postReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+							postReq.Header.Set("X-Requested-With", "XMLHttpRequest")
+							postReq.Header.Set("Referer", pageURL)
+
+							postResp, pDoErr := client.Do(postReq)
+							if pDoErr == nil {
+								defer postResp.Body.Close()
+								var kRes struct {
+									Status string `json:"status"`
+									URL    string `json:"url"`
+								}
+								if json.NewDecoder(postResp.Body).Decode(&kRes) == nil && kRes.URL != "" {
+									return kRes.URL
+								}
+							}
+						}
 					}
 				}
 			}

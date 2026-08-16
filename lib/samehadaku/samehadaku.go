@@ -234,35 +234,110 @@ func GetEpisodeDownloads(ctx context.Context, epURL string) (*EpisodeDownload, e
 	isBatch := strings.Contains(epURL, "/batch/") || strings.Contains(strings.ToLower(title), "batch")
 	var qualities []QualityGroup
 
-	doc.Find(".download-eps ul li, .list-download ul li, .download-batch ul li, .download-eps li").Each(func(i int, s *goquery.Selection) {
-		resRaw := strings.TrimSpace(s.Find("strong").Text())
-		var links []DownloadLink
+	doc.Find(".download-eps, .list-download, .download-batch").Each(func(i int, s *goquery.Selection) {
+		sectionFormat := ""
 
-		s.Find("span a").Each(func(j int, a *goquery.Selection) {
-			serverName := strings.TrimSpace(a.Text())
-			linkURL := a.AttrOr("href", "")
-			if linkURL != "" && serverName != "" {
-				links = append(links, DownloadLink{
-					Server: serverName,
-					URL:    linkURL,
+		prev := s.Prev()
+		prevText := strings.TrimSpace(prev.Text())
+		innerTitle := strings.TrimSpace(s.Find(".title, h4, h3, p, b").First().Text())
+		combinedText := strings.ToUpper(innerTitle + " " + prevText)
+
+		if strings.Contains(combinedText, "X265") || strings.Contains(combinedText, "265") {
+			sectionFormat = "x265"
+		} else if strings.Contains(combinedText, "MP4") {
+			sectionFormat = "MP4"
+		} else if strings.Contains(combinedText, "MKV") {
+			sectionFormat = "MKV"
+		}
+
+		if sectionFormat == "" {
+			s.PrevAllFiltered("p, h4, h3, div.title, b, strong").Each(func(k int, h *goquery.Selection) {
+				if sectionFormat == "" {
+					txt := strings.ToUpper(h.Text())
+					if strings.Contains(txt, "X265") || strings.Contains(txt, "265") {
+						sectionFormat = "x265"
+					} else if strings.Contains(txt, "MP4") {
+						sectionFormat = "MP4"
+					} else if strings.Contains(txt, "MKV") {
+						sectionFormat = "MKV"
+					}
+				}
+			})
+		}
+
+		if sectionFormat == "" {
+			sectionFormat = "MKV"
+		}
+
+		s.Find("ul li, li").Each(func(j int, li *goquery.Selection) {
+			resRaw := strings.TrimSpace(li.Find("strong").Text())
+			if resRaw == "" {
+				return
+			}
+			var links []DownloadLink
+
+			li.Find("span a").Each(func(k int, a *goquery.Selection) {
+				serverName := strings.TrimSpace(a.Text())
+				linkURL := a.AttrOr("href", "")
+				if linkURL != "" && serverName != "" {
+					links = append(links, DownloadLink{
+						Server: serverName,
+						URL:    linkURL,
+					})
+				}
+			})
+
+			if len(links) > 0 {
+				itemUpper := strings.ToUpper(resRaw)
+				format := sectionFormat
+				if strings.Contains(itemUpper, "X265") || strings.Contains(itemUpper, "265") {
+					format = "x265"
+				} else if strings.Contains(itemUpper, "MP4") || strings.Contains(itemUpper, "FULLHD") || strings.Contains(itemUpper, "MP4HD") {
+					format = "MP4"
+				}
+
+				qualities = append(qualities, QualityGroup{
+					Quality: resRaw,
+					Format:  format,
+					Links:   links,
 				})
 			}
 		})
-
-		if len(links) > 0 {
-			format := "MKV"
-			if strings.Contains(strings.ToUpper(resRaw), "MP4") {
-				format = "MP4"
-			} else if strings.Contains(strings.ToLower(resRaw), "x265") {
-				format = "x265"
-			}
-			qualities = append(qualities, QualityGroup{
-				Quality: resRaw,
-				Format:  format,
-				Links:   links,
-			})
-		}
 	})
+
+	// Fallback if no container matched
+	if len(qualities) == 0 {
+		doc.Find("ul li, li").Each(func(i int, s *goquery.Selection) {
+			resRaw := strings.TrimSpace(s.Find("strong").Text())
+			var links []DownloadLink
+			s.Find("span a").Each(func(j int, a *goquery.Selection) {
+				serverName := strings.TrimSpace(a.Text())
+				linkURL := a.AttrOr("href", "")
+				if linkURL != "" && serverName != "" {
+					links = append(links, DownloadLink{
+						Server: serverName,
+						URL:    linkURL,
+					})
+				}
+			})
+
+			if len(links) > 0 {
+				format := "MKV"
+				itemUpper := strings.ToUpper(resRaw)
+				if strings.Contains(itemUpper, "X265") || strings.Contains(itemUpper, "265") {
+					format = "x265"
+				} else if strings.Contains(itemUpper, "MP4") || strings.Contains(itemUpper, "FULLHD") || strings.Contains(itemUpper, "MP4HD") {
+					format = "MP4"
+				}
+
+				qualities = append(qualities, QualityGroup{
+					Quality: resRaw,
+					Format:  format,
+					Links:   links,
+				})
+			}
+		})
+	}
 
 	return &EpisodeDownload{
 		Title:     title,

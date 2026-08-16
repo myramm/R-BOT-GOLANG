@@ -6,11 +6,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -164,25 +162,10 @@ func extractQCTarget(c *command.Ctx) (string, types.JID, string) {
 }
 
 func fetchQuotlyPNG(ctx context.Context, text, name, avatarURL string) ([]byte, error) {
-	// 1. Coba Popcat Quote API terlebih dahulu
-	popcatURL := fmt.Sprintf("https://api.popcat.xyz/quote?text=%s&name=%s&image=%s",
-		url.QueryEscape(text), url.QueryEscape(name), url.QueryEscape(avatarURL))
-
-	imgData, err := httpx.GetBytes(ctx, popcatURL, 15*time.Second, 10*1024*1024)
-	if err == nil && len(imgData) > 0 && (bytes.HasPrefix(imgData, []byte("\x89PNG")) || bytes.HasPrefix(imgData, []byte("RIFF"))) {
-		return imgData, nil
-	} else if err != nil {
-		log.Printf("[rbot] qc endpoint %s error: %v", popcatURL, err)
-	}
-
-	// 2. Fallback ke endpoint Quotly JSON
+	// Memanggil instance resmi LyoSU quote-api (https://github.com/LyoSU/quote-api)
 	endpoints := []string{
+		"https://quote.yuri.ly/generate.png",
 		"https://quote.yuri.ly/generate",
-		"https://bot.lyo.su/quote/generate",
-		"https://bot.lyrical.tokyo/api/quote",
-		"https://quote.btch.bz/generate",
-		"https://qc.botcazx.my.id/generate",
-		"https://quotly.maba.workers.dev/generate",
 	}
 
 	reqPayload := quotlyRequest{
@@ -276,7 +259,7 @@ func fetchQuotlyPNG(ctx context.Context, text, name, avatarURL string) ([]byte, 
 		}
 	}
 
-	return nil, errors.New("seluruh Quotly API server tidak merespon/gagal menghasilkan gambar")
+	return nil, errors.New("seluruh LyoSU Quotly API server tidak merespon/gagal menghasilkan gambar")
 }
 
 // ExportFetchQuotlyPNG diekspor khusus untuk unit test.

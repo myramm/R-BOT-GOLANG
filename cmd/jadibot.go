@@ -21,10 +21,10 @@ func init() {
 				return err
 			}
 
-			phone := c.Sender().User
-			if command.IsOwner(c.Evt) && len(c.Args) > 0 {
+			phone := jadibot.NormalizePhone(c.SenderPhone())
+			if len(c.Args) > 0 {
 				argPhone := jadibot.NormalizePhone(c.ArgStr())
-				if len(argPhone) >= 10 {
+				if len(argPhone) >= 10 && len(argPhone) <= 15 {
 					phone = argPhone
 				}
 			}

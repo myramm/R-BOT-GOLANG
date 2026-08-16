@@ -30,6 +30,21 @@ func Candidates(evt *events.Message) []string {
 	return out
 }
 
+// SenderPhone mengembalikan nomor telepon (PN/msisdn) pengirim.
+// Jika Sender berdomain @lid (contoh: 238182377492614@lid), mengambil dari SenderAlt (@s.whatsapp.net).
+func SenderPhone(evt *events.Message) string {
+	if evt == nil {
+		return ""
+	}
+	if evt.Info.Sender.Server == "s.whatsapp.net" {
+		return evt.Info.Sender.User
+	}
+	if evt.Info.SenderAlt.Server == "s.whatsapp.net" && !evt.Info.SenderAlt.IsEmpty() {
+		return evt.Info.SenderAlt.User
+	}
+	return evt.Info.Sender.User
+}
+
 // IsOwner true bila salah satu kandidat ID pengirim ada di config.Owners.
 func IsOwner(evt *events.Message) bool {
 	cands := Candidates(evt)

@@ -118,6 +118,9 @@ func (c *Ctx) Chat() types.JID { return c.Evt.Info.Chat }
 // Sender mengembalikan JID pengirim (participant).
 func (c *Ctx) Sender() types.JID { return c.Evt.Info.Sender }
 
+// SenderPhone mengembalikan nomor telepon pengirim (resilien terhadap LID).
+func (c *Ctx) SenderPhone() string { return identity.SenderPhone(c.Evt) }
+
 // IsGroup true bila pesan dari grup.
 func (c *Ctx) IsGroup() bool { return c.Evt.Info.IsGroup }
 

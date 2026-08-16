@@ -3,6 +3,9 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -13,7 +16,6 @@ import (
 	"go.mau.fi/whatsmeow/types/events"
 
 	"rbot/brain/command"
-	"rbot/lib/httpx"
 	"rbot/lib/samehadaku"
 )
 
@@ -299,50 +301,105 @@ func handleAnimeSessionReply(ctx context.Context, client *whatsmeow.Client, evt 
 		c.React(ctx, "⏳")
 		clearSession(key)
 
-		// Resolve direct links for providers (Pixeldrain, Mediafire, etc.)
-		resolvedLinks := make([]samehadaku.DownloadLink, len(selectedQual.Links))
-		var fileSent bool
+		_, _ = c.Reply(ctx, fmt.Sprintf("⏳ *Memproses %s (%s)...*\nProses download berjalan di background agar bot tetap responsif menerima pesan lain.", epData.Title, selectedQual.Quality))
 
-		for i, l := range selectedQual.Links {
-			directURL := samehadaku.ResolveDirectLink(ctx, l.Server, l.URL)
-			resolvedLinks[i] = samehadaku.DownloadLink{
-				Server:    l.Server,
-				URL:       l.URL,
-				DirectURL: directURL,
-			}
+		// Jalankan pengunduhan & pengiriman secara asynchronous (goroutine)
+		// agar TIDAK MENETAP / MEMBOCORKAN THREAD EVENT LOOP BOT.
+		go func() {
+			bgCtx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+			defer cancel()
 
-			// Coba kirim file langsung ke WhatsApp jika ukurannya <= 2GB
-			if !fileSent && directURL != l.URL {
-				fileBytes, downloadErr := httpx.GetBytes(ctx, directURL, 10*time.Minute, maxAnimeDocBytes)
-				if downloadErr == nil && len(fileBytes) > 0 {
-					fileName := safeAnimeFileName(epData.Title, selectedQual.Quality, selectedQual.Format)
-					caption := fmt.Sprintf("🎥 *%s*\nKualitas: %s (%s)", epData.Title, selectedQual.Quality, selectedQual.Format)
-					mimeType := "video/x-matroska"
-					if strings.ToUpper(selectedQual.Format) == "MP4" {
-						mimeType = "video/mp4"
-					} else if strings.Contains(strings.ToLower(l.Server), "rar") {
-						mimeType = "application/x-rar-compressed"
-					}
+			resolvedLinks := make([]samehadaku.DownloadLink, len(selectedQual.Links))
+			var fileSent bool
 
-					sendErr := c.SendMediaBytesWithMetadata(ctx, fileBytes, command.MediaDocument, caption, fileName, mimeType, nil)
-					if sendErr == nil {
-						fileSent = true
-						c.React(ctx, "✅")
+			for i, l := range selectedQual.Links {
+				directURL := samehadaku.ResolveDirectLink(bgCtx, l.Server, l.URL)
+				resolvedLinks[i] = samehadaku.DownloadLink{
+					Server:    l.Server,
+					URL:       l.URL,
+					DirectURL: directURL,
+				}
+
+				// Coba kirim file langsung ke WhatsApp jika ukurannya <= 2GB via disk stream
+				if !fileSent && directURL != l.URL {
+					tmpPath, downloadErr := downloadToTempFile(bgCtx, directURL, 10*time.Minute, maxAnimeDocBytes)
+					if downloadErr == nil && tmpPath != "" {
+						defer os.Remove(tmpPath)
+						fileData, readErr := os.ReadFile(tmpPath)
+						if readErr == nil && len(fileData) > 0 {
+							fileName := safeAnimeFileName(epData.Title, selectedQual.Quality, selectedQual.Format)
+							caption := fmt.Sprintf("🎥 *%s*\nKualitas: %s (%s)", epData.Title, selectedQual.Quality, selectedQual.Format)
+							mimeType := "video/x-matroska"
+							if strings.ToUpper(selectedQual.Format) == "MP4" {
+								mimeType = "video/mp4"
+							} else if strings.Contains(strings.ToLower(l.Server), "rar") {
+								mimeType = "application/x-rar-compressed"
+							}
+
+							sendErr := c.SendMediaBytesWithMetadata(bgCtx, fileData, command.MediaDocument, caption, fileName, mimeType, nil)
+							if sendErr == nil {
+								fileSent = true
+								c.React(bgCtx, "✅")
+							}
+						}
 					}
 				}
 			}
-		}
 
-		if !fileSent {
-			c.React(ctx, "✅")
-			updatedQual := selectedQual
-			updatedQual.Links = resolvedLinks
-			_, _ = c.Reply(ctx, formatFinalDownloads(epData.Title, updatedQual))
-		}
+			if !fileSent {
+				c.React(bgCtx, "✅")
+				updatedQual := selectedQual
+				updatedQual.Links = resolvedLinks
+				_, _ = c.Reply(bgCtx, formatFinalDownloads(epData.Title, updatedQual))
+			}
+		}()
+
 		return true
 	}
 
 	return false
+}
+
+func downloadToTempFile(ctx context.Context, targetURL string, timeout time.Duration, maxBytes int64) (string, error) {
+	cctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(cctx, http.MethodGet, targetURL, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", samehadaku.UserAgent)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("HTTP status %d", resp.StatusCode)
+	}
+
+	tmpFile, err := os.CreateTemp("", "rbot-anime-*")
+	if err != nil {
+		return "", err
+	}
+	tmpName := tmpFile.Name()
+
+	var r io.Reader = resp.Body
+	if maxBytes > 0 {
+		r = io.LimitReader(resp.Body, maxBytes)
+	}
+
+	_, copyErr := io.Copy(tmpFile, r)
+	_ = tmpFile.Close()
+	if copyErr != nil {
+		_ = os.Remove(tmpName)
+		return "", copyErr
+	}
+
+	return tmpName, nil
 }
 
 func safeAnimeFileName(title, quality, format string) string {

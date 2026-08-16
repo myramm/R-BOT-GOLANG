@@ -76,9 +76,26 @@ func Stop(ctx context.Context, target string, requester types.JID, isOwner bool)
 	return defaultManager.Stop(ctx, target, requester, isOwner)
 }
 
+// IsConnected mengecek apakah sub-bot dengan nomor tertentu sudah terhubung (logged-in).
+func IsConnected(phone string) bool {
+	return defaultManager.IsConnected(phone)
+}
+
 // Init memuat ulang dan merestart semua sesi sub-bot dari disk pada default manager.
 func Init(ctx context.Context) {
 	defaultManager.Init(ctx)
+}
+
+// IsConnected mengecek apakah sub-bot dengan nomor tertentu sudah terhubung (logged-in).
+func (m *Manager) IsConnected(phone string) bool {
+	phoneDigits := NormalizePhone(phone)
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	bot, exists := m.bots[phoneDigits]
+	if !exists || bot.Client == nil {
+		return false
+	}
+	return bot.Client.IsLoggedIn()
 }
 
 // Count mengembalikan jumlah sub-bot aktif.

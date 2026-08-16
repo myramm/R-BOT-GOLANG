@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"rbot/brain/command"
 	"rbot/brain/jadibot"
@@ -42,9 +43,23 @@ func init() {
 				"3. Pilih *Perangkat Tertaut* (Linked Devices)\n"+
 				"4. Pilih *Tautkan Perangkat* -> *Tautkan dengan nomor telepon*\n"+
 				"5. Masukkan kode 8 digit di atas\n\n"+
-				"⏱️ _Kode berlaku selama ~30 detik. Jangan bagikan kode ini kepada siapa pun!_", code)
+				"⏱️ _Kode berlaku selama ~60 detik. Jangan bagikan kode ini kepada siapa pun!_", code)
 
 			_, err = c.Reply(ctx, msg)
+
+			// Cek apakah pairing berhasil dalam 60 detik; bila belum, infokan bahwa kode telah kadaluarsa
+			targetPhone := phone
+			requesterJID := c.Sender()
+			go func() {
+				time.Sleep(60 * time.Second)
+				if !jadibot.IsConnected(targetPhone) {
+					_ = jadibot.Stop(context.Background(), targetPhone, requesterJID, true)
+					_, _ = c.Reply(context.Background(), "⏱️ *KODE PAIRING KADALUARSA*\n\n"+
+						"Kode pairing sebelumnya telah kadaluarsa karena tidak dimasukkan dalam kurun waktu 60 detik.\n\n"+
+						"Silakan ketik *.jadibot* kembali untuk mendapatkan kode pairing baru.")
+				}
+			}()
+
 			return err
 		},
 	})

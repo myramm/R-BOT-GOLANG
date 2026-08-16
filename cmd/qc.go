@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"go.mau.fi/whatsmeow"
+	waE2E "go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/types"
 
 	"rbot/brain/command"
@@ -30,7 +31,7 @@ func init() {
 		Name:        "qc",
 		Category:    "Converter",
 		Alias:       []string{"quotly", "fakeqc"},
-		Description: "Buat stiker quote chat WhatsApp dari teks dengan membalas (reply) pesan",
+		Description: "Buat stiker quote chat WhatsApp dari teks atau dengan membalas (reply) pesan. Contoh: .qc halo dunia | atau Reply pesan lalu kirim .qc",
 		Handler:     qcHandler,
 	})
 }
@@ -81,9 +82,9 @@ type quotlyResponse struct {
 
 func qcHandler(ctx context.Context, c *command.Ctx) error {
 	ci := c.ContextInfo()
-	if ci == nil || ci.GetQuotedMessage() == nil {
-		_, err := c.Reply(ctx, "❌ Harap reply (balas) pesan terlebih dahulu untuk membuat quote stiker.\nContoh: Reply pesan lalu kirim *"+config.MainPrefix()+"qc jskwkwkw*")
-		return err
+	var qm *waE2E.Message
+	if ci != nil {
+		qm = ci.GetQuotedMessage()
 	}
 
 	rawText := strings.TrimSpace(c.ArgStr())
@@ -94,20 +95,33 @@ func qcHandler(ctx context.Context, c *command.Ctx) error {
 		}
 	}
 
-	if cleanText == "" {
-		_, err := c.Reply(ctx, "❌ Harap masukkan teks quote setelah command *"+config.MainPrefix()+"qc*.\nContoh: Reply pesan lalu kirim *"+config.MainPrefix()+"qc jskwkwkw*")
-		return err
+	var targetJID types.JID
+	var targetName string
+	var quoteText string
+
+	if qm != nil {
+		// Dari pesan yang di-reply
+		if p := ci.GetParticipant(); p != "" {
+			if parsed, err := types.ParseJID(p); err == nil {
+				targetJID = parsed
+				targetName = parsed.User
+			}
+		}
+		if cleanText != "" {
+			quoteText = cleanText
+		} else {
+			quoteText = command.ExtractText(qm)
+		}
+	} else {
+		// Tanpa reply: gunakan pengirim sendiri
+		targetJID = c.Sender()
+		targetName = c.Evt.Info.PushName
+		quoteText = cleanText
 	}
 
-	qm := ci.GetQuotedMessage()
-	targetJID := c.Sender()
-	targetName := c.Evt.Info.PushName
-
-	if p := ci.GetParticipant(); p != "" {
-		if parsed, err := types.ParseJID(p); err == nil {
-			targetJID = parsed
-			targetName = parsed.User
-		}
+	if quoteText == "" {
+		_, err := c.Reply(ctx, "❌ Masukkan teks quote atau reply pesan yang ingin dibuatkan stiker quote.\nContoh:\n• *"+config.MainPrefix()+"qc halo dunia*\n• Reply pesan lalu kirim *"+config.MainPrefix()+"qc*")
+		return err
 	}
 
 	if targetName == "" {
@@ -130,11 +144,13 @@ func qcHandler(ctx context.Context, c *command.Ctx) error {
 	}
 
 	var mediaURL string
-	if data, err := c.Client.DownloadAny(processCtx, qm); err == nil && len(data) > 0 {
-		mediaURL = mediaToDataURL(processCtx, data)
+	if qm != nil {
+		if data, err := c.Client.DownloadAny(processCtx, qm); err == nil && len(data) > 0 {
+			mediaURL = mediaToDataURL(processCtx, data)
+		}
 	}
 
-	pngBytes, err := fetchQuotlyPNG(processCtx, cleanText, targetName, avatarURL, mediaURL)
+	pngBytes, err := fetchQuotlyPNG(processCtx, quoteText, targetName, avatarURL, mediaURL)
 	if err != nil {
 		log.Printf("[rbot] QC error (fetchQuotlyPNG): %v", err)
 		c.React(ctx, "❌")
@@ -224,7 +240,6 @@ func convertMediaToPNG(ctx context.Context, data []byte) ([]byte, error) {
 }
 
 func fetchQuotlyPNG(ctx context.Context, text, name, avatarURL, mediaURL string) ([]byte, error) {
-	// Memanggil instance resmi LyoSU quote-api (https://github.com/LyoSU/quote-api)
 	endpoints := []string{
 		"https://quote.yuri.ly/generate.png",
 		"https://quote.yuri.ly/generate",
@@ -288,12 +303,10 @@ func fetchQuotlyPNG(ctx context.Context, text, name, avatarURL, mediaURL string)
 			continue
 		}
 
-		// Bila endpoint mengembalikan biner gambar langsung (image/png, image/webp, dsb)
 		if strings.HasPrefix(contentType, "image/") || bytes.HasPrefix(respBytes, []byte("\x89PNG")) || bytes.HasPrefix(respBytes, []byte("RIFF")) {
 			return respBytes, nil
 		}
 
-		// Jika balasan berupa JSON
 		var qResp quotlyResponse
 		if err := json.Unmarshal(respBytes, &qResp); err == nil {
 			rawImage := qResp.Result.Image
@@ -314,7 +327,6 @@ func fetchQuotlyPNG(ctx context.Context, text, name, avatarURL, mediaURL string)
 				}
 			}
 
-			// Bila JSON mengembalikan URL gambar
 			if qResp.Result.URL != "" {
 				if imgData, getErr := httpx.GetBytes(ctx, qResp.Result.URL, 15*time.Second, 5*1024*1024); getErr == nil && len(imgData) > 0 {
 					return imgData, nil
@@ -330,8 +342,6 @@ func fetchQuotlyPNG(ctx context.Context, text, name, avatarURL, mediaURL string)
 	return nil, errors.New("seluruh LyoSU Quotly API server tidak merespon/gagal menghasilkan gambar")
 }
 
-// ExportFetchQuotlyPNG diekspor khusus untuk unit test.
 func ExportFetchQuotlyPNG(ctx context.Context, text, name, avatarURL string) ([]byte, error) {
 	return fetchQuotlyPNG(ctx, text, name, avatarURL, "")
 }
-

@@ -6,9 +6,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -27,7 +30,7 @@ func init() {
 		Name:        "qc",
 		Category:    "Converter",
 		Alias:       []string{"quotly", "fakeqc"},
-		Description: "Buat stiker quote chat WhatsApp dari teks atau balasan pesan",
+		Description: "Buat stiker quote chat WhatsApp dari teks dengan membalas (reply) pesan",
 		Handler:     qcHandler,
 	})
 }
@@ -45,11 +48,16 @@ type quotlyPhoto struct {
 	URL string `json:"url"`
 }
 
+type quotlyMedia struct {
+	URL string `json:"url,omitempty"`
+}
+
 type quotlyMessage struct {
 	Entities     []any          `json:"entities"`
 	Avatar       bool           `json:"avatar"`
 	From         quotlyFrom     `json:"from"`
 	Text         string         `json:"text"`
+	Media        *quotlyMedia   `json:"media,omitempty"`
 	ReplyMessage map[string]any `json:"replyMessage"`
 }
 
@@ -72,10 +80,41 @@ type quotlyResponse struct {
 }
 
 func qcHandler(ctx context.Context, c *command.Ctx) error {
-	text, targetJID, targetName := extractQCTarget(c)
-	if text == "" {
-		_, err := c.Reply(ctx, "Kirim teks dengan *"+config.MainPrefix()+"qc <teks>*, atau reply pesan orang yang mau dijadikan stiker quote.")
+	ci := c.ContextInfo()
+	if ci == nil || ci.GetQuotedMessage() == nil {
+		_, err := c.Reply(ctx, "❌ Harap reply (balas) pesan terlebih dahulu untuk membuat quote stiker.\nContoh: Reply pesan lalu kirim *"+config.MainPrefix()+"qc jskwkwkw*")
 		return err
+	}
+
+	rawText := strings.TrimSpace(c.ArgStr())
+	cleanText := rawText
+	for _, p := range []string{".qc", "qc", "!qc", "/qc"} {
+		if strings.HasPrefix(strings.ToLower(cleanText), p) {
+			cleanText = strings.TrimSpace(cleanText[len(p):])
+		}
+	}
+
+	if cleanText == "" {
+		_, err := c.Reply(ctx, "❌ Harap masukkan teks quote setelah command *"+config.MainPrefix()+"qc*.\nContoh: Reply pesan lalu kirim *"+config.MainPrefix()+"qc jskwkwkw*")
+		return err
+	}
+
+	qm := ci.GetQuotedMessage()
+	targetJID := c.Sender()
+	targetName := c.Evt.Info.PushName
+
+	if p := ci.GetParticipant(); p != "" {
+		if parsed, err := types.ParseJID(p); err == nil {
+			targetJID = parsed
+			targetName = parsed.User
+		}
+	}
+
+	if targetName == "" {
+		targetName = c.SenderPhone()
+	}
+	if targetName == "" {
+		targetName = "WhatsApp User"
 	}
 
 	c.React(ctx, "⏳")
@@ -90,7 +129,12 @@ func qcHandler(ctx context.Context, c *command.Ctx) error {
 		}
 	}
 
-	pngBytes, err := fetchQuotlyPNG(processCtx, text, targetName, avatarURL)
+	var mediaURL string
+	if data, err := c.Client.DownloadAny(processCtx, qm); err == nil && len(data) > 0 {
+		mediaURL = mediaToDataURL(processCtx, data)
+	}
+
+	pngBytes, err := fetchQuotlyPNG(processCtx, cleanText, targetName, avatarURL, mediaURL)
 	if err != nil {
 		log.Printf("[rbot] QC error (fetchQuotlyPNG): %v", err)
 		c.React(ctx, "❌")
@@ -132,40 +176,63 @@ func qcHandler(ctx context.Context, c *command.Ctx) error {
 	return nil
 }
 
-func extractQCTarget(c *command.Ctx) (string, types.JID, string) {
-	text := strings.TrimSpace(c.ArgStr())
-	targetJID := c.Sender()
-	targetName := c.Evt.Info.PushName
-
-	if ci := c.ContextInfo(); ci != nil {
-		if qm := ci.GetQuotedMessage(); qm != nil {
-			if text == "" {
-				text = command.ExtractText(qm)
-			}
-			if p := ci.GetParticipant(); p != "" {
-				if parsed, err := types.ParseJID(p); err == nil {
-					targetJID = parsed
-					targetName = parsed.User
-				}
-			}
-		}
+func mediaToDataURL(ctx context.Context, data []byte) string {
+	if len(data) == 0 {
+		return ""
 	}
-
-	if targetName == "" {
-		targetName = c.SenderPhone()
+	if bytes.HasPrefix(data, []byte("\x89PNG")) {
+		return "data:image/png;base64," + base64.StdEncoding.EncodeToString(data)
 	}
-	if targetName == "" {
-		targetName = "WhatsApp User"
+	if bytes.HasPrefix(data, []byte("\xFF\xD8\xFF")) {
+		return "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(data)
 	}
-
-	return text, targetJID, targetName
+	pngBytes, err := convertMediaToPNG(ctx, data)
+	if err == nil && len(pngBytes) > 0 {
+		return "data:image/png;base64," + base64.StdEncoding.EncodeToString(pngBytes)
+	}
+	return ""
 }
 
-func fetchQuotlyPNG(ctx context.Context, text, name, avatarURL string) ([]byte, error) {
+func convertMediaToPNG(ctx context.Context, data []byte) ([]byte, error) {
+	input, err := os.CreateTemp("", "rbot-qc-media-*")
+	if err != nil {
+		return nil, err
+	}
+	inputName := input.Name()
+	defer os.Remove(inputName)
+	if _, err := input.Write(data); err != nil {
+		_ = input.Close()
+		return nil, err
+	}
+	if err := input.Close(); err != nil {
+		return nil, err
+	}
+
+	outputName := inputName + ".png"
+	defer os.Remove(outputName)
+
+	args := []string{
+		"-y", "-hide_banner", "-loglevel", "error",
+		"-i", inputName,
+		"-frames:v", "1", "-vf", "scale=512:512:force_original_aspect_ratio=decrease:flags=lanczos,format=rgba", outputName,
+	}
+	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("ffmpeg convert error: %w: %s", err, tailText(string(out), 240))
+	}
+	return os.ReadFile(outputName)
+}
+
+func fetchQuotlyPNG(ctx context.Context, text, name, avatarURL, mediaURL string) ([]byte, error) {
 	// Memanggil instance resmi LyoSU quote-api (https://github.com/LyoSU/quote-api)
 	endpoints := []string{
 		"https://quote.yuri.ly/generate.png",
 		"https://quote.yuri.ly/generate",
+	}
+
+	var m *quotlyMedia
+	if mediaURL != "" {
+		m = &quotlyMedia{URL: mediaURL}
 	}
 
 	reqPayload := quotlyRequest{
@@ -186,6 +253,7 @@ func fetchQuotlyPNG(ctx context.Context, text, name, avatarURL string) ([]byte, 
 					Photo:     quotlyPhoto{URL: avatarURL},
 				},
 				Text:         text,
+				Media:        m,
 				ReplyMessage: map[string]any{},
 			},
 		},
@@ -264,6 +332,6 @@ func fetchQuotlyPNG(ctx context.Context, text, name, avatarURL string) ([]byte, 
 
 // ExportFetchQuotlyPNG diekspor khusus untuk unit test.
 func ExportFetchQuotlyPNG(ctx context.Context, text, name, avatarURL string) ([]byte, error) {
-	return fetchQuotlyPNG(ctx, text, name, avatarURL)
+	return fetchQuotlyPNG(ctx, text, name, avatarURL, "")
 }
 

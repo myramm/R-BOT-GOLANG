@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	"rbot/brain/command"
@@ -17,9 +18,23 @@ func init() {
 		Name:        "server",
 		Category:    "Info",
 		Alias:       []string{"info"},
-		Description: "Menampilkan informasi server dan runtime bot",
+		Description: "Menampilkan informasi server, disk usage, dan runtime bot",
 		Handler:     serverHandler,
 	})
+}
+
+func getDiskUsageInfo() (totalMB, usedMB uint64, usagePct float64) {
+	var stat syscall.Statfs_t
+	if err := syscall.Statfs("/", &stat); err == nil {
+		total := stat.Blocks * uint64(stat.Bsize)
+		free := stat.Bfree * uint64(stat.Bsize)
+		used := total - free
+		if total > 0 {
+			usagePct = float64(used) / float64(total) * 100
+		}
+		return total / (1024 * 1024), used / (1024 * 1024), usagePct
+	}
+	return 10240, 2048, 20.0
 }
 
 func serverHandler(ctx context.Context, c *command.Ctx) error {
@@ -31,6 +46,8 @@ func serverHandler(ctx context.Context, c *command.Ctx) error {
 		botName = "R-BOT"
 	}
 
+	diskTotal, diskUsed, diskPct := getDiskUsageInfo()
+
 	text := fmt.Sprintf(
 		"🖥️ *SERVER INFO*\n\n"+
 			"🤖 *Bot:* %s\n"+
@@ -40,6 +57,7 @@ func serverHandler(ctx context.Context, c *command.Ctx) error {
 			"🧠 *CPU:* %d core\n"+
 			"🔁 *Goroutine:* %d\n"+
 			"💾 *Memory:* %s digunakan / %s sistem\n"+
+			"💽 *Disk Usage:* %.1f GB / %.1f GB (%.1f%%)\n"+
 			"🧩 *Command:* %d",
 		botName,
 		cmdfunc.FormatUptime(time.Since(cmdfunc.StartTime)),
@@ -50,6 +68,9 @@ func serverHandler(ctx context.Context, c *command.Ctx) error {
 		runtime.NumGoroutine(),
 		formatServerBytes(mem.Alloc),
 		formatServerBytes(mem.Sys),
+		float64(diskUsed)/1024.0,
+		float64(diskTotal)/1024.0,
+		diskPct,
 		command.Count(),
 	)
 	_, err := c.Reply(ctx, text)

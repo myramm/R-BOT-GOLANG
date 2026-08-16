@@ -912,7 +912,7 @@
         <p id="greetingSub">Semua sistem R-BOT berjalan dengan lancar.</p>
       </div>
 
-      <!-- 4 Core Metrics Grid (2 Columns on Mobile Android!) -->
+      <!-- 5 Core Metrics Grid (2 Columns on Mobile Android!) -->
       <div class="metrics-grid">
         <div class="metric-card">
           <div class="metric-title">Messages</div>
@@ -930,6 +930,12 @@
           <div class="metric-title">RAM Usage</div>
           <div class="metric-value" id="metricRam">0 MB</div>
           <div class="metric-change" id="metricRamSub" style="color: var(--text-muted);">Optimal</div>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-title">Disk Usage</div>
+          <div class="metric-value" id="metricDisk">0 GB</div>
+          <div class="metric-change" id="metricDiskSub" style="color: var(--text-muted);">Storage Space</div>
         </div>
 
         <div class="metric-card">
@@ -1534,6 +1540,16 @@
       document.getElementById('metricUsers').textContent = totalUsers.toLocaleString();
       document.getElementById('metricRam').textContent = (d.system && d.system.allocMb ? d.system.allocMb : '0') + ' MB';
       document.getElementById('metricRamSub').textContent = `Sys: ${d.system && d.system.sysMb ? d.system.sysMb : '0'} MB`;
+
+      // Disk Usage
+      const diskUsedGB = d.system && d.system.diskUsed ? (d.system.diskUsed / 1024).toFixed(1) : '0';
+      const diskTotalGB = d.system && d.system.diskTotal ? (d.system.diskTotal / 1024).toFixed(1) : '0';
+      const diskPct = d.system && d.system.diskPct ? d.system.diskPct : '0';
+      const diskEl = document.getElementById('metricDisk');
+      const diskSubEl = document.getElementById('metricDiskSub');
+      if (diskEl) diskEl.textContent = `${diskUsedGB} GB`;
+      if (diskSubEl) diskSubEl.textContent = `${diskUsedGB} / ${diskTotalGB} GB (${diskPct}%)`;
+
       document.getElementById('metricUptime').textContent = formatSeconds(d.bot && d.bot.uptime ? d.bot.uptime : 0);
       document.getElementById('metricUptimeSub').textContent = `CPU: ${d.system && d.system.cpuPct ? d.system.cpuPct : '1.0'}%`;
 

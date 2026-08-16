@@ -39,6 +39,8 @@ var (
 	reEpURL       = regexp.MustCompile(`(?i)https?://[^\s]+/.*-episode-\d+/?`)
 )
 
+const maxAnimeDocBytes = 2 * 1024 * 1024 * 1024 // 2GB batas dokumen WhatsApp
+
 func init() {
 	command.Register(&command.Command{
 		Name:        "anime",
@@ -309,9 +311,9 @@ func handleAnimeSessionReply(ctx context.Context, client *whatsmeow.Client, evt 
 				DirectURL: directURL,
 			}
 
-			// Coba kirim file langsung ke WhatsApp jika ukurannya <= 64MB
+			// Coba kirim file langsung ke WhatsApp jika ukurannya <= 2GB
 			if !fileSent && directURL != l.URL {
-				fileBytes, downloadErr := httpx.GetBytes(ctx, directURL, 3*time.Minute, maxUploadBytes)
+				fileBytes, downloadErr := httpx.GetBytes(ctx, directURL, 10*time.Minute, maxAnimeDocBytes)
 				if downloadErr == nil && len(fileBytes) > 0 {
 					fileName := safeAnimeFileName(epData.Title, selectedQual.Quality, selectedQual.Format)
 					caption := fmt.Sprintf("🎥 *%s*\nKualitas: %s (%s)", epData.Title, selectedQual.Quality, selectedQual.Format)
@@ -438,6 +440,6 @@ func formatFinalDownloads(epTitle string, q samehadaku.QualityGroup) string {
 		fmt.Fprintf(&b, " • *%-12s* : %s\n", link.Server, dlURL)
 	}
 
-	fmt.Fprintf(&b, "\n_Catatan: Jika ukuran file di bawah 64MB, file akan otomatis dikirimkan langsung ke WhatsApp._")
+	fmt.Fprintf(&b, "\n_Catatan: Jika ukuran file di bawah 2GB, file akan otomatis dikirimkan langsung ke WhatsApp._")
 	return b.String()
 }

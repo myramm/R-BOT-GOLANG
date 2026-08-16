@@ -408,7 +408,7 @@ func handleAnimeSessionReply(ctx context.Context, client *whatsmeow.Client, evt 
 		// Cek jika kualitas ini rusak / tidak memiliki link aktif
 		if isQualityBroken(selectedQual) {
 			c.React(ctx, "❌")
-			_, _ = c.Reply(ctx, fmt.Sprintf("⚠️ *Kualitas %s Tidak Tersedia (Link Rusak)!*\n\nSeluruh provider download untuk kualitas ini sedang tidak aktif atau rusak di server. Silakan pilih nomor kualitas yang lain.", selectedQual.Quality))
+			_, _ = c.Reply(ctx, fmt.Sprintf("⚠️ *Kualitas %s Tidak Tersedia (Link Rusak)!*\n\nSeluruh provider download untuk kualitas ini sedang tidak aktif atau rusak di Samehadaku. Silakan pilih nomor kualitas yang lain.", selectedQual.Quality))
 			return true
 		}
 
@@ -601,7 +601,27 @@ func formatQualityChoices(ep *samehadaku.EpisodeDownload, evt *events.Message) s
 	fmt.Fprintf(&b, "🎬 *%s*\n", ep.Title)
 	fmt.Fprintf(&b, "Pilih Kualitas & Format Download:\n\n")
 
+	currentFormat := ""
 	for i, q := range ep.Qualities {
+		fmtGroup := strings.ToUpper(strings.TrimSpace(q.Format))
+		if fmtGroup == "" {
+			fmtGroup = "MKV"
+		}
+
+		if fmtGroup != currentFormat {
+			if currentFormat != "" {
+				b.WriteString("\n")
+			}
+			currentFormat = fmtGroup
+			icon := "🎞️"
+			if currentFormat == "MP4" {
+				icon = "📱"
+			} else if strings.Contains(strings.ToLower(currentFormat), "265") {
+				icon = "⚡"
+			}
+			fmt.Fprintf(&b, "%s *%s:*\n", icon, currentFormat)
+		}
+
 		badge := ""
 		if isQualityBroken(q) {
 			badge = " ⚠️ (Link Rusak)"
@@ -612,7 +632,8 @@ func formatQualityChoices(ep *samehadaku.EpisodeDownload, evt *events.Message) s
 				badge = " 💎 [PREMIUM ONLY]"
 			}
 		}
-		fmt.Fprintf(&b, "%d. *%s* (%s)%s\n", i+1, q.Quality, q.Format, badge)
+
+		fmt.Fprintf(&b, "%d. *%s*%s\n", i+1, q.Quality, badge)
 	}
 
 	fmt.Fprintf(&b, "\n👉 *Ketik nomor kualitas (1 - %d) untuk memilih.*", len(ep.Qualities))

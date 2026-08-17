@@ -449,7 +449,13 @@ func itoa(i int) string {
 	return string(buf[pos:])
 }
 
-var rePassMd5 = regexp.MustCompile(`/pass_md5/[a-zA-Z0-9_\-]+`)
+var (
+	rePassMd5 = regexp.MustCompile(`/pass_md5/[a-zA-Z0-9_\-]+`)
+	reTitle   = regexp.MustCompile(`(?i)<title>(.*?)(?:\s*-\s*DoodStream)?</title>`)
+	reImage   = regexp.MustCompile(`(?i)meta name="og:image" content="(.*?)"`)
+	reLength  = regexp.MustCompile(`(?is)class="length"[^>]*>.*?(\d{1,2}:\d{2}(?::\d{2})?)`)
+	reSize    = regexp.MustCompile(`(?is)class="size"[^>]*>.*?([\d\.]+\s*(?:KB|MB|GB|TB))`)
+)
 
 func resolveDoodStreamDirect(ctx context.Context, rawURL string) (*Result, error) {
 	id := rawURL
@@ -460,16 +466,59 @@ func resolveDoodStreamDirect(ctx context.Context, rawURL string) (*Result, error
 
 	domains := []string{"https://dood.so", "https://dood.la", "https://doodstream.com", "https://dood.pm", "https://ds2play.com", "https://myvidplay.com"}
 
+	var title, thumbnail, duration, sizeStr string
+	headers := map[string]string{
+		"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+		"Accept":     "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+	}
+
+	// 1. Fetch metadata dari halaman /d/
+	for _, domain := range domains {
+		dURL := fmt.Sprintf("%s/d/%s", domain, id)
+		resp, err := httpx.Do(ctx, "GET", dURL, nil, 10*time.Second, headers)
+		if err == nil {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			html := string(bodyBytes)
+
+			if tm := reTitle.FindStringSubmatch(html); len(tm) > 1 {
+				title = strings.TrimSpace(strings.ReplaceAll(tm[1], "- DoodStream", ""))
+			}
+			if im := reImage.FindStringSubmatch(html); len(im) > 1 {
+				thumbnail = im[1]
+			}
+			if lm := reLength.FindStringSubmatch(html); len(lm) > 1 {
+				duration = lm[1]
+			}
+			if sm := reSize.FindStringSubmatch(html); len(sm) > 1 {
+				sizeStr = sm[1]
+			}
+			if title != "" {
+				break
+			}
+		}
+	}
+
+	if title == "" {
+		title = fmt.Sprintf("DoodStream Video (%s)", id)
+	}
+
+	metaDetails := ""
+	if duration != "" || sizeStr != "" {
+		parts := []string{}
+		if duration != "" {
+			parts = append(parts, "⏱️ Durasi: "+duration)
+		}
+		if sizeStr != "" {
+			parts = append(parts, "📦 Ukuran: "+sizeStr)
+		}
+		metaDetails = "\n" + strings.Join(parts, " | ")
+	}
+
 	var lastErr error
 	for _, domain := range domains {
 		embedURL := fmt.Sprintf("%s/e/%s", domain, id)
-		
-		headers := map[string]string{
-			"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-			"Accept":     "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-		}
-
-		resp, err := httpx.Do(ctx, "GET", embedURL, nil, 15*time.Second, headers)
+		resp, err := httpx.Do(ctx, "GET", embedURL, nil, 10*time.Second, headers)
 		if err != nil {
 			lastErr = err
 			continue
@@ -490,7 +539,7 @@ func resolveDoodStreamDirect(ctx context.Context, rawURL string) (*Result, error
 			"Referer":    embedURL,
 		}
 
-		passResp, err := httpx.Do(ctx, "GET", passMd5URL, nil, 15*time.Second, passHeaders)
+		passResp, err := httpx.Do(ctx, "GET", passMd5URL, nil, 10*time.Second, passHeaders)
 		if err != nil {
 			lastErr = err
 			continue
@@ -510,32 +559,30 @@ func resolveDoodStreamDirect(ctx context.Context, rawURL string) (*Result, error
 
 		streamURL := fmt.Sprintf("%s%s?token=%s&expiry=%d", tokenBase, randStr, tokenKey, expiry)
 
+		medias := []Media{}
+		if thumbnail != "" {
+			medias = append(medias, Media{Type: "image", URL: thumbnail, Ext: "jpg", Label: "Thumbnail"})
+		}
+		medias = append(medias, Media{Type: "video", URL: streamURL, Ext: "mp4", Label: "Video MP4"})
+
 		return &Result{
-			Title:  fmt.Sprintf("DoodStream Video (%s)", id),
+			Title:  title + metaDetails,
 			Source: "doodstream",
-			Medias: []Media{
-				{
-					Type:  "video",
-					URL:   streamURL,
-					Ext:   "mp4",
-					Label: "DoodStream Video MP4",
-				},
-			},
+			Medias: medias,
 		}, nil
 	}
 
-	fallbackURL := "https://9xbuddy.com/process?url=" + url.QueryEscape(rawURL)
+	fallbackURL := "https://dood.so/d/" + id
+	medias := []Media{}
+	if thumbnail != "" {
+		medias = append(medias, Media{Type: "image", URL: thumbnail, Ext: "jpg", Label: "Thumbnail"})
+	}
+	medias = append(medias, Media{Type: "video", URL: fallbackURL, Ext: "mp4", Label: "Direct Link"})
+
 	return &Result{
-		Title:  "DoodStream Video",
-		Source: "9xbuddy",
-		Medias: []Media{
-			{
-				Type:  "video",
-				URL:   fallbackURL,
-				Ext:   "mp4",
-				Label: "DoodStream Web Link",
-			},
-		},
+		Title:  title + metaDetails,
+		Source: "doodstream",
+		Medias: medias,
 	}, lastErr
 }
 

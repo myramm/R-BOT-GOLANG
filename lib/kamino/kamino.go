@@ -11,8 +11,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
 	"net/url"
 	"regexp"
 	"strings"
@@ -57,7 +55,6 @@ var detectPatterns = []struct {
 	{"pinterest", regexp.MustCompile(`(?i)pinterest\.[a-z.]+|pin\.it`)},
 	{"youtube", regexp.MustCompile(`(?i)youtube\.com|youtu\.be`)},
 	{"spotify", regexp.MustCompile(`(?i)open\.spotify\.com|spotify\.link`)},
-	{"doodstream", regexp.MustCompile(`(?i)doodstream\.|dood\.|myvidplay\.com|ds2play\.com|doods\.|doodstream\.me`)},
 }
 
 // Detect mengembalikan nama platform dari URL, atau "" bila tak dikenali.
@@ -359,9 +356,6 @@ func Resolve(ctx context.Context, rawURL, platform, arg string) (*Result, error)
 		}
 		return &Result{Title: title, Source: src, Medias: []Media{{Type: "audio", URL: d.URL, Ext: "mp3"}}}, nil
 
-	case "doodstream":
-		return resolveDoodStreamDirect(ctx, rawURL)
-
 	default:
 		var d genericResp
 		if err := apiJSON(ctx, "/api/download?url="+url.QueryEscape(rawURL), resolveTimeout(), &d); err != nil {
@@ -447,146 +441,5 @@ func itoa(i int) string {
 		buf[pos] = '-'
 	}
 	return string(buf[pos:])
-}
-
-var (
-	rePassMd5 = regexp.MustCompile(`/pass_md5/[a-zA-Z0-9_\-]+`)
-	reTitle   = regexp.MustCompile(`(?i)<title>(.*?)(?:\s*-\s*DoodStream)?</title>`)
-	reImage   = regexp.MustCompile(`(?i)meta name="og:image" content="(.*?)"`)
-	reLength  = regexp.MustCompile(`(?is)class="length"[^>]*>.*?(\d{1,2}:\d{2}(?::\d{2})?)`)
-	reSize    = regexp.MustCompile(`(?is)class="size"[^>]*>.*?([\d\.]+\s*(?:KB|MB|GB|TB))`)
-)
-
-func resolveDoodStreamDirect(ctx context.Context, rawURL string) (*Result, error) {
-	id := rawURL
-	if idx := strings.LastIndex(rawURL, "/"); idx != -1 {
-		id = rawURL[idx+1:]
-	}
-	id = strings.TrimSpace(id)
-
-	domains := []string{"https://dood.so", "https://dood.la", "https://doodstream.com", "https://dood.pm", "https://ds2play.com", "https://myvidplay.com"}
-
-	var title, thumbnail, duration, sizeStr string
-	headers := map[string]string{
-		"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-		"Accept":     "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-	}
-
-	// 1. Fetch metadata dari halaman /d/
-	for _, domain := range domains {
-		dURL := fmt.Sprintf("%s/d/%s", domain, id)
-		resp, err := httpx.Do(ctx, "GET", dURL, nil, 10*time.Second, headers)
-		if err == nil {
-			bodyBytes, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
-			html := string(bodyBytes)
-
-			if tm := reTitle.FindStringSubmatch(html); len(tm) > 1 {
-				title = strings.TrimSpace(strings.ReplaceAll(tm[1], "- DoodStream", ""))
-			}
-			if im := reImage.FindStringSubmatch(html); len(im) > 1 {
-				thumbnail = im[1]
-			}
-			if lm := reLength.FindStringSubmatch(html); len(lm) > 1 {
-				duration = lm[1]
-			}
-			if sm := reSize.FindStringSubmatch(html); len(sm) > 1 {
-				sizeStr = sm[1]
-			}
-			if title != "" {
-				break
-			}
-		}
-	}
-
-	if title == "" {
-		title = fmt.Sprintf("DoodStream Video (%s)", id)
-	}
-
-	metaDetails := ""
-	if duration != "" || sizeStr != "" {
-		parts := []string{}
-		if duration != "" {
-			parts = append(parts, "⏱️ Durasi: "+duration)
-		}
-		if sizeStr != "" {
-			parts = append(parts, "📦 Ukuran: "+sizeStr)
-		}
-		metaDetails = "\n" + strings.Join(parts, " | ")
-	}
-
-	for _, domain := range domains {
-		embedURL := fmt.Sprintf("%s/e/%s", domain, id)
-		resp, err := httpx.Do(ctx, "GET", embedURL, nil, 10*time.Second, headers)
-		if err != nil {
-			continue
-		}
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
-
-		html := string(bodyBytes)
-		loc := rePassMd5.FindString(html)
-		if loc == "" {
-			continue
-		}
-
-		passMd5URL := domain + loc
-		passHeaders := map[string]string{
-			"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-			"Referer":    embedURL,
-		}
-
-		passResp, err := httpx.Do(ctx, "GET", passMd5URL, nil, 10*time.Second, passHeaders)
-		if err != nil {
-			continue
-		}
-		tokenBytes, _ := io.ReadAll(passResp.Body)
-		passResp.Body.Close()
-
-		tokenBase := strings.TrimSpace(string(tokenBytes))
-		if tokenBase == "" {
-			continue
-		}
-
-		randStr := randomString(10)
-		tokenKey := loc[strings.LastIndex(loc, "/")+1:]
-		expiry := time.Now().UnixNano() / int64(time.Millisecond)
-
-		streamURL := fmt.Sprintf("%s%s?token=%s&expiry=%d", tokenBase, randStr, tokenKey, expiry)
-
-		medias := []Media{}
-		if thumbnail != "" {
-			medias = append(medias, Media{Type: "image", URL: thumbnail, Ext: "jpg", Label: "Thumbnail"})
-		}
-		medias = append(medias, Media{Type: "video", URL: streamURL, Ext: "mp4", Label: "Video MP4"})
-
-		return &Result{
-			Title:  title + metaDetails,
-			Source: "doodstream",
-			Medias: medias,
-		}, nil
-	}
-
-	fallbackURL := "https://9xbuddy.com/process?url=" + url.QueryEscape(rawURL)
-	medias := []Media{}
-	if thumbnail != "" {
-		medias = append(medias, Media{Type: "image", URL: thumbnail, Ext: "jpg", Label: "Thumbnail"})
-	}
-	medias = append(medias, Media{Type: "video", URL: fallbackURL, Ext: "mp4", Label: "9xbuddy Web Link"})
-
-	return &Result{
-		Title:  title + metaDetails,
-		Source: "doodstream",
-		Medias: medias,
-	}, nil
-}
-
-func randomString(n int) string {
-	const letters = "abcdefghijklmnopqrstuvwxyz0123456789"
-	b := make([]byte, n)
-	for i := range b {
-		b[i] = letters[len(letters)%10] // safe dummy
-	}
-	return string(b)
 }
 

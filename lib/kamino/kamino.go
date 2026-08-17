@@ -515,12 +515,10 @@ func resolveDoodStreamDirect(ctx context.Context, rawURL string) (*Result, error
 		metaDetails = "\n" + strings.Join(parts, " | ")
 	}
 
-	var lastErr error
 	for _, domain := range domains {
 		embedURL := fmt.Sprintf("%s/e/%s", domain, id)
 		resp, err := httpx.Do(ctx, "GET", embedURL, nil, 10*time.Second, headers)
 		if err != nil {
-			lastErr = err
 			continue
 		}
 		bodyBytes, _ := io.ReadAll(resp.Body)
@@ -529,7 +527,6 @@ func resolveDoodStreamDirect(ctx context.Context, rawURL string) (*Result, error
 		html := string(bodyBytes)
 		loc := rePassMd5.FindString(html)
 		if loc == "" {
-			lastErr = fmt.Errorf("pass_md5 tidak ditemukan di %s", embedURL)
 			continue
 		}
 
@@ -541,7 +538,6 @@ func resolveDoodStreamDirect(ctx context.Context, rawURL string) (*Result, error
 
 		passResp, err := httpx.Do(ctx, "GET", passMd5URL, nil, 10*time.Second, passHeaders)
 		if err != nil {
-			lastErr = err
 			continue
 		}
 		tokenBytes, _ := io.ReadAll(passResp.Body)
@@ -549,7 +545,6 @@ func resolveDoodStreamDirect(ctx context.Context, rawURL string) (*Result, error
 
 		tokenBase := strings.TrimSpace(string(tokenBytes))
 		if tokenBase == "" {
-			lastErr = fmt.Errorf("token base kosong dari %s", passMd5URL)
 			continue
 		}
 
@@ -583,7 +578,7 @@ func resolveDoodStreamDirect(ctx context.Context, rawURL string) (*Result, error
 		Title:  title + metaDetails,
 		Source: "doodstream",
 		Medias: medias,
-	}, lastErr
+	}, nil
 }
 
 func randomString(n int) string {

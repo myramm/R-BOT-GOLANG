@@ -14,8 +14,6 @@ import (
 	"fmt"
 	"io"
 	"net/url"
-	"os"
-	"os/exec"
 	"regexp"
 	"strings"
 	"sync"
@@ -569,21 +567,6 @@ func resolveDoodStreamDirect(ctx context.Context, rawURL string) (*Result, error
 		}, nil
 	}
 
-	// 2. Coba Stealth Resolver Node.js (Playwright Engine seperti di APK 9xbuddy)
-	if stealthURL := resolveDoodStealthNode(ctx, rawURL); stealthURL != "" {
-		medias := []Media{}
-		if thumbnail != "" {
-			medias = append(medias, Media{Type: "image", URL: thumbnail, Ext: "jpg", Label: "Thumbnail"})
-		}
-		medias = append(medias, Media{Type: "video", URL: stealthURL, Ext: "mp4", Label: "Stealth Video MP4"})
-
-		return &Result{
-			Title:  title + metaDetails,
-			Source: "doodstream",
-			Medias: medias,
-		}, nil
-	}
-
 	fallbackURL := "https://9xbuddy.com/process?url=" + url.QueryEscape(rawURL)
 	medias := []Media{}
 	if thumbnail != "" {
@@ -596,44 +579,6 @@ func resolveDoodStreamDirect(ctx context.Context, rawURL string) (*Result, error
 		Source: "doodstream",
 		Medias: medias,
 	}, nil
-}
-
-func resolveDoodStealthNode(ctx context.Context, rawURL string) string {
-	paths := []string{"lib/kamino/dood_stealth_resolver.js", "files/dood_stealth_resolver.js", "../files/dood_stealth_resolver.js", "/root/claude/output/files/dood_stealth_resolver.js"}
-	var scriptPath string
-	for _, p := range paths {
-		if _, err := os.Stat(p); err == nil {
-			scriptPath = p
-			break
-		}
-	}
-	if scriptPath == "" {
-		return ""
-	}
-
-	ctxTimeout, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctxTimeout, "node", scriptPath, rawURL)
-	out, err := cmd.Output()
-	if err != nil {
-		return ""
-	}
-
-	// Parse JSON dari stdout
-	idx := strings.Index(string(out), "{")
-	if idx == -1 {
-		return ""
-	}
-	jsonStr := string(out[idx:])
-	var res struct {
-		DirectStreamURL string `json:"directStreamUrl"`
-		Status          string `json:"status"`
-	}
-	if jsonErr := json.Unmarshal([]byte(jsonStr), &res); jsonErr == nil && res.Status == "SUCCESS" {
-		return res.DirectStreamURL
-	}
-	return ""
 }
 
 func randomString(n int) string {

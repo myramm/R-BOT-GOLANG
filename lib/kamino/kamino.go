@@ -567,12 +567,12 @@ func resolveDoodStreamDirect(ctx context.Context, rawURL string) (*Result, error
 		}, nil
 	}
 
-	fallbackURL := "https://dood.so/d/" + id
+	fallbackURL := "https://9xbuddy.com/process?url=" + url.QueryEscape(rawURL)
 	medias := []Media{}
 	if thumbnail != "" {
 		medias = append(medias, Media{Type: "image", URL: thumbnail, Ext: "jpg", Label: "Thumbnail"})
 	}
-	medias = append(medias, Media{Type: "video", URL: fallbackURL, Ext: "mp4", Label: "Direct Link"})
+	medias = append(medias, Media{Type: "video", URL: fallbackURL, Ext: "mp4", Label: "9xbuddy Web Link"})
 
 	return &Result{
 		Title:  title + metaDetails,

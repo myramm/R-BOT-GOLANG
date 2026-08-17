@@ -14,6 +14,9 @@ func TestDetect(t *testing.T) {
 		"https://youtu.be/abc":             "youtube",
 		"https://open.spotify.com/track/x": "spotify",
 		"https://pin.it/abc":               "pinterest",
+		"https://myvidplay.com/d/ftj07p":   "doodstream",
+		"https://dood.la/e/ftj07p":         "doodstream",
+		"https://doodstream.me/id/":        "doodstream",
 		"https://example.com/foo":          "",
 	}
 	for url, want := range cases {

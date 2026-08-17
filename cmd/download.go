@@ -38,7 +38,7 @@ func init() {
 		Name:        "download",
 		Category:    "Downloader",
 		Alias:       []string{"dl"},
-		Description: "Download video/foto/lagu dari TikTok, Instagram, YouTube, Spotify, Facebook, X, Threads, Pinterest. Contoh: .download <link> • .download <link> mp3 • atau Reply pesan berisi link lalu ketik .dl",
+		Description: "Download video/foto/lagu dari TikTok, Instagram, YouTube, Spotify, Facebook, X, Threads, Pinterest, Doodstream. Contoh: .download <link> • .download <link> mp3 • atau Reply pesan berisi link lalu ketik .dl",
 		Handler:     downloadHandler,
 	})
 }
@@ -112,7 +112,7 @@ func downloadHandler(ctx context.Context, c *command.Ctx) error {
 	}
 	platform := kamino.Detect(url)
 	if platform == "" {
-		_, err := c.Reply(ctx, "Link tidak dikenali. Didukung: TikTok, Instagram, YouTube, Spotify, Facebook, X (Twitter), Threads, Pinterest.")
+		_, err := c.Reply(ctx, "Link tidak dikenali. Didukung: TikTok, Instagram, YouTube, Spotify, Facebook, X (Twitter), Threads, Pinterest, Doodstream.")
 		return err
 	}
 

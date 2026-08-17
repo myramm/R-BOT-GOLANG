@@ -55,6 +55,7 @@ var detectPatterns = []struct {
 	{"pinterest", regexp.MustCompile(`(?i)pinterest\.[a-z.]+|pin\.it`)},
 	{"youtube", regexp.MustCompile(`(?i)youtube\.com|youtu\.be`)},
 	{"spotify", regexp.MustCompile(`(?i)open\.spotify\.com|spotify\.link`)},
+	{"doodstream", regexp.MustCompile(`(?i)doodstream\.|dood\.|myvidplay\.com|ds2play\.com|doods\.|doodstream\.me`)},
 }
 
 // Detect mengembalikan nama platform dari URL, atau "" bila tak dikenali.
@@ -355,6 +356,21 @@ func Resolve(ctx context.Context, rawURL, platform, arg string) (*Result, error)
 			src = "spotify"
 		}
 		return &Result{Title: title, Source: src, Medias: []Media{{Type: "audio", URL: d.URL, Ext: "mp3"}}}, nil
+
+	case "doodstream":
+		targetURL := "https://9xbuddy.com/process?url=" + url.QueryEscape(rawURL)
+		return &Result{
+			Title:  "DoodStream Video",
+			Source: "9xbuddy",
+			Medias: []Media{
+				{
+					Type:  "video",
+					URL:   targetURL,
+					Ext:   "mp4",
+					Label: "DoodStream Video",
+				},
+			},
+		}, nil
 
 	default:
 		var d genericResp

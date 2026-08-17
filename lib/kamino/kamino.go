@@ -11,6 +11,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/url"
 	"regexp"
 	"strings"
@@ -358,19 +360,7 @@ func Resolve(ctx context.Context, rawURL, platform, arg string) (*Result, error)
 		return &Result{Title: title, Source: src, Medias: []Media{{Type: "audio", URL: d.URL, Ext: "mp3"}}}, nil
 
 	case "doodstream":
-		targetURL := "https://9xbuddy.com/process?url=" + url.QueryEscape(rawURL)
-		return &Result{
-			Title:  "DoodStream Video",
-			Source: "9xbuddy",
-			Medias: []Media{
-				{
-					Type:  "video",
-					URL:   targetURL,
-					Ext:   "mp4",
-					Label: "DoodStream Video",
-				},
-			},
-		}, nil
+		return resolveDoodStreamDirect(ctx, rawURL)
 
 	default:
 		var d genericResp
@@ -458,3 +448,103 @@ func itoa(i int) string {
 	}
 	return string(buf[pos:])
 }
+
+var rePassMd5 = regexp.MustCompile(`/pass_md5/[a-zA-Z0-9_\-]+`)
+
+func resolveDoodStreamDirect(ctx context.Context, rawURL string) (*Result, error) {
+	id := rawURL
+	if idx := strings.LastIndex(rawURL, "/"); idx != -1 {
+		id = rawURL[idx+1:]
+	}
+	id = strings.TrimSpace(id)
+
+	domains := []string{"https://dood.so", "https://dood.la", "https://doodstream.com", "https://dood.pm", "https://ds2play.com", "https://myvidplay.com"}
+
+	var lastErr error
+	for _, domain := range domains {
+		embedURL := fmt.Sprintf("%s/e/%s", domain, id)
+		
+		headers := map[string]string{
+			"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+			"Accept":     "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+		}
+
+		resp, err := httpx.Do(ctx, "GET", embedURL, nil, 15*time.Second, headers)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		html := string(bodyBytes)
+		loc := rePassMd5.FindString(html)
+		if loc == "" {
+			lastErr = fmt.Errorf("pass_md5 tidak ditemukan di %s", embedURL)
+			continue
+		}
+
+		passMd5URL := domain + loc
+		passHeaders := map[string]string{
+			"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+			"Referer":    embedURL,
+		}
+
+		passResp, err := httpx.Do(ctx, "GET", passMd5URL, nil, 15*time.Second, passHeaders)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		tokenBytes, _ := io.ReadAll(passResp.Body)
+		passResp.Body.Close()
+
+		tokenBase := strings.TrimSpace(string(tokenBytes))
+		if tokenBase == "" {
+			lastErr = fmt.Errorf("token base kosong dari %s", passMd5URL)
+			continue
+		}
+
+		randStr := randomString(10)
+		tokenKey := loc[strings.LastIndex(loc, "/")+1:]
+		expiry := time.Now().UnixNano() / int64(time.Millisecond)
+
+		streamURL := fmt.Sprintf("%s%s?token=%s&expiry=%d", tokenBase, randStr, tokenKey, expiry)
+
+		return &Result{
+			Title:  fmt.Sprintf("DoodStream Video (%s)", id),
+			Source: "doodstream",
+			Medias: []Media{
+				{
+					Type:  "video",
+					URL:   streamURL,
+					Ext:   "mp4",
+					Label: "DoodStream Video MP4",
+				},
+			},
+		}, nil
+	}
+
+	fallbackURL := "https://9xbuddy.com/process?url=" + url.QueryEscape(rawURL)
+	return &Result{
+		Title:  "DoodStream Video",
+		Source: "9xbuddy",
+		Medias: []Media{
+			{
+				Type:  "video",
+				URL:   fallbackURL,
+				Ext:   "mp4",
+				Label: "DoodStream Web Link",
+			},
+		},
+	}, lastErr
+}
+
+func randomString(n int) string {
+	const letters = "abcdefghijklmnopqrstuvwxyz0123456789"
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = letters[len(letters)%10] // safe dummy
+	}
+	return string(b)
+}
+

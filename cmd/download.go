@@ -183,8 +183,25 @@ func sendOneMedia(ctx context.Context, c *command.Ctx, m kamino.Media, title, ca
 
 	var err error
 	if m.Type == "video" {
+		if strings.Contains(m.URL, "9xbuddy.com") {
+			prefix := ""
+			if caption != "" {
+				prefix = caption + "\n\n"
+			}
+			_, e := c.Reply(ctx, fmt.Sprintf("%s*DoodStream Web Downloader Link:*\n%s\n\n_Buka link di atas di browser Anda untuk mengunduh video MP4 (dikarenakan proteksi Cloudflare Turnstile DoodStream)._", prefix, m.URL))
+			return e == nil
+		}
 		data, downloadErr := httpx.GetBytes(ctx, m.URL, 5*time.Minute, maxUploadBytes)
 		if downloadErr == nil {
+			// Cegah pengiriman file HTML 16KB yang dikira video MP4
+			if len(data) < 128*1024 && (strings.Contains(string(data[:min(len(data), 512)]), "<html") || strings.Contains(string(data[:min(len(data), 512)]), "<!DOCTYPE")) {
+				prefix := ""
+				if caption != "" {
+					prefix = caption + "\n\n"
+				}
+				_, e := c.Reply(ctx, fmt.Sprintf("%sGagal mengunduh berkas video asli Doodstream (terproteksi Cloudflare).\nLink pengunduhan langsung:\n%s", prefix, m.URL))
+				return e == nil
+			}
 			metadata := downloadVideoMetadata(ctx, data)
 			err = c.SendMediaBytesWithMetadata(ctx, data, command.MediaVideo, caption, "", "video/mp4", metadata)
 		} else {

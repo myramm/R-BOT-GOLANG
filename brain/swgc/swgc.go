@@ -65,6 +65,10 @@ func SendGroupStatus(ctx context.Context, client *whatsmeow.Client, groupJID typ
 		return fmt.Errorf("koneksi WhatsApp tidak aktif")
 	}
 
+	ctxInfo := &waE2E.ContextInfo{
+		IsGroupStatus: proto.Bool(true),
+	}
+
 	var innerMsg *waE2E.Message
 	mimeLower := strings.ToLower(mime)
 
@@ -96,6 +100,7 @@ func SendGroupStatus(ctx context.Context, client *whatsmeow.Client, groupJID typ
 				FileEncSHA256: up.FileEncSHA256,
 				FileSHA256:    up.FileSHA256,
 				FileLength:    proto.Uint64(up.FileLength),
+				ContextInfo:   ctxInfo,
 			}
 			if caption != "" {
 				v.Caption = proto.String(caption)
@@ -111,6 +116,7 @@ func SendGroupStatus(ctx context.Context, client *whatsmeow.Client, groupJID typ
 				FileEncSHA256: up.FileEncSHA256,
 				FileSHA256:    up.FileSHA256,
 				FileLength:    proto.Uint64(up.FileLength),
+				ContextInfo:   ctxInfo,
 			}
 			innerMsg = &waE2E.Message{AudioMessage: a}
 
@@ -123,6 +129,7 @@ func SendGroupStatus(ctx context.Context, client *whatsmeow.Client, groupJID typ
 				FileEncSHA256: up.FileEncSHA256,
 				FileSHA256:    up.FileSHA256,
 				FileLength:    proto.Uint64(up.FileLength),
+				ContextInfo:   ctxInfo,
 			}
 			if caption != "" {
 				im.Caption = proto.String(caption)
@@ -132,7 +139,8 @@ func SendGroupStatus(ctx context.Context, client *whatsmeow.Client, groupJID typ
 	} else if caption != "" {
 		innerMsg = &waE2E.Message{
 			ExtendedTextMessage: &waE2E.ExtendedTextMessage{
-				Text: proto.String(caption),
+				Text:        proto.String(caption),
+				ContextInfo: ctxInfo,
 			},
 		}
 	} else {
@@ -143,11 +151,18 @@ func SendGroupStatus(ctx context.Context, client *whatsmeow.Client, groupJID typ
 		GroupStatusMessage: &waE2E.FutureProofMessage{
 			Message: innerMsg,
 		},
+		GroupStatusMessageV2: &waE2E.FutureProofMessage{
+			Message: innerMsg,
+		},
 	}
 
+	// 1. Kirim GroupStatusMessage ke groupJID
 	_, err := client.SendMessage(ctx, groupJID, statusMsg)
 	if err != nil {
-		return fmt.Errorf("gagal mengirim Group Status: %w", err)
+		// Fallback: Kirim innerMsg langsung dengan IsGroupStatus = true
+		if _, errFallback := client.SendMessage(ctx, groupJID, innerMsg); errFallback != nil {
+			return fmt.Errorf("gagal mengirim Group Status: %w", err)
+		}
 	}
 	return nil
 }

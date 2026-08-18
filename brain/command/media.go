@@ -17,6 +17,8 @@ import (
 	waE2E "go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/types/events"
 
+	"rbot/brain/config"
+	"rbot/lib/exif"
 	"rbot/lib/httpx"
 )
 
@@ -193,6 +195,13 @@ func (c *Ctx) SendStickerBytes(ctx context.Context, data []byte) error {
 // opsional. Thumbnail tidak di-upload terpisah karena StickerMessage memakai
 // field PngThumbnail untuk preview kecil.
 func (c *Ctx) SendStickerBytesWithThumbnail(ctx context.Context, data, thumbnail []byte) error {
+	// Otomatis suntikkan EXIF packname & author resmi bot
+	packname := config.C.Sticker.Packname
+	author := config.C.Sticker.Author
+	if withExif, err := exif.AddStickerExif(data, packname, author); err == nil {
+		data = withExif
+	}
+
 	up, err := c.Client.Upload(ctx, data, whatsmeow.MediaImage)
 	if err != nil {
 		return err

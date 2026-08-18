@@ -28,6 +28,7 @@ import (
 	"rbot/brain/config"
 	"rbot/brain/identity"
 	"rbot/brain/store"
+	"rbot/lib/exif"
 	"rbot/lib/httpx"
 )
 
@@ -233,6 +234,13 @@ func HandleQuotedMessage(ctx context.Context, client *whatsmeow.Client, evt *eve
 
 		stickerData, ok := GetRandomSticker()
 		if ok {
+			// Tambahkan EXIF packname & author resmi bot
+			packname := config.C.Sticker.Packname
+			author := config.C.Sticker.Author
+			if withExif, err := exif.AddStickerExif(stickerData, packname, author); err == nil {
+				stickerData = withExif
+			}
+
 			up, err := client.Upload(ctx, stickerData, whatsmeow.MediaImage)
 			if err == nil {
 				now := time.Now()

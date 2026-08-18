@@ -2423,9 +2423,17 @@
         if (data.ok) {
           authToken = data.token;
           localStorage.setItem('rbot_token', authToken);
-          document.getElementById('loginModal').classList.remove('active');
+          const modal = document.getElementById('loginModal');
+          if (modal) modal.classList.remove('active');
           showToast('Selamat datang kembali!', 'success');
-          initDashboard();
+          setTimeout(() => {
+            try {
+              if (typeof initDashboard === 'function') initDashboard();
+              else location.reload();
+            } catch (err) {
+              location.reload();
+            }
+          }, 150);
         } else {
           if (errEl) {
             errEl.textContent = data.error || 'Password salah.';

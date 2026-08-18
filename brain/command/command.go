@@ -470,19 +470,25 @@ func Dispatch(ctx context.Context, client *whatsmeow.Client, evt *events.Message
 	if c.IsGroup() {
 		groupID := c.Chat().String()
 		isOwner := IsOwner(evt)
-		isAdmin := false
-		if !isOwner && IsGroupAdminHook != nil {
-			isAdmin = IsGroupAdminHook(ctx, client, evt)
+
+		// Cek Mute GC (Bot di-mute total di grup ini)
+		// Saat grup di-mute, SEMUA command di grup diabaikan total,
+		// KECUALI command "mute" (.unmute / .unmutegc / .unbangc) yang hanya bisa dieksekusi Admin/Owner.
+		if settings.IsGroupMuted(groupID) {
+			if cmd.Name != "mute" {
+				return
+			}
 		}
 
-		// Cek Mute GC (bot admin-only mode di grup)
-		if settings.IsGroupMuted(groupID) && !isOwner && !isAdmin {
-			return
-		}
-
-		// Cek Ban User khusus di grup ini (User di-ban di grup ini oleh Admin/Owner)
-		if settings.IsUserBannedInGroup(groupID, cands) && !isOwner && !isAdmin {
-			return
+		// Cek Ban User khusus di grup ini (User yang di-ban tidak bisa memakai bot di grup ini)
+		if settings.IsUserBannedInGroup(groupID, cands) && !isOwner {
+			isAdmin := false
+			if IsGroupAdminHook != nil {
+				isAdmin = IsGroupAdminHook(ctx, client, evt)
+			}
+			if !isAdmin {
+				return
+			}
 		}
 	}
 

@@ -75,6 +75,6 @@ func muteGCHandler(ctx context.Context, c *command.Ctx) error {
 	if isAdmin && !isOwner {
 		roleStr = "Admin Grup"
 	}
-	_, err := c.Reply(ctx, "🔇 *Bot Berhasil Di-mute di Grup Ini!*\n\nOleh: *"+roleStr+"*\nAnggota biasa tidak dapat menggunakan perintah bot.\nHanya *Admin Grup* dan *Owner Bot* yang dapat menggunakan bot.")
+	_, err := c.Reply(ctx, "🔇 *Bot Berhasil Di-mute di Grup Ini!*\n\nOleh: *"+roleStr+"*\nBot di-mute total di grup ini dan tidak akan merespon perintah (.p, dll) sampai di-unmute (`.unmute`) oleh Admin Grup atau Owner Bot.")
 	return err
 }

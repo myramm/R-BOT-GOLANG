@@ -1097,13 +1097,12 @@
             <table>
               <thead>
                 <tr>
-                  <th>User ID / Nomor</th>
-                  <th>Status Blacklist</th>
+                  <th>User & Status Blacklist</th>
                   <th style="text-align: right;">Aksi</th>
                 </tr>
               </thead>
               <tbody id="blacklistTableBody">
-                <tr><td colspan="3" style="text-align: center; color: var(--text-muted); padding: 1rem;">Memuat daftar blacklist...</td></tr>
+                <tr><td colspan="2" style="text-align: center; color: var(--text-muted); padding: 1rem;">Memuat daftar blacklist...</td></tr>
               </tbody>
             </table>
           </div>
@@ -1869,7 +1868,7 @@
     async function loadBlacklistWeb() {
       const tbody = document.getElementById('blacklistTableBody');
       if (!tbody) return;
-      tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; color: var(--text-muted); padding: 1rem;">Memuat daftar blacklist...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="2" style="text-align: center; color: var(--text-muted); padding: 1rem;">Memuat daftar blacklist...</td></tr>';
 
       try {
         const res = await fetch('/api/blacklist', {
@@ -1877,7 +1876,7 @@
         });
         const data = await res.json();
         if (!data.ok || !data.blacklist || data.blacklist.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; color: var(--text-muted); padding: 1rem;">Belum ada user yang di-blacklist secara global.</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="2" style="text-align: center; color: var(--text-muted); padding: 1rem;">Belum ada user yang di-blacklist secara global.</td></tr>';
           return;
         }
 
@@ -1889,22 +1888,22 @@
           const lidVal = item.lid || '';
           return `
           <tr>
-            <td style="font-family: var(--font-mono); font-weight: 600; padding: 0.75rem 1rem; vertical-align: middle;">
-              <div style="display: flex; flex-direction: column; gap: 0.25rem;">
-                <div style="font-size: 0.95rem; color: var(--text-main);">${item.phone}</div>
+            <td style="padding: 0.75rem 1rem; vertical-align: middle;">
+              <div style="display: flex; flex-direction: column; gap: 0.35rem;">
+                <div style="display: flex; align-items: center; gap: 0.6rem; font-family: var(--font-mono); font-weight: 600;">
+                  <span style="font-size: 0.95rem; color: var(--text-main);">${item.phone}</span>
+                  <span style="color: var(--danger); font-weight: 600; font-size: 0.85rem; background: rgba(239, 68, 68, 0.12); padding: 0.15rem 0.5rem; border-radius: 4px;">⛔ Blacklisted (100%)</span>
+                </div>
                 ${lidVal ? `
                   <div onclick="toggleLidSpoiler(this)" 
-                       style="cursor: pointer; user-select: none; font-size: 0.8rem; font-family: var(--font-mono); color: var(--text-muted); display: inline-flex; align-items: center; gap: 0.35rem; width: fit-content;" 
+                       style="cursor: pointer; user-select: none; font-size: 0.82rem; font-family: var(--font-mono); color: var(--text-muted); display: inline-flex; align-items: center; gap: 0.4rem; width: fit-content;" 
                        title="Klik untuk membuka LID">
-                    <span class="lid-stars" style="background: rgba(255,255,255,0.08); padding: 0.1rem 0.4rem; border-radius: 4px; letter-spacing: 2px; font-weight: bold; color: var(--text-muted);">******</span>
-                    <span class="lid-val" style="display: none; background: rgba(255,255,255,0.12); padding: 0.1rem 0.4rem; border-radius: 4px; color: var(--text-main); font-weight: 600;">${lidVal}</span>
-                    <span style="font-size: 0.7rem; color: var(--text-sub); opacity: 0.7;">(LID)</span>
+                    <span class="lid-stars" style="background: rgba(255,255,255,0.08); padding: 0.15rem 0.5rem; border-radius: 4px; letter-spacing: 3px; font-weight: bold; color: var(--text-muted);">******</span>
+                    <span class="lid-val" style="display: none; background: rgba(255,255,255,0.12); padding: 0.15rem 0.5rem; border-radius: 4px; color: var(--text-main); font-weight: 600;">${lidVal}</span>
+                    <span style="font-size: 0.72rem; color: var(--text-sub); opacity: 0.7;">(LID)</span>
                   </div>
                 ` : ''}
               </div>
-            </td>
-            <td style="padding: 0.75rem 1rem; vertical-align: middle;">
-              <span style="color: var(--danger); font-weight: 600;">⛔ Blacklisted (100%)</span>
             </td>
             <td style="text-align: right; vertical-align: middle; padding: 0.75rem 1rem;">
               <button class="btn btn-secondary btn-sm" onclick="toggleBlacklistGrouped('${idsAttr}', false)">✅ Unblacklist</button>
@@ -1913,7 +1912,7 @@
         `;
         }).join('');
       } catch (err) {
-        tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: var(--danger); padding: 1rem;">❌ Error: ${err.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="2" style="text-align: center; color: var(--danger); padding: 1rem;">❌ Error: ${err.message}</td></tr>`;
       }
     }
 

@@ -1366,6 +1366,28 @@
           <button id="groupMsgSubmitBtn" class="btn btn-primary" onclick="submitGroupMsgForm()">💬 Kirim Pesan ke Grup</button>
         </div>
       </div>
+
+      <!-- CARD 3: MODERASI MUTE / UNMUTE GRUP (ADMIN ONLY MODE) -->
+      <div class="card" style="max-width: 720px; margin: 1.5rem auto 0 auto; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.5rem;">
+        <h3 style="font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin: 0 0 0.5rem 0;">🔇 Group Mute / Admin-Only Control (Owner Web)</h3>
+        <p style="color: var(--text-sub); font-size: 0.825rem; margin: 0 0 1rem 0;">Mute atau unmute grup secara instan dari Web Dashboard agar bot hanya bisa merespon Admin Grup & Owner di grup tersebut.</p>
+
+        <div class="table-responsive">
+          <table class="table" style="width: 100%;">
+            <thead>
+              <tr>
+                <th>Nama Grup</th>
+                <th>Anggota</th>
+                <th>Status Mute</th>
+                <th style="text-align: right;">Aksi Mute</th>
+              </tr>
+            </thead>
+            <tbody id="groupMuteTableBody">
+              <tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 1rem;">Memuat daftar grup...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </section>
 
   </div>
@@ -1728,9 +1750,11 @@
     async function loadSWGCGroups() {
       const select1 = document.getElementById('swgcGroupSelect');
       const select2 = document.getElementById('groupMsgSelect');
+      const muteTbody = document.getElementById('groupMuteTableBody');
       const loadingHTML = '<option value="">⏳ Memuat daftar grup...</option>';
       if (select1) select1.innerHTML = loadingHTML;
       if (select2) select2.innerHTML = loadingHTML;
+      if (muteTbody) muteTbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 1rem;">Memuat daftar grup...</td></tr>';
 
       try {
         const res = await fetch('/api/swgc/groups', {
@@ -1741,21 +1765,72 @@
           const errHTML = `<option value="">❌ ${data.error || 'Gagal memuat grup'}</option>`;
           if (select1) select1.innerHTML = errHTML;
           if (select2) select2.innerHTML = errHTML;
+          if (muteTbody) muteTbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--danger); padding: 1rem;">❌ ${data.error || 'Gagal memuat grup'}</td></tr>`;
           return;
         }
         if (!data.groups || data.groups.length === 0) {
           const emptyHTML = '<option value="">⚠️ Bot tidak berada di grup manapun</option>';
           if (select1) select1.innerHTML = emptyHTML;
           if (select2) select2.innerHTML = emptyHTML;
+          if (muteTbody) muteTbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 1rem;">Bot tidak berada di grup manapun.</td></tr>';
           return;
         }
         const optionsHTML = data.groups.map(g => `<option value="${g.jid}">${g.name} (${g.participants} anggota${g.isAnnounce ? ' | Hanya Admin' : ''})</option>`).join('');
         if (select1) select1.innerHTML = optionsHTML;
         if (select2) select2.innerHTML = optionsHTML;
+
+        renderGroupMuteTable(data.groups);
       } catch (err) {
         const errHTML = `<option value="">❌ Error: ${err.message}</option>`;
         if (select1) select1.innerHTML = errHTML;
         if (select2) select2.innerHTML = errHTML;
+        if (muteTbody) muteTbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--danger); padding: 1rem;">❌ Error: ${err.message}</td></tr>`;
+      }
+    }
+
+    function renderGroupMuteTable(groups) {
+      const tbody = document.getElementById('groupMuteTableBody');
+      if (!tbody) return;
+
+      tbody.innerHTML = groups.map(g => {
+        const statusBadge = g.isMuted 
+          ? `<span style="color: var(--danger); font-weight: 600;">🔇 Muted (Admin Only)</span>`
+          : `<span style="color: var(--success); font-weight: 600;">🔊 Normal (Semua Member)</span>`;
+
+        const btn = g.isMuted
+          ? `<button class="btn btn-secondary btn-sm" onclick="toggleGroupMute('${g.jid}', false)">🔊 Unmute</button>`
+          : `<button class="btn btn-danger btn-sm" onclick="toggleGroupMute('${g.jid}', true)">🔇 Mute GC</button>`;
+
+        return `
+          <tr>
+            <td style="font-weight: 600;">${g.name}</td>
+            <td>${g.participants} member</td>
+            <td>${statusBadge}</td>
+            <td style="text-align: right;">${btn}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function toggleGroupMute(jid, mute) {
+      try {
+        const res = await fetch('/api/group/mute', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + authToken
+          },
+          body: JSON.stringify({ jid: jid, muted: mute })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast(mute ? 'Grup berhasil di-mute (Admin-Only Mode)' : 'Grup berhasil di-unmute', 'success');
+          loadSWGCGroups();
+        } else {
+          showToast('Gagal mengubah status mute: ' + (data.error || 'Unknown error'), 'danger');
+        }
+      } catch (err) {
+        showToast('Error koneksi: ' + err.message, 'danger');
       }
     }
 

@@ -22,6 +22,7 @@ import (
 	"rbot/brain/energy"
 	"rbot/brain/identity"
 	"rbot/brain/premium"
+	"rbot/brain/settings"
 	"rbot/brain/sponsor"
 )
 
@@ -309,6 +310,8 @@ var (
 	KlaimRewardHook func(ctx context.Context, client *whatsmeow.Client, evt *events.Message)
 	// ResumeHook: lanjutkan sesi interaktif untuk pesan tanpa prefix.
 	ResumeHook func(ctx context.Context, client *whatsmeow.Client, evt *events.Message, text string)
+	// IsGroupAdminHook: true bila pengirim pesan admin di grup.
+	IsGroupAdminHook func(ctx context.Context, client *whatsmeow.Client, evt *events.Message) bool
 	// StatsHook: catat statistik pemakaian command.
 	StatsHook func(cmdName string, evt *events.Message)
 	// ErrorHook menerima error command/panic agar runtime dapat meneruskannya
@@ -455,6 +458,20 @@ func Dispatch(ctx context.Context, client *whatsmeow.Client, evt *events.Message
 	}
 
 	c := &Ctx{Client: client, Evt: evt, Args: args, Text: text, InvokedAs: key, SubBot: subBot}
+
+	// Cek Group Mute / Ban GC (kecuali Owner Bot atau Admin Grup)
+	if c.IsGroup() && settings.IsGroupMuted(c.Chat().String()) {
+		isOwner := IsOwner(evt)
+		isAdmin := false
+		if !isOwner && IsGroupAdminHook != nil {
+			isAdmin = IsGroupAdminHook(ctx, client, evt)
+		}
+
+		// Jika bukan owner & bukan admin grup: abaikan command (bot di-mute untuk member biasa)
+		if !isOwner && !isAdmin {
+			return
+		}
+	}
 
 	// Member grup official bayar energi lebih murah. Dicek sekali per command.
 	member := !subBot && !config.C.Energy.IsUnlimited() && heavyCommands[cmd.Name] &&

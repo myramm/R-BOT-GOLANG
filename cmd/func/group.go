@@ -8,11 +8,27 @@ import (
 	"context"
 	"strings"
 
+	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/types"
+	"go.mau.fi/whatsmeow/types/events"
 
 	"rbot/brain/command"
 	"rbot/brain/config"
 )
+
+func init() {
+	command.IsGroupAdminHook = func(ctx context.Context, client *whatsmeow.Client, evt *events.Message) bool {
+		if evt == nil || !evt.Info.IsGroup {
+			return false
+		}
+		c := &command.Ctx{Client: client, Evt: evt}
+		info, err := client.GetGroupInfo(ctx, evt.Info.Chat)
+		if err != nil {
+			return false
+		}
+		return SenderIsAdmin(c, info)
+	}
+}
 
 // AdminGate adalah hasil pengecekan konteks admin grup.
 type AdminGate struct {

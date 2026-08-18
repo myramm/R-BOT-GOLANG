@@ -468,6 +468,7 @@ func Start(ctx context.Context) {
 	mux.HandleFunc("/api/swgc/groups", handleSWGCGroups)
 	mux.HandleFunc("/api/swgc/send", handleSWGCSend)
 	mux.HandleFunc("/api/group/send-message", handleGroupSendMessage)
+	mux.HandleFunc("/api/group/mute", handleGroupMute)
 
 	// WebSockets
 	mux.HandleFunc("/ws/metrics", handleMetricsWS)
@@ -1156,6 +1157,7 @@ func handleSWGCGroups(w http.ResponseWriter, r *http.Request) {
 		Name         string `json:"name"`
 		Participants int    `json:"participants"`
 		IsAnnounce   bool   `json:"isAnnounce"`
+		IsMuted      bool   `json:"isMuted"`
 	}
 
 	list := make([]groupInfo, 0, len(groups))
@@ -1169,6 +1171,7 @@ func handleSWGCGroups(w http.ResponseWriter, r *http.Request) {
 			Name:         name,
 			Participants: len(g.Participants),
 			IsAnnounce:   g.IsAnnounce,
+			IsMuted:      settings.IsGroupMuted(g.JID.String()),
 		})
 	}
 
@@ -1430,6 +1433,46 @@ func handleGroupSendMessage(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"ok":      true,
 		"message": fmt.Sprintf("✅ Berhasil mengirim pesan ke grup %s!", targetJIDRaw),
+	})
+}
+
+func handleGroupMute(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		JID   string `json:"jid"`
+		Muted bool   `json:"muted"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.JID == "" {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	if err := settings.SetGroupMuted(req.JID, req.Muted); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	act := "MUTE"
+	if !req.Muted {
+		act = "UNMUTE"
+	}
+	RecordAudit(r, "GROUP_MUTE", fmt.Sprintf("%s grup %s via Web Dashboard", act, req.JID))
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":    true,
+		"jid":   req.JID,
+		"muted": req.Muted,
 	})
 }
 

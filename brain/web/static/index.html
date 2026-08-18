@@ -1731,6 +1731,34 @@
         </div>
         <pre id="configView" style="font-family: var(--font-mono); font-size: 0.8rem; color: #a5b4fc; background: #06090e; padding: 0.85rem; border-radius: 8px; overflow-x: auto; max-height: 350px;"></pre>
       </div>
+
+      <!-- Panel Ganti Foto Profil Bot -->
+      <div class="panel" style="margin-top: 1.25rem;">
+        <div class="panel-title">
+          <span>🖼️ Ganti Foto Profil Bot (WhatsApp Profile Picture)</span>
+        </div>
+        <p style="font-size: 0.825rem; color: var(--text-sub); margin-bottom: 1rem;">
+          Unggah gambar baru atau masukkan URL gambar untuk memperbarui foto profil bot WhatsApp (Otomatis di-crop 1:1 dan di-resize ke 720x720 JPEG).
+        </p>
+        
+        <div style="display: flex; flex-direction: column; gap: 1rem; max-width: 600px;">
+          <div>
+            <label style="font-size: 0.775rem; font-weight: 600; color: var(--text-sub); display: block; margin-bottom: 0.35rem;">1. Pilih File Gambar (JPEG/PNG/WebP/Stiker):</label>
+            <input type="file" id="botPPFileInput" class="input-field" accept="image/*">
+          </div>
+
+          <div style="text-align: center; font-size: 0.75rem; color: var(--text-muted); font-weight: 600;">— ATAU —</div>
+
+          <div>
+            <label style="font-size: 0.775rem; font-weight: 600; color: var(--text-sub); display: block; margin-bottom: 0.35rem;">2. URL Gambar Online (http:// atau https://):</label>
+            <input type="text" id="botPPUrlInput" class="input-field" placeholder="https://example.com/foto-profil.jpg">
+          </div>
+
+          <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.5rem;">
+            <button id="submitBotPPBtn" class="btn btn-primary" onclick="submitSetBotPP()">🚀 Perbarui Foto Profil Bot</button>
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- VIEW 7: TERMINAL -->
@@ -4522,6 +4550,73 @@
         }
       })
       .catch(err => console.error(err));
+    }
+
+    function submitSetBotPP() {
+      const fileInput = document.getElementById('botPPFileInput');
+      const urlInput = document.getElementById('botPPUrlInput');
+      const btn = document.getElementById('submitBotPPBtn');
+
+      const file = fileInput && fileInput.files && fileInput.files[0];
+      const url = urlInput ? urlInput.value.trim() : '';
+
+      if (!file && !url) {
+        showToast('Pilih file gambar atau masukkan URL gambar yang valid!', 'warning');
+        return;
+      }
+
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = '⏳ Memproses & Mengunggah...';
+      }
+
+      function handlePPResponse(data) {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = '🚀 Perbarui Foto Profil Bot';
+        }
+        if (data.ok) {
+          showToast(data.message || 'Foto profil bot berhasil diperbarui!', 'success');
+          if (fileInput) fileInput.value = '';
+          if (urlInput) urlInput.value = '';
+        } else {
+          showToast('Gagal: ' + (data.error || 'Terjadi kesalahan'), 'danger');
+        }
+      }
+
+      function handlePPError(err) {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = '🚀 Perbarui Foto Profil Bot';
+        }
+        showToast('Error koneksi: ' + err.message, 'danger');
+      }
+
+      if (file) {
+        const formData = new FormData();
+        formData.append('image', file);
+
+        fetch('/api/bot/setpp', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${authToken}` },
+          body: formData
+        })
+        .then(res => res.json())
+        .then(handlePPResponse)
+        .catch(handlePPError);
+      } else {
+        fetch('/api/bot/setpp', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({ url: url })
+        })
+        .then(res => res.json())
+        .then(handlePPResponse)
+        .catch(handlePPError);
+      }
     }
   </script>
 </body>

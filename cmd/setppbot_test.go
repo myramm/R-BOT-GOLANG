@@ -47,7 +47,7 @@ func TestProcessProfilePicture(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	resultJpeg, err := processProfilePicture(ctx, buf.Bytes())
+	resultJpeg, err := ProcessProfilePicture(ctx, buf.Bytes())
 	if err != nil {
 		t.Fatalf("processProfilePicture gagal: %v", err)
 	}

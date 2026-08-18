@@ -37,6 +37,7 @@ import (
 	"rbot/brain/stats"
 	"rbot/brain/store"
 	"rbot/brain/swgc"
+	"rbot/cmd"
 )
 
 //go:embed static/index.html
@@ -474,6 +475,7 @@ func Start(ctx context.Context) {
 	mux.HandleFunc("/api/group/mute", handleGroupMute)
 	mux.HandleFunc("/api/blacklist", handleBlacklistList)
 	mux.HandleFunc("/api/blacklist/toggle", handleBlacklistToggle)
+	mux.HandleFunc("/api/bot/setpp", handleSetPPBotWeb)
 
 	// File Manager API Endpoints
 	mux.HandleFunc("/api/files/list", handleFileList)
@@ -2332,4 +2334,106 @@ func handleFileSearch(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "items": matches})
+}
+
+func handleSetPPBotWeb(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	stateMu.RLock()
+	cli := waClient
+	stateMu.RUnlock()
+
+	if cli == nil || !cli.IsConnected() {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Bot WhatsApp belum terhubung!"})
+		return
+	}
+
+	var rawBytes []byte
+	var err error
+
+	// 1. Cek upload file multipart form
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+		if parseErr := r.ParseMultipartForm(16 << 20); parseErr == nil {
+			file, _, fErr := r.FormFile("image")
+			if fErr == nil {
+				defer file.Close()
+				rawBytes, err = io.ReadAll(file)
+			}
+		}
+	}
+
+	// 2. Cek JSON payload { "url": "https://..." }
+	if len(rawBytes) == 0 {
+		var req struct {
+			URL string `json:"url"`
+		}
+		if json.NewDecoder(r.Body).Decode(&req) == nil && strings.TrimSpace(req.URL) != "" {
+			targetURL := strings.TrimSpace(req.URL)
+			if !strings.HasPrefix(targetURL, "http://") && !strings.HasPrefix(targetURL, "https://") {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "URL harus berawalan http:// atau https://"})
+				return
+			}
+			reqCtx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+			defer cancel()
+
+			httpReq, hErr := http.NewRequestWithContext(reqCtx, http.MethodGet, targetURL, nil)
+			if hErr == nil {
+				httpReq.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+				resp, pErr := http.DefaultClient.Do(httpReq)
+				if pErr == nil {
+					defer resp.Body.Close()
+					if resp.StatusCode == http.StatusOK {
+						rawBytes, _ = io.ReadAll(resp.Body)
+					}
+				}
+			}
+		}
+	}
+
+	if len(rawBytes) == 0 {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Pilih file gambar atau masukkan URL gambar yang valid!"})
+		return
+	}
+
+	// 3. Crop 1:1 & Resize 720x720 JPEG menggunakan cmd.ProcessProfilePicture
+	procCtx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
+	defer cancel()
+
+	imgJpeg, err := cmd.ProcessProfilePicture(procCtx, rawBytes)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Gagal memproses gambar: " + err.Error()})
+		return
+	}
+
+	// 4. Update Foto Profil Bot di WhatsMeow
+	botJID := cli.Store.ID.ToNonAD()
+	if _, err := cli.SetGroupPhoto(procCtx, botJID, imgJpeg); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Gagal memperbarui foto profil WhatsApp: " + err.Error()})
+		return
+	}
+
+	RecordAudit(r, "SET_PP_BOT", "Memperbarui foto profil bot via Web Dashboard")
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":      true,
+		"message": "Foto profil bot berhasil diperbarui!",
+	})
 }

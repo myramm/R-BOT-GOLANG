@@ -73,7 +73,7 @@ func setppbotHandler(ctx context.Context, c *command.Ctx) error {
 	c.React(ctx, "⏳")
 
 	// 3. Proses Crop 1:1 & Resize ke 720x720 JPEG
-	imgJpeg, err := processProfilePicture(ctx, rawData)
+	imgJpeg, err := ProcessProfilePicture(ctx, rawData)
 	if err != nil {
 		c.React(ctx, "❌")
 		_, e := c.Reply(ctx, "❌ Gagal memproses gambar foto profil: "+err.Error())
@@ -130,7 +130,7 @@ func fetchImageFromURL(ctx context.Context, urlStr string) ([]byte, error) {
 	return io.ReadAll(io.LimitReader(resp.Body, 15*1024*1024))
 }
 
-func processProfilePicture(ctx context.Context, data []byte) ([]byte, error) {
+func ProcessProfilePicture(ctx context.Context, data []byte) ([]byte, error) {
 	src, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
 		// Jika decode bawaan (image/png, image/jpeg, image/webp) gagal, coba konversi stiker via ffmpeg

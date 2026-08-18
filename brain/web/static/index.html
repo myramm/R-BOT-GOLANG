@@ -1305,7 +1305,7 @@
         <div style="margin-bottom: 1rem;">
           <input type="password" id="loginPassword" class="input-field" placeholder="Password admin..." required autofocus style="padding: 0.65rem 0.85rem;" onkeydown="if(event.key==='Enter'){handleLogin(event);}">
         </div>
-        <button type="button" class="btn btn-primary" onclick="handleLogin(event)" style="width: 100%; padding: 0.65rem;">Masuk</button>
+        <button type="button" id="loginSubmitBtn" class="btn btn-primary" onclick="handleLogin(event)" style="width: 100%; padding: 0.65rem;">Masuk</button>
         <div id="loginError" style="color: var(--danger); font-size: 0.775rem; margin-top: 0.65rem; display: none; text-align: center;"></div>
       </form>
     </div>
@@ -2367,6 +2367,10 @@
 
     document.addEventListener('DOMContentLoaded', () => {
       checkAuth();
+      const loginBtn = document.getElementById('loginSubmitBtn');
+      if (loginBtn) loginBtn.addEventListener('click', handleLogin);
+      const loginForm = document.getElementById('loginForm');
+      if (loginForm) loginForm.addEventListener('submit', handleLogin);
     });
 
     function showToast(msg, type = 'info') {

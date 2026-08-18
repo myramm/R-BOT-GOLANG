@@ -19,6 +19,7 @@ import (
 
 	"go.mau.fi/whatsmeow"
 	waE2E "go.mau.fi/whatsmeow/proto/waE2E"
+	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 
 	"rbot/brain/command"
@@ -235,6 +236,12 @@ func HandleQuotedMessage(ctx context.Context, client *whatsmeow.Client, evt *eve
 	if text == "" {
 		return false
 	}
+
+	// Tampilkan status "sedang mengetik..." di chat
+	_ = client.SendChatPresence(ctx, evt.Info.Chat, types.ChatPresenceComposing, types.ChatPresenceMediaText)
+	defer func() {
+		_ = client.SendChatPresence(context.Background(), evt.Info.Chat, types.ChatPresencePaused, types.ChatPresenceMediaText)
+	}()
 
 	reply, err := AskSimi(ctx, text)
 	if err != nil || strings.TrimSpace(reply) == "" {

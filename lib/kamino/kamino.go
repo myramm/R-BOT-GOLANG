@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"rbot/brain/config"
+	"rbot/lib/doodstream"
 	"rbot/lib/httpx"
 )
 
@@ -55,6 +56,7 @@ var detectPatterns = []struct {
 	{"pinterest", regexp.MustCompile(`(?i)pinterest\.[a-z.]+|pin\.it`)},
 	{"youtube", regexp.MustCompile(`(?i)youtube\.com|youtu\.be`)},
 	{"spotify", regexp.MustCompile(`(?i)open\.spotify\.com|spotify\.link`)},
+	{"doodstream", regexp.MustCompile(`(?i)doodstream|dood|dso|ds2play|dood\.la|dood\.ws|dood\.so|dood\.pm|dood\.to|dood\.watch|dood\.wf|dood\.re`)},
 }
 
 // Detect mengembalikan nama platform dari URL, atau "" bila tak dikenali.
@@ -355,6 +357,21 @@ func Resolve(ctx context.Context, rawURL, platform, arg string) (*Result, error)
 			src = "spotify"
 		}
 		return &Result{Title: title, Source: src, Medias: []Media{{Type: "audio", URL: d.URL, Ext: "mp3"}}}, nil
+
+	case "doodstream":
+		res, err := doodstream.Resolve(ctx, rawURL)
+		if err != nil {
+			return nil, err
+		}
+		return &Result{
+			Title:  res.Title,
+			Source: "DoodStream",
+			Medias: []Media{{
+				Type: "video",
+				URL:  res.DownloadURL,
+				Ext:  "mp4",
+			}},
+		}, nil
 
 	default:
 		var d genericResp

@@ -1,9 +1,12 @@
 package cmd
 
 import (
+	"context"
 	"testing"
 
 	"github.com/robertkrimen/otto"
+
+	"rbot/brain/command"
 )
 
 func TestOttoEval(t *testing.T) {
@@ -22,4 +25,29 @@ func TestOttoEval(t *testing.T) {
 	}
 
 	t.Logf("Otto JS eval result for '10 + 20': %d", result)
+}
+
+func TestDirectOwnerTriggers(t *testing.T) {
+	cmdEval := command.Resolve(">")
+	if cmdEval == nil {
+		t.Fatalf("Expected '>' command to be registered")
+	}
+
+	cmdExec := command.Resolve("#")
+	if cmdExec == nil {
+		t.Fatalf("Expected '#' command to be registered")
+	}
+
+	ctx := context.Background()
+	c := &command.Ctx{
+		Args:      []string{"1", "+", "1"},
+		Text:      "> 1 + 1",
+		InvokedAs: ">",
+	}
+
+	if c.ArgStr() != "1 + 1" {
+		t.Errorf("Expected ArgStr() '1 + 1', got %q", c.ArgStr())
+	}
+
+	_ = ctx
 }

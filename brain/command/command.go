@@ -398,23 +398,53 @@ func energiHabisMessage(evt *events.Message) string {
 func Dispatch(ctx context.Context, client *whatsmeow.Client, evt *events.Message, subBot bool) {
 	text := ExtractText(evt.Message)
 
+	var key string
+	var args []string
+	var cmd *Command
+
 	prefix := config.MatchPrefix(text)
 	if prefix == "" {
-		// Tanpa prefix: coba lanjutkan sesi interaktif (ada teks).
-		if text != "" && ResumeHook != nil {
-			ResumeHook(ctx, client, evt, text)
+		// Pesan tanpa prefix: Cek pemicu command owner langsung (#, $, >, =>)
+		trimmed := strings.TrimSpace(text)
+		if !subBot && IsOwner(evt) {
+			switch {
+			case strings.HasPrefix(trimmed, "=>"):
+				cmd = Resolve(">")
+				key = ">"
+				args = strings.Fields(strings.TrimSpace(trimmed[2:]))
+			case strings.HasPrefix(trimmed, ">"):
+				cmd = Resolve(">")
+				key = ">"
+				args = strings.Fields(strings.TrimSpace(trimmed[1:]))
+			case strings.HasPrefix(trimmed, "#"):
+				cmd = Resolve("#")
+				key = "#"
+				args = strings.Fields(strings.TrimSpace(trimmed[1:]))
+			case strings.HasPrefix(trimmed, "$"):
+				cmd = Resolve("$")
+				key = "$"
+				args = strings.Fields(strings.TrimSpace(trimmed[1:]))
+			}
 		}
-		return
-	}
-	rest := strings.TrimSpace(text[len(prefix):])
-	if rest == "" {
-		return
-	}
-	fields := strings.Fields(rest)
-	key := strings.ToLower(fields[0])
-	args := fields[1:]
 
-	cmd := Resolve(key)
+		if cmd == nil {
+			// Tanpa prefix: coba lanjutkan sesi interaktif (ada teks).
+			if text != "" && ResumeHook != nil {
+				ResumeHook(ctx, client, evt, text)
+			}
+			return
+		}
+	} else {
+		rest := strings.TrimSpace(text[len(prefix):])
+		if rest == "" {
+			return
+		}
+		fields := strings.Fields(rest)
+		key = strings.ToLower(fields[0])
+		args = fields[1:]
+		cmd = Resolve(key)
+	}
+
 	if cmd == nil {
 		return
 	}

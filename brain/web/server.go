@@ -1669,36 +1669,100 @@ type FileItemInfo struct {
 
 func getWorkspaceRoot() string {
 	wd, err := os.Getwd()
+	if err != nil || wd == "" {
+		wd = "."
+	}
+	abs, err := filepath.Abs(wd)
 	if err != nil {
+		abs = wd
+	}
+	realRoot, err := filepath.EvalSymlinks(abs)
+	if err == nil && realRoot != "" {
+		return filepath.Clean(realRoot)
+	}
+	return filepath.Clean(abs)
+}
+
+func getRawWorkspaceRoot() string {
+	wd, err := os.Getwd()
+	if err != nil || wd == "" {
 		return "."
 	}
-	return filepath.Clean(wd)
+	abs, err := filepath.Abs(wd)
+	if err != nil {
+		return filepath.Clean(wd)
+	}
+	return filepath.Clean(abs)
+}
+
+func expandTilde(p string) string {
+	if p == "~" || strings.HasPrefix(p, "~/") || strings.HasPrefix(p, "~\\") {
+		homeDir, err := os.UserHomeDir()
+		if err == nil && homeDir != "" {
+			if p == "~" {
+				return homeDir
+			}
+			return filepath.Join(homeDir, p[2:])
+		}
+	}
+	return p
 }
 
 func resolveSecurePath(subPath string) (string, error) {
-	root := getWorkspaceRoot()
-	cleaned := filepath.Clean(filepath.FromSlash(subPath))
-	if cleaned == "." || cleaned == "/" || cleaned == "\\" || cleaned == "" {
-		return root, nil
-	}
+	realRoot := getWorkspaceRoot()
+	rawRoot := getRawWorkspaceRoot()
 
-	if strings.Contains(cleaned, "\x00") {
+	if strings.Contains(subPath, "\x00") {
+		log.Printf("[rbot] [File API] Akses ditolak! Null byte terdeteksi di subPath: %q", subPath)
 		return "", errors.New("akses path ditolak: null byte terdeteksi")
 	}
 
-	fullPath := filepath.Clean(filepath.Join(root, cleaned))
+	trimmed := strings.TrimSpace(subPath)
+	expanded := expandTilde(trimmed)
+	cleaned := filepath.Clean(filepath.FromSlash(expanded))
 
-	evalPath, err := filepath.EvalSymlinks(fullPath)
-	if err == nil {
-		fullPath = evalPath
+	if cleaned == "." || cleaned == "" || cleaned == "/" || cleaned == "\\" {
+		return realRoot, nil
 	}
 
-	rel, err := filepath.Rel(root, fullPath)
-	if err != nil || strings.HasPrefix(rel, "..") || rel == ".." {
+	var targetCandidate string
+	if filepath.IsAbs(cleaned) {
+		targetCandidate = cleaned
+	} else {
+		targetCandidate = filepath.Join(realRoot, cleaned)
+	}
+
+	absTarget, err := filepath.Abs(targetCandidate)
+	if err != nil {
+		absTarget = targetCandidate
+	}
+
+	realTarget, err := filepath.EvalSymlinks(absTarget)
+	if err != nil {
+		parentDir := filepath.Dir(absTarget)
+		realParent, pErr := filepath.EvalSymlinks(parentDir)
+		if pErr == nil {
+			realTarget = filepath.Clean(filepath.Join(realParent, filepath.Base(absTarget)))
+		} else {
+			realTarget = filepath.Clean(absTarget)
+		}
+	} else {
+		realTarget = filepath.Clean(realTarget)
+	}
+
+	relReal, errReal := filepath.Rel(realRoot, realTarget)
+	insideReal := errReal == nil && relReal != ".." && !strings.HasPrefix(relReal, ".."+string(filepath.Separator)) && !strings.HasPrefix(relReal, "../")
+
+	relRaw, errRaw := filepath.Rel(rawRoot, absTarget)
+	insideRaw := errRaw == nil && relRaw != ".." && !strings.HasPrefix(relRaw, ".."+string(filepath.Separator)) && !strings.HasPrefix(relRaw, "../")
+
+	if !insideReal && !insideRaw {
+		log.Printf("[rbot] [File API] Akses path ditolak! Requested: %q | TargetCandidate: %q | RealTarget: %q | RealRoot: %q | RelReal: %q | RelRaw: %q",
+			subPath, targetCandidate, realTarget, realRoot, relReal, relRaw)
 		return "", errors.New("akses path ditolak: di luar workspace bot")
 	}
 
-	return fullPath, nil
+	return realTarget, nil
 }
 
 func handleFileList(w http.ResponseWriter, r *http.Request) {

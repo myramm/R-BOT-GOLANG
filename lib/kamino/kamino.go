@@ -56,7 +56,7 @@ var detectPatterns = []struct {
 	{"pinterest", regexp.MustCompile(`(?i)pinterest\.[a-z.]+|pin\.it`)},
 	{"youtube", regexp.MustCompile(`(?i)youtube\.com|youtu\.be`)},
 	{"spotify", regexp.MustCompile(`(?i)open\.spotify\.com|spotify\.link`)},
-	{"doodstream", regexp.MustCompile(`(?i)doodstream|dood|dso|ds2play|myvidplay|ds2video|do0od|dood\.la|dood\.ws|dood\.so|dood\.pm|dood\.to|dood\.watch|dood\.wf|dood\.re|dood\.video|dood\.work`)},
+	{"doodstream", regexp.MustCompile(`(?i)doodstream|dood|dso|ds2play|myvidplay|ds2video|do0od|d0000d|d000d|playmogo|dood\.la|dood\.ws|dood\.so|dood\.pm|dood\.to|dood\.watch|dood\.wf|dood\.re|dood\.video|dood\.work|dood\.sh|dood\.yt|dood\.cx`)},
 }
 
 // Detect mengembalikan nama platform dari URL, atau "" bila tak dikenali.

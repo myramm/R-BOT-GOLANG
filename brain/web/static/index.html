@@ -1079,6 +1079,35 @@
             </table>
           </div>
         </div>
+
+        <!-- GLOBAL BLACKLIST PANEL (OWNER CONTROL) -->
+        <div class="panel">
+          <div class="panel-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+            <span>⛔ Global Blacklist User (100% Blocked)</span>
+            <button class="btn btn-secondary btn-sm" onclick="loadBlacklistWeb()">🔄 Refresh</button>
+          </div>
+          <p style="color: var(--text-sub); font-size: 0.8rem; margin: 0 0 0.85rem 0;">User yang di-blacklist global sama sekali tidak bisa memakai bot di grup mana pun maupun di PM.</p>
+
+          <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+            <input type="text" id="addBlacklistInput" placeholder="Masukkan nomor HP (contoh: 628123456789)" class="form-input" style="flex: 1; padding: 0.4rem 0.75rem;">
+            <button class="btn btn-danger btn-sm" onclick="addBlacklistWeb()">⛔ Blacklist User</button>
+          </div>
+
+          <div class="table-responsive">
+            <table>
+              <thead>
+                <tr>
+                  <th>User ID / Nomor</th>
+                  <th>Status Blacklist</th>
+                  <th style="text-align: right;">Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="blacklistTableBody">
+                <tr><td colspan="3" style="text-align: center; color: var(--text-muted); padding: 1rem;">Memuat daftar blacklist...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -1745,6 +1774,9 @@
       if (viewId === 'swgc') {
         loadSWGCGroups();
       }
+      if (viewId === 'users') {
+        loadBlacklistWeb();
+      }
     }
 
     async function loadSWGCGroups() {
@@ -1828,6 +1860,69 @@
           loadSWGCGroups();
         } else {
           showToast('Gagal mengubah status mute: ' + (data.error || 'Unknown error'), 'danger');
+        }
+      } catch (err) {
+        showToast('Error koneksi: ' + err.message, 'danger');
+      }
+    }
+
+    async function loadBlacklistWeb() {
+      const tbody = document.getElementById('blacklistTableBody');
+      if (!tbody) return;
+      tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; color: var(--text-muted); padding: 1rem;">Memuat daftar blacklist...</td></tr>';
+
+      try {
+        const res = await fetch('/api/blacklist', {
+          headers: { 'Authorization': 'Bearer ' + authToken }
+        });
+        const data = await res.json();
+        if (!data.ok || !data.blacklist || data.blacklist.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; color: var(--text-muted); padding: 1rem;">Belum ada user yang di-blacklist secara global.</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = data.blacklist.map(id => `
+          <tr>
+            <td style="font-family: var(--font-mono); font-weight: 600;">${id}</td>
+            <td><span style="color: var(--danger); font-weight: 600;">⛔ Blacklisted (100%)</span></td>
+            <td style="text-align: right;">
+              <button class="btn btn-secondary btn-sm" onclick="toggleBlacklistWeb('${id}', false)">✅ Unblacklist</button>
+            </td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: var(--danger); padding: 1rem;">❌ Error: ${err.message}</td></tr>`;
+      }
+    }
+
+    async function addBlacklistWeb() {
+      const input = document.getElementById('addBlacklistInput');
+      const target = (input.value || '').trim();
+      if (!target) {
+        showToast('Masukkan nomor WhatsApp atau ID user!', 'warning');
+        return;
+      }
+
+      toggleBlacklistWeb(target, true);
+      input.value = '';
+    }
+
+    async function toggleBlacklistWeb(target, blacklisted) {
+      try {
+        const res = await fetch('/api/blacklist/toggle', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + authToken
+          },
+          body: JSON.stringify({ target: target, blacklisted: blacklisted })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast(blacklisted ? `User ${data.target} berhasil di-blacklist global` : `User ${data.target} berhasil di-unblacklist`, 'success');
+          loadBlacklistWeb();
+        } else {
+          showToast('Gagal mengubah blacklist: ' + (data.error || 'Unknown error'), 'danger');
         }
       } catch (err) {
         showToast('Error koneksi: ' + err.message, 'danger');

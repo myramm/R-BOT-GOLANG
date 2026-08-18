@@ -469,6 +469,8 @@ func Start(ctx context.Context) {
 	mux.HandleFunc("/api/swgc/send", handleSWGCSend)
 	mux.HandleFunc("/api/group/send-message", handleGroupSendMessage)
 	mux.HandleFunc("/api/group/mute", handleGroupMute)
+	mux.HandleFunc("/api/blacklist", handleBlacklistList)
+	mux.HandleFunc("/api/blacklist/toggle", handleBlacklistToggle)
 
 	// WebSockets
 	mux.HandleFunc("/ws/metrics", handleMetricsWS)
@@ -1473,6 +1475,73 @@ func handleGroupMute(w http.ResponseWriter, r *http.Request) {
 		"ok":    true,
 		"jid":   req.JID,
 		"muted": req.Muted,
+	})
+}
+
+func handleBlacklistList(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	blMap := settings.GetGlobalBlacklist()
+	list := make([]string, 0, len(blMap))
+	for k := range blMap {
+		list = append(list, k)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":        true,
+		"blacklist": list,
+	})
+}
+
+func handleBlacklistToggle(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Target      string `json:"target"`
+		Blacklisted bool   `json:"blacklisted"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Target == "" {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	bareID := config.BareNumber(req.Target)
+	if bareID == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Nomor/ID target tidak valid"})
+		return
+	}
+
+	if err := settings.SetUserBlacklisted(bareID, req.Blacklisted); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	actStr := "BLACKLIST"
+	if !req.Blacklisted {
+		actStr = "UNBLACKLIST"
+	}
+	RecordAudit(r, "GLOBAL_BLACKLIST", fmt.Sprintf("%s user %s via Web Dashboard", actStr, bareID))
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":          true,
+		"target":      bareID,
+		"blacklisted": req.Blacklisted,
 	})
 }
 

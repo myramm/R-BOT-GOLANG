@@ -12,9 +12,11 @@ const storeKey = "settings"
 
 // data adalah bentuk tersimpan di store.
 type data struct {
-	AutoRead    bool            `json:"autoRead"`
-	ButtonMode  int             `json:"buttonMode"`
-	MutedGroups map[string]bool `json:"mutedGroups,omitempty"`
+	AutoRead        bool                       `json:"autoRead"`
+	ButtonMode      int                        `json:"buttonMode"`
+	MutedGroups     map[string]bool            `json:"mutedGroups,omitempty"`
+	GlobalBlacklist map[string]bool            `json:"globalBlacklist,omitempty"`
+	GroupBans       map[string]map[string]bool `json:"groupBans,omitempty"`
 }
 
 var (
@@ -37,6 +39,12 @@ func Load() error {
 	}
 	if d.MutedGroups == nil {
 		d.MutedGroups = make(map[string]bool)
+	}
+	if d.GlobalBlacklist == nil {
+		d.GlobalBlacklist = make(map[string]bool)
+	}
+	if d.GroupBans == nil {
+		d.GroupBans = make(map[string]map[string]bool)
 	}
 	cache = d
 	loaded = true
@@ -115,6 +123,114 @@ func GetMutedGroups() map[string]bool {
 	out := make(map[string]bool, len(cache.MutedGroups))
 	for k, v := range cache.MutedGroups {
 		out[k] = v
+	}
+	return out
+}
+
+// IsUserBlacklisted mengecek apakah salah satu ID kandidat user ada di Global Blacklist.
+func IsUserBlacklisted(cands []string) bool {
+	mu.RLock()
+	defer mu.RUnlock()
+	if cache.GlobalBlacklist == nil || len(cands) == 0 {
+		return false
+	}
+	for _, c := range cands {
+		if cache.GlobalBlacklist[c] {
+			return true
+		}
+	}
+	return false
+}
+
+// SetUserBlacklisted memasukkan atau menghapus user bare ID dari Global Blacklist.
+func SetUserBlacklisted(id string, blacklisted bool) error {
+	mu.Lock()
+	if cache.GlobalBlacklist == nil {
+		cache.GlobalBlacklist = make(map[string]bool)
+	}
+	if blacklisted {
+		cache.GlobalBlacklist[id] = true
+	} else {
+		delete(cache.GlobalBlacklist, id)
+	}
+	snapshot := cache
+	mu.Unlock()
+	return store.Set(storeKey, snapshot)
+}
+
+// GetGlobalBlacklist mengembalikan daftar seluruh ID user yang di-blacklist global.
+func GetGlobalBlacklist() map[string]bool {
+	mu.RLock()
+	defer mu.RUnlock()
+	out := make(map[string]bool, len(cache.GlobalBlacklist))
+	for k, v := range cache.GlobalBlacklist {
+		out[k] = v
+	}
+	return out
+}
+
+// IsUserBannedInGroup mengecek apakah user di-ban di grup tertentu.
+func IsUserBannedInGroup(groupID string, cands []string) bool {
+	mu.RLock()
+	defer mu.RUnlock()
+	if cache.GroupBans == nil || len(cands) == 0 {
+		return false
+	}
+	userMap, exists := cache.GroupBans[groupID]
+	if !exists || userMap == nil {
+		return false
+	}
+	for _, c := range cands {
+		if userMap[c] {
+			return true
+		}
+	}
+	return false
+}
+
+// SetUserBannedInGroup mem-ban atau mem-unban daftar ID user di grup tertentu.
+func SetUserBannedInGroup(groupID string, userIDs []string, banned bool) error {
+	mu.Lock()
+	if cache.GroupBans == nil {
+		cache.GroupBans = make(map[string]map[string]bool)
+	}
+	userMap, exists := cache.GroupBans[groupID]
+	if !exists {
+		userMap = make(map[string]bool)
+		cache.GroupBans[groupID] = userMap
+	}
+
+	for _, id := range userIDs {
+		if banned {
+			userMap[id] = true
+		} else {
+			delete(userMap, id)
+		}
+	}
+
+	if len(userMap) == 0 {
+		delete(cache.GroupBans, groupID)
+	}
+
+	snapshot := cache
+	mu.Unlock()
+	return store.Set(storeKey, snapshot)
+}
+
+// GetGroupBannedUsers mengembalikan daftar ID user yang di-ban di grup tertentu.
+func GetGroupBannedUsers(groupID string) []string {
+	mu.RLock()
+	defer mu.RUnlock()
+	if cache.GroupBans == nil {
+		return nil
+	}
+	userMap := cache.GroupBans[groupID]
+	if userMap == nil {
+		return nil
+	}
+	out := make([]string, 0, len(userMap))
+	for k := range userMap {
+		out = append(out, k)
 	}
 	return out
 }

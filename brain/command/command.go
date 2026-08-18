@@ -448,6 +448,13 @@ func Dispatch(ctx context.Context, client *whatsmeow.Client, evt *events.Message
 		cmd = Resolve(key)
 	}
 
+	cands := identity.Candidates(evt)
+
+	// 1. Cek Global Blacklist (100% diblokir dari bot di mana pun, kecuali Owner)
+	if settings.IsUserBlacklisted(cands) && !IsOwner(evt) {
+		return
+	}
+
 	if cmd == nil {
 		return
 	}
@@ -459,16 +466,22 @@ func Dispatch(ctx context.Context, client *whatsmeow.Client, evt *events.Message
 
 	c := &Ctx{Client: client, Evt: evt, Args: args, Text: text, InvokedAs: key, SubBot: subBot}
 
-	// Cek Group Mute / Ban GC (kecuali Owner Bot atau Admin Grup)
-	if c.IsGroup() && settings.IsGroupMuted(c.Chat().String()) {
+	// 2. Cek Pengaturan Grup (Group Mute & Group Ban User di grup tertentu)
+	if c.IsGroup() {
+		groupID := c.Chat().String()
 		isOwner := IsOwner(evt)
 		isAdmin := false
 		if !isOwner && IsGroupAdminHook != nil {
 			isAdmin = IsGroupAdminHook(ctx, client, evt)
 		}
 
-		// Jika bukan owner & bukan admin grup: abaikan command (bot di-mute untuk member biasa)
-		if !isOwner && !isAdmin {
+		// Cek Mute GC (bot admin-only mode di grup)
+		if settings.IsGroupMuted(groupID) && !isOwner && !isAdmin {
+			return
+		}
+
+		// Cek Ban User khusus di grup ini (User di-ban di grup ini oleh Admin/Owner)
+		if settings.IsUserBannedInGroup(groupID, cands) && !isOwner && !isAdmin {
 			return
 		}
 	}

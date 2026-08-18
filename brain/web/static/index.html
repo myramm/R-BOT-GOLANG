@@ -799,6 +799,169 @@
       max-width: 420px;
     }
 
+    /* Dedicated Full-Screen Auth Screen */
+    .auth-fullscreen-backdrop {
+      position: fixed;
+      inset: 0;
+      background: #090d16 radial-gradient(circle at 50% 30%, rgba(99, 102, 241, 0.18), rgba(15, 23, 42, 0.96) 75%);
+      z-index: 99999;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+      overflow-y: auto;
+      transition: opacity 0.3s ease;
+    }
+    .auth-fullscreen-backdrop.active {
+      display: flex;
+    }
+
+    .auth-card {
+      background: rgba(17, 24, 39, 0.85);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 20px;
+      padding: 2.25rem 2rem;
+      width: 100%;
+      max-width: 400px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 40px rgba(99, 102, 241, 0.12);
+      position: relative;
+      animation: authCardFadeIn 0.35s ease-out;
+    }
+
+    @keyframes authCardFadeIn {
+      from { opacity: 0; transform: translateY(16px) scale(0.98); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    @keyframes shakeAuth {
+      0%, 100% { transform: translateX(0); }
+      20%, 60% { transform: translateX(-8px); }
+      40%, 80% { transform: translateX(8px); }
+    }
+
+    .shake-error {
+      animation: shakeAuth 0.4s ease-in-out;
+    }
+
+    .auth-logo-badge {
+      width: 58px;
+      height: 58px;
+      margin: 0 auto 1.25rem;
+      border-radius: 16px;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: #ffffff;
+      font-size: 1.6rem;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 25px rgba(99, 102, 241, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.4);
+      position: relative;
+    }
+
+    .auth-logo-badge::after {
+      content: '';
+      position: absolute;
+      inset: -4px;
+      border-radius: 20px;
+      border: 2px solid rgba(99, 102, 241, 0.35);
+      animation: pulseGlow 2.5s infinite;
+    }
+
+    @keyframes pulseGlow {
+      0%, 100% { transform: scale(1); opacity: 0.4; }
+      50% { transform: scale(1.08); opacity: 0.8; }
+    }
+
+    .auth-input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+      margin-bottom: 1.25rem;
+    }
+
+    .auth-input-icon {
+      position: absolute;
+      left: 14px;
+      color: #94a3b8;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .auth-input-field {
+      width: 100%;
+      padding: 0.8rem 2.8rem 0.8rem 2.8rem;
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 12px;
+      color: #f8fafc;
+      font-size: 0.925rem;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+
+    .auth-input-field:focus {
+      border-color: #6366f1;
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
+      background: rgba(15, 23, 42, 0.95);
+    }
+
+    .auth-pwd-toggle {
+      position: absolute;
+      right: 12px;
+      background: none;
+      border: none;
+      color: #94a3b8;
+      cursor: pointer;
+      padding: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: color 0.2s;
+    }
+
+    .auth-pwd-toggle:hover {
+      color: #f8fafc;
+    }
+
+    .auth-submit-btn {
+      width: 100%;
+      padding: 0.85rem;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #6366f1, #4f46e5);
+      color: #ffffff;
+      font-weight: 700;
+      font-size: 0.95rem;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      box-shadow: 0 4px 15px rgba(99, 102, 241, 0.35);
+      transition: all 0.2s ease;
+    }
+
+    .auth-submit-btn:hover {
+      background: linear-gradient(135deg, #4f46e5, #4338ca);
+      box-shadow: 0 6px 20px rgba(99, 102, 241, 0.45);
+      transform: translateY(-1px);
+    }
+
+    .auth-submit-btn:active {
+      transform: translateY(0);
+    }
+
+    .auth-submit-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
     /* Terminal Box — Mobile-First Server Administration Design */
     .terminal-box {
       background: #080b11;
@@ -1293,21 +1456,41 @@
     </div>
   </div>
 
-  <!-- Login Modal -->
-  <div id="loginModal" class="modal-backdrop">
-    <div class="modal-box" style="max-width: 340px;">
-      <div style="text-align: center; margin-bottom: 1.25rem;">
-        <div class="brand-logo" style="width: 44px; height: 44px; margin: 0 auto 0.6rem; font-size: 1.2rem; display: flex; align-items: center; justify-content: center; border-radius: 10px; background: var(--accent); color: #fff; font-weight: 800;">R</div>
-        <h3 style="font-size: 1.15rem; font-weight: 700;">R-BOT Control Center</h3>
-        <p style="color: var(--text-sub); font-size: 0.8rem; margin-top: 0.25rem;">Masukkan password web untuk melanjutkan.</p>
-      </div>
-      <form id="loginForm" onsubmit="handleLogin(event); return false;">
-        <div style="margin-bottom: 1rem;">
-          <input type="password" id="loginPassword" class="input-field" placeholder="Password admin..." autocomplete="current-password" autofocus style="width: 100%; padding: 0.65rem 0.85rem;" onkeydown="if(event.key==='Enter'){handleLogin(event);}">
+  <!-- Full-Screen Dedicated Login View -->
+  <div id="loginModal" class="auth-fullscreen-backdrop">
+    <div id="loginCard" class="auth-card">
+      <div style="text-align: center; margin-bottom: 1.5rem;">
+        <div class="auth-logo-badge">R</div>
+        <h2 style="font-size: 1.35rem; font-weight: 800; color: #f8fafc; letter-spacing: -0.02em;">R-BOT Control Center</h2>
+        <div style="display: inline-flex; align-items: center; gap: 0.4rem; background: rgba(34, 197, 94, 0.12); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 9999px; padding: 0.2rem 0.65rem; margin-top: 0.5rem; font-size: 0.725rem; color: #4ade80; font-weight: 600;">
+          <span style="width: 6px; height: 6px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 6px #22c55e;"></span>
+          Server Engine Online
         </div>
-        <button type="button" id="loginSubmitBtn" class="btn btn-primary" onclick="handleLogin(event)" style="width: 100%; padding: 0.65rem; font-weight: 600;">Masuk Dashboard</button>
-        <div id="loginError" style="color: var(--danger); font-size: 0.775rem; margin-top: 0.65rem; display: none; text-align: center;"></div>
+        <p style="color: #94a3b8; font-size: 0.825rem; margin-top: 0.65rem;">Masukkan password administrator untuk mengakses dashboard.</p>
+      </div>
+
+      <form id="loginForm" onsubmit="handleLogin(event); return false;">
+        <div class="auth-input-wrapper">
+          <span class="auth-input-icon">
+            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+          </span>
+          <input type="password" id="loginPassword" class="auth-input-field" placeholder="Password administrator..." autocomplete="current-password" required autofocus onkeydown="if(event.key==='Enter'){handleLogin(event);}">
+          <button type="button" class="auth-pwd-toggle" onclick="toggleLoginPasswordVisibility()" title="Lihat password">
+            <svg id="pwdEyeIcon" width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+          </button>
+        </div>
+
+        <button type="button" id="loginSubmitBtn" class="auth-submit-btn" onclick="handleLogin(event)">
+          <span id="loginBtnText">Masuk Dashboard</span>
+          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+        </button>
+
+        <div id="loginError" style="color: #f87171; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 0.6rem 0.8rem; font-size: 0.8rem; margin-top: 1rem; display: none; text-align: center; line-height: 1.4;"></div>
       </form>
+
+      <div style="margin-top: 1.5rem; text-align: center; border-top: 1px solid rgba(255, 255, 255, 0.06); padding-top: 0.85rem;">
+        <span style="font-size: 0.725rem; color: #64748b; letter-spacing: 0.02em;">R-BOT Engine • Go High Performance Runtime</span>
+      </div>
     </div>
   </div>
 
@@ -2418,11 +2601,28 @@
       }
     }
 
+    function toggleLoginPasswordVisibility() {
+      const pwdInput = document.getElementById('loginPassword');
+      const eyeIcon = document.getElementById('pwdEyeIcon');
+      if (!pwdInput || !eyeIcon) return;
+      if (pwdInput.type === 'password') {
+        pwdInput.type = 'text';
+        eyeIcon.innerHTML = '<path d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18"/>';
+      } else {
+        pwdInput.type = 'password';
+        eyeIcon.innerHTML = '<path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>';
+      }
+    }
+
     async function handleLogin(e) {
       if (e && e.preventDefault) e.preventDefault();
       const pwdInput = document.getElementById('loginPassword');
       const pwd = pwdInput ? pwdInput.value.trim() : '';
       const errEl = document.getElementById('loginError');
+      const btn = document.getElementById('loginSubmitBtn');
+      const btnText = document.getElementById('loginBtnText');
+      const card = document.getElementById('loginCard');
+
       if (errEl) errEl.style.display = 'none';
 
       if (!pwd) {
@@ -2430,8 +2630,16 @@
           errEl.textContent = 'Password tidak boleh kosong.';
           errEl.style.display = 'block';
         }
+        if (card) {
+          card.classList.remove('shake-error');
+          void card.offsetWidth;
+          card.classList.add('shake-error');
+        }
         return;
       }
+
+      if (btn) btn.disabled = true;
+      if (btnText) btnText.textContent = 'Memverifikasi...';
 
       try {
         const res = await fetch('/api/login', {
@@ -2454,12 +2662,25 @@
             errEl.textContent = data.error || 'Password salah.';
             errEl.style.display = 'block';
           }
+          if (card) {
+            card.classList.remove('shake-error');
+            void card.offsetWidth;
+            card.classList.add('shake-error');
+          }
         }
       } catch (err) {
         if (errEl) {
           errEl.textContent = 'Gagal terhubung ke server: ' + err.message;
           errEl.style.display = 'block';
         }
+        if (card) {
+          card.classList.remove('shake-error');
+          void card.offsetWidth;
+          card.classList.add('shake-error');
+        }
+      } finally {
+        if (btn) btn.disabled = false;
+        if (btnText) btnText.textContent = 'Masuk Dashboard';
       }
     }
 

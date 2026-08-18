@@ -1639,6 +1639,7 @@
       <div style="position: relative;">
         <!-- Desktop buttons -->
         <div class="topbar-actions desktop-only">
+          <button id="btnBotModeWeb" class="btn btn-secondary btn-sm" onclick="toggleBotModeWeb()" title="Klik untuk mengubah mode akses bot">🌐 Mode: PUBLIC</button>
           <button class="btn btn-secondary btn-sm" onclick="openMessageModal()">💬 Kirim Pesan</button>
           <button class="btn btn-secondary btn-sm" onclick="reloadConfig()">🔁 Reload Config</button>
           <button class="btn btn-warning btn-sm" onclick="askRestartBot()">🔄 Restart</button>
@@ -1649,6 +1650,7 @@
 
         <!-- Dropdown Popup -->
         <div id="actionMenuDropdown" class="action-menu-dropdown">
+          <button id="btnBotModeWebMobile" class="dropdown-item" onclick="toggleBotModeWeb(); closeActionMenu();">🌐 Mode: PUBLIC</button>
           <button class="dropdown-item" onclick="openMessageModal(); closeActionMenu();">💬 Kirim Pesan</button>
           <button class="dropdown-item" onclick="reloadConfig(); closeActionMenu();">🔁 Reload Config</button>
           <button class="dropdown-item" onclick="askRestartBot(); closeActionMenu();">🔄 Restart Bot</button>
@@ -2873,11 +2875,16 @@
 
     function initDashboard() {
       fetchStatus();
+      loadBotModeWeb();
       connectMetricsWS();
       connectLogsWS();
       if (!statusIntervalTimer) {
         statusIntervalTimer = setInterval(fetchStatus, 3000);
       }
+
+      // Restore tab aktif setelah refresh halaman
+      const initialTab = window.location.hash.replace(/^#/, '') || localStorage.getItem('rbot_active_tab') || 'overview';
+      switchNav(initialTab);
     }
 
     function connectMetricsWS() {
@@ -3073,6 +3080,14 @@
     }
 
     function switchNav(viewId, el) {
+      if (!viewId) viewId = 'overview';
+      try {
+        localStorage.setItem('rbot_active_tab', viewId);
+        if (window.location.hash !== '#' + viewId) {
+          history.replaceState(null, null, '#' + viewId);
+        }
+      } catch (e) {}
+
       document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
       document.querySelectorAll('.bottom-nav-btn').forEach(b => b.classList.remove('active'));
       document.querySelectorAll('.view-container').forEach(v => v.classList.remove('active'));
@@ -3117,6 +3132,76 @@
       }
       if (viewId === 'welcome') {
         loadWelcomeWeb();
+      }
+    }
+
+    window.addEventListener('hashchange', () => {
+      const tab = window.location.hash.replace(/^#/, '');
+      if (tab) switchNav(tab);
+    });
+
+    // -------------------------------------------------------------
+    // BOT MODE (SELF / PUBLIC) JAVASCRIPT CONTROLLER
+    // -------------------------------------------------------------
+
+    let isSelfModeWeb = false;
+
+    async function loadBotModeWeb() {
+      try {
+        const res = await fetch('/api/mode', {
+          headers: { 'Authorization': 'Bearer ' + authToken }
+        });
+        const data = await res.json();
+        if (data.ok) {
+          isSelfModeWeb = data.self_mode;
+          updateBotModeUI(data.self_mode);
+        }
+      } catch (e) {}
+    }
+
+    function updateBotModeUI(selfMode) {
+      isSelfModeWeb = selfMode;
+      const btn = document.getElementById('btnBotModeWeb');
+      const btnMobile = document.getElementById('btnBotModeWebMobile');
+      const text = selfMode ? '🔒 Mode: SELF' : '🌐 Mode: PUBLIC';
+      const color = selfMode ? '#ef4444' : '#60a5fa';
+
+      if (btn) {
+        btn.innerHTML = text;
+        btn.style.color = color;
+      }
+      if (btnMobile) {
+        btnMobile.innerHTML = text;
+        btnMobile.style.color = color;
+      }
+    }
+
+    async function toggleBotModeWeb() {
+      const newSelf = !isSelfModeWeb;
+      const confirmText = newSelf 
+        ? 'Ubah mode bot ke SELF (hanya Owner yang bisa menggunakan bot)?' 
+        : 'Ubah mode bot ke PUBLIC (semua orang bisa menggunakan bot)?';
+
+      if (!confirm(confirmText)) return;
+
+      try {
+        const res = await fetch('/api/mode', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + authToken
+          },
+          body: JSON.stringify({ self_mode: newSelf })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast(`Mode bot berhasil diubah ke ${data.mode.toUpperCase()}!`, 'success');
+          updateBotModeUI(data.self_mode);
+        } else {
+          showToast(data.error || 'Gagal mengubah mode bot', 'danger');
+        }
+      } catch (err) {
+        showToast('Error: ' + err.message, 'danger');
       }
     }
 

@@ -14,6 +14,7 @@ const storeKey = "settings"
 type data struct {
 	AutoRead        bool                       `json:"autoRead"`
 	ButtonMode      int                        `json:"buttonMode"`
+	SelfMode        bool                       `json:"selfMode"`
 	MutedGroups     map[string]bool            `json:"mutedGroups,omitempty"`
 	GlobalBlacklist map[string]bool            `json:"globalBlacklist,omitempty"`
 	GroupBans       map[string]map[string]bool `json:"groupBans,omitempty"`
@@ -62,6 +63,22 @@ func AutoRead() bool {
 func SetAutoRead(on bool) error {
 	mu.Lock()
 	cache.AutoRead = on
+	snapshot := cache
+	mu.Unlock()
+	return store.Set(storeKey, snapshot)
+}
+
+// IsSelfMode mengecek apakah bot dalam mode Self (hanya Owner yang bisa eksekusi command).
+func IsSelfMode() bool {
+	mu.RLock()
+	defer mu.RUnlock()
+	return cache.SelfMode
+}
+
+// SetSelfMode mengubah mode bot (true: Self/Private, false: Public).
+func SetSelfMode(self bool) error {
+	mu.Lock()
+	cache.SelfMode = self
 	snapshot := cache
 	mu.Unlock()
 	return store.Set(storeKey, snapshot)

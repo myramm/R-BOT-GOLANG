@@ -62,8 +62,37 @@ func setHandler(ctx context.Context, c *command.Ctx) error {
 		}
 		_, err := c.Reply(ctx, "✅ Autoread "+word+". Bot "+ternary(on, "akan", "tidak lagi")+" otomatis menandai pesan masuk sebagai dibaca.")
 		return err
+	case "mode":
+		if len(c.Args) < 2 {
+			curr := "public"
+			if settings.IsSelfMode() {
+				curr = "self"
+			}
+			_, err := c.Reply(ctx, "Mode bot saat ini: *"+curr+"*.\nUbah: *"+mp+"set mode self* atau *"+mp+"set mode public*")
+			return err
+		}
+		val := strings.ToLower(c.Args[1])
+		switch val {
+		case "self", "private", "owner", "1", "on":
+			if err := settings.SetSelfMode(true); err != nil {
+				_, e := c.Reply(ctx, "Gagal menyimpan mode: "+err.Error())
+				return e
+			}
+			_, err := c.Reply(ctx, "🔒 *Mode Bot diubah ke SELF*\nSekarang hanya Owner yang dapat menggunakan bot.")
+			return err
+		case "public", "publik", "all", "0", "off":
+			if err := settings.SetSelfMode(false); err != nil {
+				_, e := c.Reply(ctx, "Gagal menyimpan mode: "+err.Error())
+				return e
+			}
+			_, err := c.Reply(ctx, "🌐 *Mode Bot diubah ke PUBLIC*\nSekarang semua orang dapat menggunakan bot.")
+			return err
+		default:
+			_, err := c.Reply(ctx, "Pilihan tidak valid. Gunakan *"+mp+"set mode self* atau *"+mp+"set mode public*")
+			return err
+		}
 	default:
-		_, err := c.Reply(ctx, "Pengaturan tidak dikenal: *"+c.Args[0]+"*.\nCoba: *"+mp+"set autoread on/off*")
+		_, err := c.Reply(ctx, "Pengaturan tidak dikenal: *"+c.Args[0]+"*.\nPilihan: *autoread*, *mode*")
 		return err
 	}
 }

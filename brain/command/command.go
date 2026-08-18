@@ -471,6 +471,11 @@ func Dispatch(ctx context.Context, client *whatsmeow.Client, evt *events.Message
 
 	cands := identity.Candidates(evt)
 
+	// 0. Cek Mode Self (Hanya Owner yang boleh memakai bot saat Self Mode aktif)
+	if settings.IsSelfMode() && !IsOwner(evt) {
+		return
+	}
+
 	// 1. Cek Global Blacklist (100% diblokir dari bot di mana pun, kecuali Owner)
 	if settings.IsUserBlacklisted(cands) && !IsOwner(evt) {
 		return

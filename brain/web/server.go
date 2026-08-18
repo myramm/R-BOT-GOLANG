@@ -498,6 +498,9 @@ func Start(ctx context.Context) {
 	mux.HandleFunc("/api/welcome/toggle", handleWelcomeToggle)
 	mux.HandleFunc("/api/welcome/template", handleWelcomeTemplate)
 
+	// Bot Mode Endpoints (Self / Public)
+	mux.HandleFunc("/api/mode", handleBotMode)
+
 	// File Manager API Endpoints
 	mux.HandleFunc("/api/files/list", handleFileList)
 	mux.HandleFunc("/api/files/read", handleFileRead)
@@ -2824,4 +2827,73 @@ func handleWelcomeTemplate(w http.ResponseWriter, r *http.Request) {
 		"template":       welcome.GetTemplate(req.JID),
 		"has_custom_msg": true,
 	})
+}
+
+func handleBotMode(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	if r.Method == http.MethodGet {
+		selfMode := settings.IsSelfMode()
+		modeStr := "public"
+		if selfMode {
+			modeStr = "self"
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":        true,
+			"self_mode": selfMode,
+			"mode":      modeStr,
+		})
+		return
+	}
+
+	if r.Method == http.MethodPost {
+		var req struct {
+			SelfMode *bool  `json:"self_mode"`
+			Mode     string `json:"mode"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Bad request", http.StatusBadRequest)
+			return
+		}
+
+		newSelf := false
+		if req.SelfMode != nil {
+			newSelf = *req.SelfMode
+		} else if req.Mode != "" {
+			switch strings.ToLower(req.Mode) {
+			case "self", "private", "owner":
+				newSelf = true
+			default:
+				newSelf = false
+			}
+		}
+
+		if err := settings.SetSelfMode(newSelf); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+
+		modeStr := "public"
+		if newSelf {
+			modeStr = "self"
+		}
+		RecordAudit(r, "MODE_CHANGE", fmt.Sprintf("Ubah mode bot ke %s via Web Dashboard", strings.ToUpper(modeStr)))
+		BroadcastMetricsNow()
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":        true,
+			"self_mode": newSelf,
+			"mode":      modeStr,
+		})
+		return
+	}
+
+	http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 }

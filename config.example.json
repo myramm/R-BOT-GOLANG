@@ -64,6 +64,12 @@
     "systemPrompt": "Kamu adalah R-BOT, asisten AI WhatsApp yang cerdas, ramah, dan helpful. Jawab selalu dalam bahasa Indonesia kecuali pengguna minta bahasa lain. Jawab langsung, jelas, dan to-the-point. Jangan pura-pura jadi AI lain."
   },
 
+  "simi": {
+    "apiKey": "",
+    "model": "gemini-3.5-flash",
+    "enabledByDefault": true
+  },
+
   "kamino": {
     "apiUrl": "https://dl.kaminoater.top",
     "resolveTimeoutMs": 120000,

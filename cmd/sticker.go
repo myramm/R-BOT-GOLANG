@@ -16,6 +16,7 @@ import (
 
 	"rbot/brain/command"
 	"rbot/brain/config"
+	"rbot/brain/simi"
 )
 
 const (
@@ -81,6 +82,9 @@ func stickerHandler(ctx context.Context, c *command.Ctx) error {
 	}
 	if err := c.SendStickerBytesWithThumbnail(ctx, webp, thumbnail); err != nil {
 		return stickerError(ctx, c, "Gagal mengirim sticker: "+err.Error())
+	}
+	if c.IsGroup() {
+		_ = simi.SaveGroupSticker(webp)
 	}
 	c.React(ctx, "✅")
 	return nil

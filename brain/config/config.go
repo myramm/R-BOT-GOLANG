@@ -70,6 +70,13 @@ type Config struct {
 		SystemPrompt string   `json:"systemPrompt"`
 	} `json:"ai"`
 
+	Simi struct {
+		APIKey           string `json:"apiKey"`
+		Model            string `json:"model"`
+		SystemPrompt     string `json:"systemPrompt"`
+		EnabledByDefault bool   `json:"enabledByDefault"`
+	} `json:"simi"`
+
 	Kamino struct {
 		APIURL           string `json:"apiUrl"`
 		ResolveTimeoutMs int    `json:"resolveTimeoutMs"`

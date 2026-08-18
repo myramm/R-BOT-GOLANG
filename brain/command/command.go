@@ -317,6 +317,8 @@ var (
 	// ErrorHook menerima error command/panic agar runtime dapat meneruskannya
 	// ke owner tanpa membuat command dispatcher bergantung pada transport tujuan.
 	ErrorHook func(ctx context.Context, c *Ctx, err error)
+	// SimiHook: balas otomatis percakapan/sticker jika user me-reply pesan bot.
+	SimiHook func(ctx context.Context, client *whatsmeow.Client, evt *events.Message) bool
 	// RestSectionHook & MakananSectionHook: bagian tambahan pesan "energi habis".
 	RestSectionHook    func(evt *events.Message) string
 	MakananSectionHook func(evt *events.Message) string
@@ -431,6 +433,25 @@ func Dispatch(ctx context.Context, client *whatsmeow.Client, evt *events.Message
 		}
 
 		if cmd == nil {
+			cands := identity.Candidates(evt)
+			if settings.IsUserBlacklisted(cands) && !IsOwner(evt) {
+				return
+			}
+			if evt.Info.IsGroup {
+				groupID := evt.Info.Chat.String()
+				if settings.IsGroupMuted(groupID) {
+					return
+				}
+				if settings.IsUserBannedInGroup(groupID, cands) && !IsOwner(evt) {
+					return
+				}
+			}
+
+			// SimiHook: auto-reply jika me-reply pesan bot
+			if SimiHook != nil && SimiHook(ctx, client, evt) {
+				return
+			}
+
 			// Tanpa prefix: coba lanjutkan sesi interaktif (ada teks).
 			if text != "" && ResumeHook != nil {
 				ResumeHook(ctx, client, evt, text)

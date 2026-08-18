@@ -131,6 +131,13 @@ func isMatchSeries(s1, s2 string) bool {
 	return s1 == s2 || strings.HasPrefix(s1, s2) || strings.HasPrefix(s2, s1)
 }
 
+func sanitizeURL(rawURL, source string) string {
+	if source == "komiku" && strings.Contains(rawURL, "secure.komikid.org") {
+		return strings.ReplaceAll(rawURL, "secure.komikid.org", "komiku.org")
+	}
+	return rawURL
+}
+
 func fetchHTML(ctx context.Context, targetURL string) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, targetURL, nil)
 	if err != nil {
@@ -273,7 +280,7 @@ func SearchComics(ctx context.Context, query string) ([]Comic, error) {
 					Title:  seriesTitle,
 					Slug:   seriesSlug,
 					Source: "komiku",
-					Link:   p.Link,
+					Link:   sanitizeURL(p.Link, "komiku"),
 				}
 				seriesMap[key] = &comic
 				results = append(results, comic)
@@ -351,7 +358,7 @@ func GetChapters(ctx context.Context, c Comic) ([]Chapter, error) {
 							ID:     strconv.Itoa(p.ID),
 							Num:    num,
 							Title:  t,
-							URL:    p.Link,
+							URL:    sanitizeURL(p.Link, c.Source),
 							Slug:   p.Slug,
 							Images: filterComicImages(extractImages(p.Content.Rendered)),
 							Source: c.Source,
@@ -388,23 +395,21 @@ func GetChapterImages(ctx context.Context, ch Chapter) ([]string, error) {
 	}
 
 	// 1. Jika Komiku atau jika data image di API kosong, fetch langsung dari halaman HTML reader
-	if ch.Source == "komiku" || ch.URL != "" {
-		pageURL := ch.URL
-		if pageURL == "" && ch.Slug != "" {
-			if ch.Source == "komiku" {
-				pageURL = fmt.Sprintf("https://komiku.org/%s/", ch.Slug)
-			} else {
-				pageURL = fmt.Sprintf("https://komiktap.info/%s/", ch.Slug)
-			}
+	pageURL := sanitizeURL(ch.URL, ch.Source)
+	if pageURL == "" && ch.Slug != "" {
+		if ch.Source == "komiku" {
+			pageURL = fmt.Sprintf("https://komiku.org/%s/", ch.Slug)
+		} else {
+			pageURL = fmt.Sprintf("https://komiktap.info/%s/", ch.Slug)
 		}
+	}
 
-		if pageURL != "" {
-			htmlContent, err := fetchHTML(ctx, pageURL)
-			if err == nil {
-				imgs := filterComicImages(extractImages(htmlContent))
-				if len(imgs) > 0 {
-					return imgs, nil
-				}
+	if pageURL != "" {
+		htmlContent, err := fetchHTML(ctx, pageURL)
+		if err == nil {
+			imgs := filterComicImages(extractImages(htmlContent))
+			if len(imgs) > 0 {
+				return imgs, nil
 			}
 		}
 	}

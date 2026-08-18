@@ -15,8 +15,8 @@ import (
 const userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
 var (
-	reDoodDomain = regexp.MustCompile(`(?i)(doodstream|dood|dso|ds2play|myvidplay|ds2video|do0od|d0000d|d000d|playmogo|dood\.la|dood\.ws|dood\.so|dood\.pm|dood\.to|dood\.watch|dood\.wf|dood\.re|dood\.video|dood\.work|dood\.sh|dood\.yt|dood\.cx)`)
-	reFileCode   = regexp.MustCompile(`/(?:d|e|f|v)/([A-Za-z0-9]+)`)
+	reDoodDomain = regexp.MustCompile(`(?i)(doodstream|dood|dso|ds2play|myvidplay|ds2video|do0od|dood\.la|dood\.ws|dood\.so|dood\.pm|dood\.to|dood\.watch|dood\.wf|dood\.re|dood\.video|dood\.work)`)
+	reFileCode   = regexp.MustCompile(`/(?:d|e)/([A-Za-z0-9]+)`)
 	reTitle      = regexp.MustCompile(`(?i)<title>([^<]+)</title>`)
 	rePassMD5    = regexp.MustCompile(`/(pass_md5/[^'"]+)`)
 )

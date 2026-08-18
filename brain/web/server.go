@@ -6,6 +6,7 @@ import (
 	_ "embed"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -13,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strconv"
@@ -472,6 +474,17 @@ func Start(ctx context.Context) {
 	mux.HandleFunc("/api/group/mute", handleGroupMute)
 	mux.HandleFunc("/api/blacklist", handleBlacklistList)
 	mux.HandleFunc("/api/blacklist/toggle", handleBlacklistToggle)
+
+	// File Manager API Endpoints
+	mux.HandleFunc("/api/files/list", handleFileList)
+	mux.HandleFunc("/api/files/read", handleFileRead)
+	mux.HandleFunc("/api/files/write", handleFileWrite)
+	mux.HandleFunc("/api/files/create", handleFileCreate)
+	mux.HandleFunc("/api/files/rename", handleFileRename)
+	mux.HandleFunc("/api/files/delete", handleFileDelete)
+	mux.HandleFunc("/api/files/download", handleFileDownload)
+	mux.HandleFunc("/api/files/upload", handleFileUpload)
+	mux.HandleFunc("/api/files/search", handleFileSearch)
 
 	// WebSockets
 	mux.HandleFunc("/ws/metrics", handleMetricsWS)
@@ -1639,4 +1652,620 @@ func orDefault(s, def string) string {
 		return def
 	}
 	return s
+}
+
+// ============================================================================
+// FILE MANAGER & CODE EDITOR API HANDLERS
+// ============================================================================
+
+type FileItemInfo struct {
+	Name    string `json:"name"`
+	Path    string `json:"path"`
+	IsDir   bool   `json:"isDir"`
+	Size    int64  `json:"size"`
+	ModTime string `json:"modTime"`
+	Ext     string `json:"ext"`
+}
+
+func getWorkspaceRoot() string {
+	wd, err := os.Getwd()
+	if err != nil {
+		return "."
+	}
+	return filepath.Clean(wd)
+}
+
+func resolveSecurePath(subPath string) (string, error) {
+	root := getWorkspaceRoot()
+	cleaned := filepath.Clean(filepath.FromSlash(subPath))
+	if cleaned == "." || cleaned == "/" || cleaned == "\\" || cleaned == "" {
+		return root, nil
+	}
+
+	if strings.Contains(cleaned, "\x00") {
+		return "", errors.New("akses path ditolak: null byte terdeteksi")
+	}
+
+	fullPath := filepath.Clean(filepath.Join(root, cleaned))
+
+	evalPath, err := filepath.EvalSymlinks(fullPath)
+	if err == nil {
+		fullPath = evalPath
+	}
+
+	rel, err := filepath.Rel(root, fullPath)
+	if err != nil || strings.HasPrefix(rel, "..") || rel == ".." {
+		return "", errors.New("akses path ditolak: di luar workspace bot")
+	}
+
+	return fullPath, nil
+}
+
+func handleFileList(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	reqPath := r.URL.Query().Get("path")
+	fullPath, err := resolveSecurePath(reqPath)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	entries, err := os.ReadDir(fullPath)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Gagal membaca direktori: " + err.Error()})
+		return
+	}
+
+	root := getWorkspaceRoot()
+	relPath, _ := filepath.Rel(root, fullPath)
+	if relPath == "." {
+		relPath = ""
+	}
+
+	var items []FileItemInfo
+	for _, entry := range entries {
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+
+		itemRel := filepath.ToSlash(filepath.Join(relPath, entry.Name()))
+		ext := strings.ToLower(filepath.Ext(entry.Name()))
+
+		items = append(items, FileItemInfo{
+			Name:    entry.Name(),
+			Path:    itemRel,
+			IsDir:   entry.IsDir(),
+			Size:    info.Size(),
+			ModTime: info.ModTime().Format("2006-01-02 15:04:05"),
+			Ext:     ext,
+		})
+	}
+
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].IsDir != items[j].IsDir {
+			return items[i].IsDir
+		}
+		return strings.ToLower(items[i].Name) < strings.ToLower(items[j].Name)
+	})
+
+	parentPath := ""
+	if relPath != "" {
+		parentPath = filepath.ToSlash(filepath.Dir(relPath))
+		if parentPath == "." {
+			parentPath = ""
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":          true,
+		"currentPath": filepath.ToSlash(relPath),
+		"parentPath":  parentPath,
+		"items":       items,
+	})
+}
+
+func handleFileRead(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	reqPath := r.URL.Query().Get("path")
+	fullPath, err := resolveSecurePath(reqPath)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	info, err := os.Stat(fullPath)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "File tidak ditemukan"})
+		return
+	}
+
+	if info.IsDir() {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Path adalah direktori, bukan file"})
+		return
+	}
+
+	if info.Size() > 5*1024*1024 {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Ukuran file terlalu besar untuk diedit di browser (maks 5MB)"})
+		return
+	}
+
+	contentBytes, err := os.ReadFile(fullPath)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Gagal membaca file: " + err.Error()})
+		return
+	}
+
+	root := getWorkspaceRoot()
+	relPath, _ := filepath.Rel(root, fullPath)
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":      true,
+		"name":    filepath.Base(fullPath),
+		"path":    filepath.ToSlash(relPath),
+		"content": string(contentBytes),
+		"size":    info.Size(),
+		"modTime": info.ModTime().Format("2006-01-02 15:04:05"),
+		"ext":     strings.ToLower(filepath.Ext(fullPath)),
+	})
+}
+
+func handleFileWrite(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Path    string `json:"path"`
+		Content string `json:"content"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Path == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Bad request"})
+		return
+	}
+
+	fullPath, err := resolveSecurePath(req.Path)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	// 1. Create Backup if target file exists
+	if _, err := os.Stat(fullPath); err == nil {
+		createFileBackup(fullPath)
+	}
+
+	// 2. Atomic Write: Write to temp file first, then flush & rename
+	dir := filepath.Dir(fullPath)
+	tmpFile, err := os.CreateTemp(dir, ".tmp_rbot_*")
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Gagal membuat file sementara: " + err.Error()})
+		return
+	}
+	tmpName := tmpFile.Name()
+
+	if _, err := tmpFile.WriteString(req.Content); err != nil {
+		tmpFile.Close()
+		os.Remove(tmpName)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Gagal menulis file: " + err.Error()})
+		return
+	}
+	_ = tmpFile.Sync()
+	tmpFile.Close()
+
+	if err := os.Rename(tmpName, fullPath); err != nil {
+		os.Remove(tmpName)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Gagal menyimpan file secara atomic: " + err.Error()})
+		return
+	}
+
+	RecordAudit(r, "FILE_WRITE", fmt.Sprintf("Menyimpan file %s (Atomic write + backup)", req.Path))
+
+	info, _ := os.Stat(fullPath)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":      true,
+		"path":    req.Path,
+		"modTime": info.ModTime().Format("2006-01-02 15:04:05"),
+	})
+}
+
+func createFileBackup(fullPath string) {
+	root := getWorkspaceRoot()
+	relPath, err := filepath.Rel(root, fullPath)
+	if err != nil {
+		return
+	}
+
+	backupDir := filepath.Join(root, ".backups")
+	_ = os.MkdirAll(backupDir, 0755)
+
+	timestamp := time.Now().Format("20060102_150405")
+	cleanRel := strings.ReplaceAll(relPath, "/", "_")
+	cleanRel = strings.ReplaceAll(cleanRel, "\\", "_")
+	backupName := fmt.Sprintf("%s.%s.bak", cleanRel, timestamp)
+	backupPath := filepath.Join(backupDir, backupName)
+
+	data, err := os.ReadFile(fullPath)
+	if err == nil {
+		_ = os.WriteFile(backupPath, data, 0644)
+	}
+
+	cleanupOldBackups(backupDir, cleanRel, 10)
+}
+
+func cleanupOldBackups(backupDir, cleanRel string, maxKeep int) {
+	entries, err := os.ReadDir(backupDir)
+	if err != nil {
+		return
+	}
+
+	prefix := cleanRel + "."
+	var matching []os.DirEntry
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasPrefix(e.Name(), prefix) && strings.HasSuffix(e.Name(), ".bak") {
+			matching = append(matching, e)
+		}
+	}
+
+	if len(matching) <= maxKeep {
+		return
+	}
+
+	sort.Slice(matching, func(i, j int) bool {
+		iInfo, iErr := matching[i].Info()
+		jInfo, jErr := matching[j].Info()
+		if iErr != nil || jErr != nil {
+			return matching[i].Name() < matching[j].Name()
+		}
+		return iInfo.ModTime().Before(jInfo.ModTime())
+	})
+
+	toDelete := len(matching) - maxKeep
+	for i := 0; i < toDelete; i++ {
+		_ = os.Remove(filepath.Join(backupDir, matching[i].Name()))
+	}
+}
+
+func handleFileCreate(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Path string `json:"path"`
+		Type string `json:"type"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Path == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Bad request"})
+		return
+	}
+
+	fullPath, err := resolveSecurePath(req.Path)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	if _, err := os.Stat(fullPath); err == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "File atau folder sudah ada"})
+		return
+	}
+
+	if req.Type == "folder" {
+		if err := os.MkdirAll(fullPath, 0755); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Gagal membuat folder: " + err.Error()})
+			return
+		}
+		RecordAudit(r, "FOLDER_CREATE", "Membuat folder "+req.Path)
+	} else {
+		_ = os.MkdirAll(filepath.Dir(fullPath), 0755)
+		f, err := os.Create(fullPath)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Gagal membuat file: " + err.Error()})
+			return
+		}
+		f.Close()
+		RecordAudit(r, "FILE_CREATE", "Membuat file "+req.Path)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "path": req.Path})
+}
+
+func handleFileRename(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		OldPath string `json:"oldPath"`
+		NewPath string `json:"newPath"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.OldPath == "" || req.NewPath == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Bad request"})
+		return
+	}
+
+	oldFullPath, err1 := resolveSecurePath(req.OldPath)
+	newFullPath, err2 := resolveSecurePath(req.NewPath)
+	if err1 != nil || err2 != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Akses path ditolak"})
+		return
+	}
+
+	if err := os.Rename(oldFullPath, newFullPath); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Gagal mengubah nama: " + err.Error()})
+		return
+	}
+
+	RecordAudit(r, "FILE_RENAME", fmt.Sprintf("Rename %s menjadi %s", req.OldPath, req.NewPath))
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+}
+
+func handleFileDelete(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Path      string `json:"path"`
+		Recursive bool   `json:"recursive"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Path == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Bad request"})
+		return
+	}
+
+	fullPath, err := resolveSecurePath(req.Path)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	info, err := os.Stat(fullPath)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "File tidak ditemukan"})
+		return
+	}
+
+	if info.IsDir() {
+		entries, _ := os.ReadDir(fullPath)
+		if len(entries) > 0 && !req.Recursive {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"ok":            false,
+				"error":         fmt.Sprintf("Folder berisi %d item. Membutuhkan konfirmasi hapus rekursif.", len(entries)),
+				"itemCount":     len(entries),
+				"needRecursive": true,
+			})
+			return
+		}
+		if err := os.RemoveAll(fullPath); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Gagal menghapus folder: " + err.Error()})
+			return
+		}
+	} else {
+		if err := os.Remove(fullPath); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Gagal menghapus file: " + err.Error()})
+			return
+		}
+	}
+
+	RecordAudit(r, "FILE_DELETE", "Menghapus "+req.Path)
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+}
+
+func handleFileDownload(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	reqPath := r.URL.Query().Get("path")
+	fullPath, err := resolveSecurePath(reqPath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	info, err := os.Stat(fullPath)
+	if err != nil || info.IsDir() {
+		http.Error(w, "File tidak ditemukan atau berupa folder", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filepath.Base(fullPath)))
+	w.Header().Set("Content-Type", "application/octet-stream")
+	http.ServeFile(w, r, fullPath)
+}
+
+func handleFileUpload(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	_ = r.ParseMultipartForm(32 << 20)
+	targetDir := r.FormValue("dir")
+	fullDir, err := resolveSecurePath(targetDir)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Gagal membaca upload file"})
+		return
+	}
+	defer file.Close()
+
+	destPath := filepath.Join(fullDir, filepath.Base(header.Filename))
+	destFile, err := os.Create(destPath)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Gagal membuat file tujuan: " + err.Error()})
+		return
+	}
+	defer destFile.Close()
+
+	if _, err := io.Copy(destFile, file); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Gagal menyimpan file upload: " + err.Error()})
+		return
+	}
+
+	relPath, _ := filepath.Rel(getWorkspaceRoot(), destPath)
+	RecordAudit(r, "FILE_UPLOAD", "Upload file "+relPath)
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "path": filepath.ToSlash(relPath)})
+}
+
+func handleFileSearch(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	query := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("query")))
+	if query == "" {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "items": []FileItemInfo{}})
+		return
+	}
+
+	root := getWorkspaceRoot()
+	var matches []FileItemInfo
+	count := 0
+
+	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil || count >= 100 {
+			return nil
+		}
+		name := d.Name()
+		if d.IsDir() && (name == ".git" || name == "node_modules" || name == ".backups") {
+			return filepath.SkipDir
+		}
+
+		if strings.Contains(strings.ToLower(name), query) {
+			rel, _ := filepath.Rel(root, path)
+			info, err := d.Info()
+			sz := int64(0)
+			modTime := ""
+			if err == nil {
+				sz = info.Size()
+				modTime = info.ModTime().Format("2006-01-02 15:04:05")
+			}
+			matches = append(matches, FileItemInfo{
+				Name:    name,
+				Path:    filepath.ToSlash(rel),
+				IsDir:   d.IsDir(),
+				Size:    sz,
+				ModTime: modTime,
+				Ext:     strings.ToLower(filepath.Ext(name)),
+			})
+			count++
+		}
+		return nil
+	})
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "items": matches})
 }

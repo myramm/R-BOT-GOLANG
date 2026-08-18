@@ -11,6 +11,20 @@
   <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
 
+  <!-- CodeMirror 5 Editor & Modes -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.13/lib/codemirror.min.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.13/theme/one-dark.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.13/lib/codemirror.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.13/mode/go/go.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.13/mode/javascript/javascript.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.13/mode/xml/xml.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.13/mode/htmlmixed/htmlmixed.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.13/mode/css/css.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.13/mode/yaml/yaml.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.13/mode/markdown/markdown.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.13/mode/shell/shell.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.13/mode/toml/toml.min.js"></script>
+
   <style>
     :root {
       --bg-app: #0b0f17;
@@ -978,6 +992,11 @@
           Terminal
         </button>
 
+        <button class="nav-item" onclick="switchNav('files', this); closeMobileDrawer();">
+          <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+          File Manager
+        </button>
+
         <button class="nav-item" onclick="switchNav('swgc', this); closeMobileDrawer();">
           <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
           Group Status (SWGC)
@@ -1096,6 +1115,11 @@
       <button class="nav-item" onclick="switchNav('terminal', this)">
         <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M4 17l6-6-6-6m8 14h8"/></svg>
         Terminal
+      </button>
+
+      <button class="nav-item" onclick="switchNav('files', this)">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+        File Manager
       </button>
 
       <button class="nav-item" onclick="switchNav('swgc', this)">
@@ -1742,6 +1766,124 @@
     </div>
   </div>
 
+    <!-- VIEW 9: FILE MANAGER & CODE EDITOR -->
+    <section id="view-files" class="view-container">
+      <div class="greeting-header" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem;">
+        <div>
+          <h2 style="margin: 0; font-size: 1.35rem;">📁 File Manager & Code Editor</h2>
+          <p style="margin: 0.25rem 0 0 0; color: var(--text-sub); font-size: 0.85rem;">Kelola, edit, buat, backup, dan pantau seluruh source code R-BOT secara langsung.</p>
+        </div>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+          <button class="btn btn-secondary btn-sm" onclick="openCreateFileModal('file')">📄 File Baru</button>
+          <button class="btn btn-secondary btn-sm" onclick="openCreateFileModal('folder')">📁 Folder Baru</button>
+          <button class="btn btn-primary btn-sm" onclick="triggerFileUpload()">📤 Upload File</button>
+          <input type="file" id="fileUploadInput" style="display: none;" onchange="handleFileUpload(event)">
+        </div>
+      </div>
+
+      <!-- File Navigation Breadcrumb & Search -->
+      <div class="panel-card" style="margin-bottom: 1rem; padding: 0.85rem;">
+        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+          <div id="fileBreadcrumb" style="display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; font-family: var(--font-mono); font-size: 0.85rem;"></div>
+          <div style="display: flex; gap: 0.5rem;">
+            <input type="text" id="fileSearchInput" class="input-field" placeholder="🔍 Cari file di workspace..." onkeyup="handleFileSearch(event)">
+            <button class="btn btn-secondary btn-sm" onclick="fetchFileList(currentFileDir)">🔄 Refresh</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- File List Table Container -->
+      <div class="panel-card" style="padding: 0; overflow: hidden;">
+        <div class="table-responsive">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 45%;">Nama Item</th>
+                <th>Ukuran</th>
+                <th>Diubah</th>
+                <th style="text-align: right;">Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="fileTableBody">
+              <tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Memuat daftar file...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  <!-- CODE EDITOR FULL-SCREEN MODAL -->
+  <div id="editorModal" class="modal-backdrop">
+    <div class="modal-box" style="width: 95vw; max-width: 1200px; height: 92vh; max-height: 92vh; display: flex; flex-direction: column; padding: 0; overflow: hidden; border-radius: 12px; background: #090d16;">
+      
+      <!-- Editor Header -->
+      <div style="padding: 0.65rem 1rem; background: #0d121e; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap;">
+        <div style="display: flex; align-items: center; gap: 0.65rem;">
+          <button class="btn btn-secondary btn-sm" onclick="attemptCloseEditor()">← Kembali</button>
+          <span id="editorFileName" style="font-family: var(--font-mono); font-weight: 600; font-size: 0.9rem; color: var(--text-main);">filename.go</span>
+          <span id="editorStatusBadge" class="badge badge-success" style="font-size: 0.725rem;">● Saved</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <button id="editorFormatBtn" class="btn btn-secondary btn-sm" style="display: none;" onclick="formatJsonEditor()">✨ Format JSON</button>
+          <button class="btn btn-primary btn-sm" onclick="saveActiveFile()">💾 Save (Ctrl+S)</button>
+          <button class="btn btn-secondary btn-sm" onclick="attemptCloseEditor()">✕</button>
+        </div>
+      </div>
+
+      <!-- JSON Validation Error Banner -->
+      <div id="editorJsonErrorBanner" style="display: none; background: rgba(239, 68, 68, 0.15); border-bottom: 1px solid var(--danger); padding: 0.5rem 1rem; color: #f87171; font-family: var(--font-mono); font-size: 0.78rem;">
+        ⚠️ <span id="editorJsonErrorText">Invalid JSON</span>
+      </div>
+
+      <!-- CodeMirror / Editor Container -->
+      <div id="codeEditorContainer" style="flex: 1; position: relative; overflow: hidden;">
+        <textarea id="codeEditorTextarea" style="width: 100%; height: 100%; background: #080b11; color: #f3f4f6; font-family: var(--font-mono); font-size: 13px; padding: 0.75rem; border: none; outline: none; resize: none;"></textarea>
+      </div>
+
+      <!-- Compact Footer Info Bar -->
+      <div style="padding: 0.35rem 1rem; background: #0a0e17; border-top: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted);">
+        <div>Path: <span id="editorFilePath"></span></div>
+        <div>Ukuran: <span id="editorFileSize">0 B</span> | Backup Otomatis Ditaktifkan</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Create File / Folder -->
+  <div id="modalCreateFile" class="modal-backdrop">
+    <div class="modal-box" style="max-width: 380px;">
+      <h3 id="modalCreateTitle" style="font-size: 1.05rem; font-weight: 700; margin-bottom: 0.85rem;">Buat File Baru</h3>
+      <form onsubmit="submitCreateFile(event)">
+        <input type="hidden" id="createItemType" value="file">
+        <div style="margin-bottom: 1rem;">
+          <label style="display: block; font-size: 0.75rem; color: var(--text-sub); margin-bottom: 0.35rem;">Nama Item (relatif terhadap direktori saat ini)</label>
+          <input type="text" id="createItemName" class="input-field" placeholder="contoh: config.json atau myfolder" required autofocus>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+          <button type="button" class="btn btn-secondary" onclick="closeCreateFileModal()">Batal</button>
+          <button type="submit" class="btn btn-primary">Buat Item</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Rename Item -->
+  <div id="modalRenameItem" class="modal-backdrop">
+    <div class="modal-box" style="max-width: 380px;">
+      <h3 style="font-size: 1.05rem; font-weight: 700; margin-bottom: 0.85rem;">Rename File / Folder</h3>
+      <form onsubmit="submitRenameItem(event)">
+        <input type="hidden" id="renameOldPath">
+        <div style="margin-bottom: 1rem;">
+          <label style="display: block; font-size: 0.75rem; color: var(--text-sub); margin-bottom: 0.35rem;">Nama Baru</label>
+          <input type="text" id="renameNewName" class="input-field" required autofocus>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+          <button type="button" class="btn btn-secondary" onclick="closeRenameModal()">Batal</button>
+          <button type="submit" class="btn btn-primary">Simpan Nama Baru</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- ANDROID MOBILE BOTTOM APP BAR NAVIGATION -->
   <nav class="bottom-appbar mobile-only">
     <button class="bottom-nav-btn active" onclick="switchNav('overview', this); updateBottomNav(this);">
@@ -2037,6 +2179,9 @@
       }
       if (viewId === 'swgc') {
         loadSWGCGroups();
+      }
+      if (viewId === 'files') {
+        initFileManager();
       }
       if (viewId === 'users') {
         loadBlacklistWeb();
@@ -3471,6 +3616,492 @@
     function escapeHtml(text) {
       if (!text) return '';
       return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    /* File Manager & Code Editor System */
+    let currentFileDir = '';
+    let activeEditPath = '';
+    let activeEditOriginalContent = '';
+    let cmInstance = null;
+    let isFileDirty = false;
+
+    function initFileManager() {
+      fetchFileList(currentFileDir);
+    }
+
+    function fetchFileList(dir) {
+      currentFileDir = dir || '';
+      fetch(`/api/files/list?path=${encodeURIComponent(currentFileDir)}`, {
+        headers: { 'Authorization': `Bearer ${authToken}` }
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (!data.ok) {
+          showToast(data.error || 'Gagal memuat direktori', 'danger');
+          return;
+        }
+        renderFileBreadcrumb(data.currentPath);
+        renderFileList(data.items, data.parentPath);
+      })
+      .catch(err => showToast('Gagal memuat file: ' + err.message, 'danger'));
+    }
+
+    function renderFileBreadcrumb(pathStr) {
+      const bc = document.getElementById('fileBreadcrumb');
+      if (!bc) return;
+
+      const parts = pathStr ? pathStr.split('/') : [];
+      let html = `<button class="btn btn-secondary btn-sm" style="padding: 0.15rem 0.45rem;" onclick="fetchFileList('')">📁 workspace</button>`;
+
+      let acc = '';
+      parts.forEach((p, idx) => {
+        if (!p) return;
+        acc = acc ? `${acc}/${p}` : p;
+        const currentPath = acc;
+        html += `<span style="color: var(--text-muted);">/</span>`;
+        if (idx === parts.length - 1) {
+          html += `<span style="font-weight: 600; color: var(--accent);">${p}</span>`;
+        } else {
+          html += `<button class="btn btn-secondary btn-sm" style="padding: 0.15rem 0.45rem;" onclick="fetchFileList('${currentPath}')">${p}</button>`;
+        }
+      });
+      bc.innerHTML = html;
+    }
+
+    function getFileIcon(item) {
+      if (item.isDir) return '📁';
+      const ext = item.ext ? item.ext.toLowerCase() : '';
+      if (ext === '.go') return '🐹';
+      if (ext === '.js') return '🟨';
+      if (ext === '.ts') return '🔷';
+      if (ext === '.json' || ext === '.yaml' || ext === '.yml' || ext === '.toml') return '⚙️';
+      if (ext === '.html' || ext === '.css') return '🌐';
+      if (ext === '.md') return '📝';
+      if (ext === '.sh') return '🐚';
+      if (['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'].includes(ext)) return '🖼️';
+      return '📄';
+    }
+
+    function formatFileSize(bytes) {
+      if (bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    function renderFileList(items, parentPath) {
+      const tbody = document.getElementById('fileTableBody');
+      if (!tbody) return;
+
+      if (!items || items.length === 0) {
+        let emptyHtml = '';
+        if (parentPath !== undefined && parentPath !== null && currentFileDir !== '') {
+          emptyHtml += `
+            <tr style="cursor: pointer;" onclick="fetchFileList('${parentPath}')">
+              <td colspan="4" style="color: var(--accent); font-family: var(--font-mono); font-size: 0.85rem; background: rgba(99, 102, 241, 0.05);">📁 .. (Kembali ke folder induk)</td>
+            </tr>`;
+        }
+        emptyHtml += `<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Direktori ini kosong</td></tr>`;
+        tbody.innerHTML = emptyHtml;
+        return;
+      }
+
+      let html = '';
+      if (parentPath !== undefined && parentPath !== null && currentFileDir !== '') {
+        html += `
+          <tr style="cursor: pointer;" onclick="fetchFileList('${parentPath}')">
+            <td colspan="4" style="color: var(--accent); font-family: var(--font-mono); font-size: 0.85rem; background: rgba(99, 102, 241, 0.05);">📁 .. (Kembali ke folder induk)</td>
+          </tr>`;
+      }
+
+      items.forEach(item => {
+        const icon = getFileIcon(item);
+        const isEditable = !item.isDir && ['.go','.js','.ts','.json','.yaml','.yml','.toml','.html','.css','.md','.sh','.txt','.env','.log','.mod','.sum'].includes(item.ext);
+        
+        html += `
+          <tr>
+            <td>
+              <div style="display: flex; align-items: center; gap: 0.5rem; font-family: var(--font-mono); font-size: 0.85rem;">
+                <span>${icon}</span>
+                ${item.isDir ? 
+                  `<a href="#" onclick="fetchFileList('${item.path}'); return false;" style="color: var(--text-main); font-weight: 600; text-decoration: none;">${item.name}</a>` :
+                  `<span style="color: var(--text-main);">${item.name}</span>`
+                }
+              </div>
+            </td>
+            <td style="font-family: var(--font-mono); font-size: 0.775rem; color: var(--text-sub);">${item.isDir ? '-' : formatFileSize(item.size)}</td>
+            <td style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted);">${item.modTime}</td>
+            <td style="text-align: right;">
+              <div style="display: flex; justify-content: flex-end; gap: 0.35rem;">
+                ${isEditable ? `<button class="btn btn-secondary btn-sm" onclick="openFileEditor('${item.path}')">✏️ Edit</button>` : ''}
+                ${!item.isDir ? `<a class="btn btn-secondary btn-sm" href="/api/files/download?path=${encodeURIComponent(item.path)}&token=${encodeURIComponent(authToken)}" download>📥</a>` : ''}
+                <button class="btn btn-secondary btn-sm" onclick="openRenameModal('${item.path}', '${item.name}')">✏️</button>
+                <button class="btn btn-danger btn-sm" onclick="promptDeleteFile('${item.path}', ${item.isDir})">🗑️</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      });
+
+      tbody.innerHTML = html;
+    }
+
+    function openFileEditor(pathStr) {
+      fetch(`/api/files/read?path=${encodeURIComponent(pathStr)}`, {
+        headers: { 'Authorization': `Bearer ${authToken}` }
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (!data.ok) {
+          showToast(data.error || 'Gagal membaca file', 'danger');
+          return;
+        }
+
+        activeEditPath = data.path;
+        activeEditOriginalContent = data.content;
+        isFileDirty = false;
+
+        document.getElementById('editorFileName').textContent = data.name;
+        document.getElementById('editorFilePath').textContent = data.path;
+        document.getElementById('editorFileSize').textContent = formatFileSize(data.size);
+        updateEditorStatus('saved');
+
+        const formatBtn = document.getElementById('editorFormatBtn');
+        if (formatBtn) {
+          formatBtn.style.display = data.ext === '.json' ? 'inline-flex' : 'none';
+        }
+
+        document.getElementById('editorJsonErrorBanner').style.display = 'none';
+        document.getElementById('editorModal').classList.add('active');
+
+        setupCodeMirrorInstance(data.content, data.ext);
+      })
+      .catch(err => showToast('Error: ' + err.message, 'danger'));
+    }
+
+    function setupCodeMirrorInstance(content, ext) {
+      const mode = getCMMode(ext);
+      const container = document.getElementById('codeEditorContainer');
+      container.innerHTML = `<textarea id="codeEditorTextarea"></textarea>`;
+      const textarea = document.getElementById('codeEditorTextarea');
+      textarea.value = content;
+
+      if (window.CodeMirror) {
+        cmInstance = CodeMirror.fromTextArea(textarea, {
+          lineNumbers: true,
+          mode: mode,
+          theme: 'one-dark',
+          lineWrapping: true,
+          viewportMargin: Infinity
+        });
+
+        cmInstance.on('change', () => {
+          const currentVal = cmInstance.getValue();
+          if (currentVal !== activeEditOriginalContent) {
+            if (!isFileDirty) {
+              isFileDirty = true;
+              updateEditorStatus('unsaved');
+            }
+          } else {
+            isFileDirty = false;
+            updateEditorStatus('saved');
+          }
+          if (ext === '.json') validateJsonContent(currentVal);
+        });
+
+        cmInstance.setOption('extraKeys', {
+          'Ctrl-S': function() { saveActiveFile(); },
+          'Cmd-S': function() { saveActiveFile(); }
+        });
+
+        setTimeout(() => cmInstance.refresh(), 100);
+      } else {
+        textarea.style.display = 'block';
+        textarea.addEventListener('input', () => {
+          if (textarea.value !== activeEditOriginalContent) {
+            isFileDirty = true;
+            updateEditorStatus('unsaved');
+          } else {
+            isFileDirty = false;
+            updateEditorStatus('saved');
+          }
+          if (ext === '.json') validateJsonContent(textarea.value);
+        });
+      }
+    }
+
+    function getCMMode(ext) {
+      if (ext === '.go') return 'go';
+      if (ext === '.js' || ext === '.json') return 'javascript';
+      if (ext === '.html' || ext === '.htm') return 'htmlmixed';
+      if (ext === '.css') return 'css';
+      if (ext === '.yaml' || ext === '.yml') return 'yaml';
+      if (ext === '.md') return 'markdown';
+      if (ext === '.sh') return 'shell';
+      if (ext === '.toml') return 'toml';
+      return 'text/plain';
+    }
+
+    function updateEditorStatus(status, errorMsg) {
+      const badge = document.getElementById('editorStatusBadge');
+      if (!badge) return;
+
+      if (status === 'saved') {
+        badge.className = 'badge badge-success';
+        badge.textContent = '● Saved';
+      } else if (status === 'unsaved') {
+        badge.className = 'badge badge-warning';
+        badge.textContent = '● Unsaved changes';
+      } else if (status === 'saving') {
+        badge.className = 'badge badge-info';
+        badge.textContent = '● Saving...';
+      } else if (status === 'error') {
+        badge.className = 'badge badge-danger';
+        badge.textContent = '● Error: ' + (errorMsg || 'Failed');
+      }
+    }
+
+    function validateJsonContent(str) {
+      const banner = document.getElementById('editorJsonErrorBanner');
+      const errText = document.getElementById('editorJsonErrorText');
+      if (!banner || !errText) return;
+
+      try {
+        JSON.parse(str);
+        banner.style.display = 'none';
+      } catch (err) {
+        errText.textContent = 'Syntax JSON tidak valid: ' + err.message;
+        banner.style.display = 'block';
+      }
+    }
+
+    function formatJsonEditor() {
+      const val = cmInstance ? cmInstance.getValue() : document.getElementById('codeEditorTextarea').value;
+      try {
+        const parsed = JSON.parse(val);
+        const formatted = JSON.stringify(parsed, null, 2);
+        if (cmInstance) {
+          cmInstance.setValue(formatted);
+        } else {
+          document.getElementById('codeEditorTextarea').value = formatted;
+        }
+        showToast('JSON berhasil diformat', 'success');
+      } catch (err) {
+        showToast('Tidak bisa memformat JSON tidak valid: ' + err.message, 'warning');
+      }
+    }
+
+    function saveActiveFile() {
+      if (!activeEditPath) return;
+
+      const content = cmInstance ? cmInstance.getValue() : document.getElementById('codeEditorTextarea').value;
+      updateEditorStatus('saving');
+
+      fetch('/api/files/write', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({ path: activeEditPath, content: content })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (!data.ok) {
+          updateEditorStatus('error', data.error);
+          showToast('Gagal menyimpan file: ' + data.error, 'danger');
+          return;
+        }
+        activeEditOriginalContent = content;
+        isFileDirty = false;
+        updateEditorStatus('saved');
+        showToast('File berhasil disimpan! (Backup atomic otomatis dibuat)', 'success');
+        fetchFileList(currentFileDir);
+      })
+      .catch(err => {
+        updateEditorStatus('error', err.message);
+        showToast('Error koneksi saat menyimpan: ' + err.message, 'danger');
+      });
+    }
+
+    function attemptCloseEditor() {
+      if (isFileDirty) {
+        openConfirmModal('Unsaved Changes', 'Perubahan pada file belum disimpan. Yakin ingin keluar?', () => {
+          closeConfirmModal();
+          document.getElementById('editorModal').classList.remove('active');
+          isFileDirty = false;
+        });
+      } else {
+        document.getElementById('editorModal').classList.remove('active');
+      }
+    }
+
+    function openCreateFileModal(type) {
+      document.getElementById('createItemType').value = type;
+      document.getElementById('modalCreateTitle').textContent = type === 'folder' ? 'Buat Folder Baru' : 'Buat File Baru';
+      document.getElementById('createItemName').value = '';
+      document.getElementById('modalCreateFile').classList.add('active');
+    }
+
+    function closeCreateFileModal() {
+      document.getElementById('modalCreateFile').classList.remove('active');
+    }
+
+    function submitCreateFile(e) {
+      e.preventDefault();
+      const type = document.getElementById('createItemType').value;
+      const name = document.getElementById('createItemName').value.trim();
+      if (!name) return;
+
+      const fullRelPath = currentFileDir ? `${currentFileDir}/${name}` : name;
+      fetch('/api/files/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({ path: fullRelPath, type: type })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (!data.ok) {
+          showToast(data.error || 'Gagal membuat item', 'danger');
+          return;
+        }
+        closeCreateFileModal();
+        showToast(`Berhasil membuat ${type}!`, 'success');
+        fetchFileList(currentFileDir);
+      })
+      .catch(err => showToast('Error: ' + err.message, 'danger'));
+    }
+
+    function openRenameModal(pathStr, nameStr) {
+      document.getElementById('renameOldPath').value = pathStr;
+      document.getElementById('renameNewName').value = nameStr;
+      document.getElementById('modalRenameItem').classList.add('active');
+    }
+
+    function closeRenameModal() {
+      document.getElementById('modalRenameItem').classList.remove('active');
+    }
+
+    function submitRenameItem(e) {
+      e.preventDefault();
+      const oldPath = document.getElementById('renameOldPath').value;
+      const newName = document.getElementById('renameNewName').value.trim();
+      if (!newName) return;
+
+      const dir = oldPath.includes('/') ? oldPath.substring(0, oldPath.lastIndexOf('/')) : '';
+      const newPath = dir ? `${dir}/${newName}` : newName;
+
+      fetch('/api/files/rename', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({ oldPath: oldPath, newPath: newPath })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (!data.ok) {
+          showToast(data.error || 'Gagal rename', 'danger');
+          return;
+        }
+        closeRenameModal();
+        showToast('Nama berhasil diubah', 'success');
+        fetchFileList(currentFileDir);
+      })
+      .catch(err => showToast('Error: ' + err.message, 'danger'));
+    }
+
+    function promptDeleteFile(pathStr, isDir) {
+      const typeText = isDir ? 'folder' : 'file';
+      openConfirmModal(`Hapus ${typeText}`, `Yakin ingin menghapus ${pathStr}?`, () => {
+        deleteFileItem(pathStr, false);
+      });
+    }
+
+    function deleteFileItem(pathStr, recursive) {
+      fetch('/api/files/delete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({ path: pathStr, recursive: recursive })
+      })
+      .then(res => res.json())
+      .then(data => {
+        closeConfirmModal();
+        if (!data.ok) {
+          if (data.needRecursive) {
+            openConfirmModal('Folder Tidak Kosong', `${data.error} Yakin ingin menghapus folder dan SELURUH isi (${data.itemCount} item) secara permanen?`, () => {
+              deleteFileItem(pathStr, true);
+            });
+            return;
+          }
+          showToast(data.error || 'Gagal menghapus', 'danger');
+          return;
+        }
+        showToast('Berhasil dihapus', 'success');
+        fetchFileList(currentFileDir);
+      })
+      .catch(err => {
+        closeConfirmModal();
+        showToast('Error: ' + err.message, 'danger');
+      });
+    }
+
+    function triggerFileUpload() {
+      document.getElementById('fileUploadInput').click();
+    }
+
+    function handleFileUpload(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const formData = new FormData();
+      formData.append('dir', currentFileDir);
+      formData.append('file', file);
+
+      showToast('Mengunggah file...', 'info');
+
+      fetch('/api/files/upload', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${authToken}` },
+        body: formData
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (!data.ok) {
+          showToast(data.error || 'Gagal upload file', 'danger');
+          return;
+        }
+        showToast(`File ${file.name} berhasil diupload!`, 'success');
+        fetchFileList(currentFileDir);
+      })
+      .catch(err => showToast('Upload error: ' + err.message, 'danger'));
+    }
+
+    function handleFileSearch(e) {
+      const query = e.target.value.trim();
+      if (!query) {
+        fetchFileList(currentFileDir);
+        return;
+      }
+
+      fetch(`/api/files/search?query=${encodeURIComponent(query)}`, {
+        headers: { 'Authorization': `Bearer ${authToken}` }
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.ok) {
+          renderFileList(data.items, null);
+        }
+      })
+      .catch(err => console.error(err));
     }
   </script>
 </body>

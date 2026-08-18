@@ -780,7 +780,7 @@
       background: rgba(0, 0, 0, 0.75);
       backdrop-filter: blur(4px);
       z-index: 9000;
-      display: flex;
+      display: none;
       align-items: center;
       justify-content: center;
       padding: 1rem;
@@ -788,7 +788,7 @@
       pointer-events: none;
       transition: opacity 0.2s ease;
     }
-    .modal-backdrop.active { opacity: 1; pointer-events: auto; }
+    .modal-backdrop.active { display: flex; opacity: 1; pointer-events: auto; }
 
     .modal-box {
       background: var(--bg-card);
@@ -1293,7 +1293,23 @@
     </div>
   </div>
 
-
+  <!-- Login Modal -->
+  <div id="loginModal" class="modal-backdrop">
+    <div class="modal-box" style="max-width: 340px;">
+      <div style="text-align: center; margin-bottom: 1.25rem;">
+        <div class="brand-logo" style="width: 44px; height: 44px; margin: 0 auto 0.6rem; font-size: 1.2rem; display: flex; align-items: center; justify-content: center; border-radius: 10px; background: var(--accent); color: #fff; font-weight: 800;">R</div>
+        <h3 style="font-size: 1.15rem; font-weight: 700;">R-BOT Control Center</h3>
+        <p style="color: var(--text-sub); font-size: 0.8rem; margin-top: 0.25rem;">Masukkan password web untuk melanjutkan.</p>
+      </div>
+      <form id="loginForm" onsubmit="handleLogin(event); return false;">
+        <div style="margin-bottom: 1rem;">
+          <input type="password" id="loginPassword" class="input-field" placeholder="Password admin..." autocomplete="current-password" autofocus style="width: 100%; padding: 0.65rem 0.85rem;" onkeydown="if(event.key==='Enter'){handleLogin(event);}">
+        </div>
+        <button type="button" id="loginSubmitBtn" class="btn btn-primary" onclick="handleLogin(event)" style="width: 100%; padding: 0.65rem; font-weight: 600;">Masuk Dashboard</button>
+        <div id="loginError" style="color: var(--danger); font-size: 0.775rem; margin-top: 0.65rem; display: none; text-align: center;"></div>
+      </form>
+    </div>
+  </div>
 
   <!-- Action Confirmation Dialog Modal -->
   <div id="confirmModal" class="modal-backdrop">
@@ -1443,6 +1459,25 @@
       <div class="greeting-header">
         <h2>Selamat Datang 👋</h2>
         <p id="greetingSub">Semua sistem R-BOT berjalan dengan lancar.</p>
+      </div>
+
+      <!-- WhatsApp Pairing Code Banner (Active when unlinked) -->
+      <div id="pairingBanner" style="display: none; background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(168, 85, 247, 0.12)); border: 1px solid rgba(99, 102, 241, 0.35); border-radius: 12px; padding: 1.15rem; margin-bottom: 1.5rem;">
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
+          <div>
+            <div style="font-weight: 700; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem; color: #818cf8;">
+              <span>📱 Tautkan WhatsApp Bot</span>
+              <span class="badge" style="background: rgba(234, 179, 8, 0.2); color: #facc15; font-size: 0.72rem; padding: 0.15rem 0.5rem; border-radius: 9999px;">Menunggu Pairing</span>
+            </div>
+            <p style="color: var(--text-sub); font-size: 0.825rem; margin-top: 0.35rem; line-height: 1.4;">
+              Buka WhatsApp di HP &rarr; <strong>Perangkat Tertaut</strong> &rarr; <strong>Tautkan dengan nomor telepon</strong> &rarr; Masukkan kode pairing:
+            </p>
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <span id="pairingCodeDisplay" style="font-family: var(--font-mono); font-size: 1.35rem; font-weight: 800; letter-spacing: 2px; background: rgba(0,0,0,0.4); padding: 0.45rem 0.9rem; border-radius: 8px; border: 1px solid rgba(99, 102, 241, 0.4); color: #38bdf8;">----</span>
+            <button class="btn btn-primary btn-sm" onclick="copyPairingCode()">📋 Salin</button>
+          </div>
+        </div>
       </div>
 
       <!-- 5 Core Metrics Grid (2 Columns on Mobile Android!) -->
@@ -2350,7 +2385,7 @@
     let pendingConfirmAction = null;
 
     document.addEventListener('DOMContentLoaded', () => {
-      initDashboard();
+      checkAuth();
     });
 
     function showToast(msg, type = 'info') {
@@ -2366,7 +2401,21 @@
     }
 
     async function checkAuth() {
-      initDashboard();
+      try {
+        const res = await fetch('/api/auth/status', {
+          headers: authToken ? { 'Authorization': 'Bearer ' + authToken } : {}
+        });
+        const data = await res.json();
+        const modal = document.getElementById('loginModal');
+        if (!data.required || data.authenticated) {
+          if (modal) modal.classList.remove('active');
+          initDashboard();
+        } else {
+          if (modal) modal.classList.add('active');
+        }
+      } catch (err) {
+        initDashboard();
+      }
     }
 
     async function handleLogin(e) {
@@ -2546,8 +2595,54 @@
       renderCommandsTables(d.topCommands || [], d.topCommandErrors || []);
       renderAuditTable(d.auditLogs || []);
 
+      // Pairing Banner Handler
+      const pairingBanner = document.getElementById('pairingBanner');
+      const pairingCodeDisplay = document.getElementById('pairingCodeDisplay');
+      if (pairingBanner && pairingCodeDisplay) {
+        if (d.bot && !d.bot.loggedIn && d.bot.pairingCode) {
+          pairingCodeDisplay.textContent = d.bot.pairingCode;
+          pairingBanner.style.display = 'block';
+        } else {
+          pairingBanner.style.display = 'none';
+        }
+      }
+
       // Config View
       document.getElementById('configView').textContent = JSON.stringify(d.config || {}, null, 2);
+    }
+
+    function copyPairingCode() {
+      const el = document.getElementById('pairingCodeDisplay');
+      if (!el) return;
+      const code = el.textContent.trim();
+      if (!code || code === '----') return;
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(code).then(() => {
+          showToast('Kode pairing disalin: ' + code, 'success');
+        }).catch(() => {
+          fallbackCopyText(code);
+        });
+      } else {
+        fallbackCopyText(code);
+      }
+    }
+
+    function fallbackCopyText(text) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      try {
+        document.execCommand('copy');
+        showToast('Kode pairing disalin: ' + text, 'success');
+      } catch (e) {
+        showToast('Kode pairing: ' + text, 'info');
+      }
+      document.body.removeChild(ta);
     }
 
     function toggleMobileDrawer() {
@@ -3016,12 +3111,14 @@
     async function fetchStatus() {
       try {
         const res = await fetch('/api/status', {
-          headers: { 'Authorization': 'Bearer ' + authToken }
+          headers: authToken ? { 'Authorization': 'Bearer ' + authToken } : {}
         });
         if (res.status === 401) {
-          checkAuth();
+          const modal = document.getElementById('loginModal');
+          if (modal) modal.classList.add('active');
           return;
         }
+        if (!res.ok) return;
         const d = await res.json();
         applyMetricsData(d);
       } catch (err) {
@@ -4781,6 +4878,8 @@
         .then(handlePPResponse)
         .catch(handlePPError);
       }
+    }
+
     function checkWebUpdate() {
       const box = document.getElementById('updateStatusBox');
       const applyBtn = document.getElementById('applyUpdateBtn');

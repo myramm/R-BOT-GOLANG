@@ -232,7 +232,27 @@ func validateToken(token string) bool {
 }
 
 func IsAuthenticated(r *http.Request) bool {
-	return true
+	if !isPasswordRequired() {
+		return true
+	}
+	if cookie, err := r.Cookie("rbot_session"); err == nil {
+		if validateToken(cookie.Value) {
+			return true
+		}
+	}
+	authHeader := r.Header.Get("Authorization")
+	if strings.HasPrefix(authHeader, "Bearer ") {
+		token := strings.TrimPrefix(authHeader, "Bearer ")
+		if validateToken(token) {
+			return true
+		}
+	}
+	if token := r.URL.Query().Get("token"); token != "" {
+		if validateToken(token) {
+			return true
+		}
+	}
+	return false
 }
 
 func SetWhatsAppClient(cli *whatsmeow.Client) {
@@ -598,9 +618,11 @@ func handleLogout(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleAuthStatus(w http.ResponseWriter, r *http.Request) {
+	required := isPasswordRequired()
 	authenticated := IsAuthenticated(r)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
+		"required":      required,
 		"authenticated": authenticated,
 	})
 }
@@ -1110,18 +1132,24 @@ func handleSWGCGroups(w http.ResponseWriter, r *http.Request) {
 	cli := waClient
 	stateMu.RUnlock()
 
-	if cli == nil || !cli.IsConnected() {
+	if cli == nil || !cli.IsConnected() || !cli.IsLoggedIn() {
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "WhatsApp client belum terhubung!"})
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":     true,
+			"groups": []any{},
+			"info":   "WhatsApp bot belum login atau belum terhubung.",
+		})
 		return
 	}
 
 	groups, err := cli.GetJoinedGroups(r.Context())
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": fmt.Sprintf("Gagal mengambil grup: %v", err)})
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":     true,
+			"groups": []any{},
+			"error":  fmt.Sprintf("Gagal mengambil grup: %v", err),
+		})
 		return
 	}
 

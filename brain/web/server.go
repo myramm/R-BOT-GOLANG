@@ -39,6 +39,7 @@ import (
 	"rbot/brain/store"
 	"rbot/brain/swgc"
 	"rbot/brain/updater"
+	"rbot/brain/welcome"
 	"rbot/cmd"
 )
 
@@ -491,6 +492,11 @@ func Start(ctx context.Context) {
 	mux.HandleFunc("/api/simi/stickers/upload", handleSimiStickerUpload)
 	mux.HandleFunc("/api/simi/stickers/delete", handleSimiStickerDelete)
 	mux.HandleFunc("/api/simi/stickers/clear", handleSimiStickerClear)
+
+	// Welcome Message Endpoints
+	mux.HandleFunc("/api/welcome/groups", handleWelcomeGroups)
+	mux.HandleFunc("/api/welcome/toggle", handleWelcomeToggle)
+	mux.HandleFunc("/api/welcome/template", handleWelcomeTemplate)
 
 	// File Manager API Endpoints
 	mux.HandleFunc("/api/files/list", handleFileList)
@@ -2679,5 +2685,143 @@ func handleSimiStickerClear(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"ok":             true,
 		"total_stickers": 0,
+	})
+}
+
+// -------------------------------------------------------------
+// WELCOME MESSAGE WEB HANDLERS
+// -------------------------------------------------------------
+
+func handleWelcomeGroups(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	stateMu.RLock()
+	cli := waClient
+	stateMu.RUnlock()
+
+	if cli == nil || !cli.IsConnected() || !cli.IsLoggedIn() {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":     true,
+			"groups": []welcome.GroupWelcomeData{},
+			"info":   "WhatsApp bot belum terhubung.",
+		})
+		return
+	}
+
+	groups, err := welcome.GetGroupsWelcomeData(r.Context(), cli)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":     false,
+			"error":  err.Error(),
+			"groups": []welcome.GroupWelcomeData{},
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":               true,
+		"groups":           groups,
+		"default_template": welcome.DefaultTemplate(),
+	})
+}
+
+func handleWelcomeToggle(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		JID     string `json:"jid"`
+		Enabled bool   `json:"enabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.JID == "" {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	if err := welcome.SetEnabled(req.JID, req.Enabled); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	statusStr := "OFF"
+	if req.Enabled {
+		statusStr = "ON"
+	}
+	RecordAudit(r, "WELCOME_TOGGLE", fmt.Sprintf("Ubah status Welcome %s untuk grup %s via Web Dashboard", statusStr, req.JID))
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":      true,
+		"jid":     req.JID,
+		"enabled": req.Enabled,
+	})
+}
+
+func handleWelcomeTemplate(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		JID      string `json:"jid"`
+		Template string `json:"template"`
+		Action   string `json:"action"` // "set" | "reset"
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.JID == "" {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	if req.Action == "reset" {
+		_ = welcome.ResetTemplate(req.JID)
+		RecordAudit(r, "WELCOME_TEMPLATE", fmt.Sprintf("Reset template welcome untuk grup %s ke bawaan", req.JID))
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":             true,
+			"jid":            req.JID,
+			"template":       welcome.GetTemplate(req.JID),
+			"has_custom_msg": false,
+		})
+		return
+	}
+
+	if strings.TrimSpace(req.Template) == "" {
+		http.Error(w, "Template tidak boleh kosong", http.StatusBadRequest)
+		return
+	}
+
+	if err := welcome.SetTemplate(req.JID, req.Template); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	RecordAudit(r, "WELCOME_TEMPLATE", fmt.Sprintf("Update template welcome untuk grup %s via Web Dashboard", req.JID))
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":             true,
+		"jid":            req.JID,
+		"template":       welcome.GetTemplate(req.JID),
+		"has_custom_msg": true,
 	})
 }

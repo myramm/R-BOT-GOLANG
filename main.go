@@ -30,6 +30,7 @@ import (
 	"rbot/brain/stats"
 	"rbot/brain/store"
 	"rbot/brain/web"
+	"rbot/brain/welcome"
 	_ "rbot/cmd"
 )
 
@@ -141,6 +142,10 @@ func run(ctx context.Context) error {
 				}()
 			}
 			go command.Dispatch(ctx, client, evt, false)
+		case *events.GroupInfo:
+			if len(evt.Join) > 0 {
+				go welcome.HandleGroupJoin(ctx, client, evt)
+			}
 		case *events.Connected:
 			log.Printf("[rbot] terhubung ke WhatsApp sebagai %s", client.Store.ID)
 			web.BroadcastMetricsNow()

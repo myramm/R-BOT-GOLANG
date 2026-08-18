@@ -1446,6 +1446,11 @@
           <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
           Simi-Simi AI
         </button>
+
+        <button class="nav-item" onclick="switchNav('welcome', this); closeMobileDrawer();">
+          <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>
+          Pesan Welcome
+        </button>
       </nav>
 
       <div class="sidebar-footer">
@@ -1595,6 +1600,11 @@
       <button class="nav-item" onclick="switchNav('simi', this)">
         <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
         Simi-Simi AI
+      </button>
+
+      <button class="nav-item" onclick="switchNav('welcome', this)">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>
+        Pesan Welcome
       </button>
     </nav>
 
@@ -2479,6 +2489,90 @@
       </div>
     </section>
 
+    <!-- VIEW 11: PESAN SAMBUTAN (WELCOME MESSAGE) -->
+    <section id="view-welcome" class="view-container">
+      <div class="greeting-header" style="margin-bottom: 1rem;">
+        <h2 style="margin: 0; font-size: 1.35rem;">👋 Pengaturan Pesan Welcome Grup</h2>
+        <p style="margin: 0.25rem 0 0 0; color: var(--text-sub); font-size: 0.85rem;">Kelola status aktif dan kustomisasi teks sambutan otomatis untuk setiap grup WhatsApp.</p>
+      </div>
+
+      <!-- Quick Info Banner -->
+      <div class="panel" style="margin-bottom: 1rem; padding: 1rem; border-left: 4px solid var(--accent); background: rgba(59, 130, 246, 0.05);">
+        <div style="font-size: 0.85rem; color: var(--text-sub); line-height: 1.5;">
+          💡 <strong>Informasi:</strong> Fitur ini menyambut setiap member baru yang masuk/di-invite ke grup dengan otomatis me-mention mereka.<br>
+          Admin grup juga dapat mengaktifkan langsung di WhatsApp dengan perintah <code>.welcome on</code> / <code>.welcome off</code>.
+        </div>
+      </div>
+
+      <!-- Groups List Panel -->
+      <div class="panel" style="padding: 1.25rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+          <div>
+            <h3 style="margin: 0; font-size: 1.05rem;">📋 Daftar Grup WhatsApp</h3>
+            <p style="margin: 0.2rem 0 0 0; color: var(--text-muted); font-size: 0.775rem;">Aktifkan atau matikan pesan welcome untuk masing-masing grup.</p>
+          </div>
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <input type="text" id="welcomeGroupSearch" class="input-field" placeholder="🔍 Cari nama grup..." onkeyup="filterWelcomeGroups()" style="min-width: 180px; padding: 0.35rem 0.65rem; font-size: 0.85rem;">
+            <button class="btn btn-secondary btn-sm" onclick="loadWelcomeWeb()">🔄 Refresh</button>
+          </div>
+        </div>
+
+        <!-- Table for Desktop -->
+        <div class="table-responsive desktop-only">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 35%;">Nama Grup</th>
+                <th>Status Welcome</th>
+                <th>Format Template</th>
+                <th style="text-align: right;">Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="welcomeTableBody">
+              <tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Memuat data grup...</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Card List for Mobile -->
+        <div id="welcomeMobileList" class="mobile-only" style="display: flex; flex-direction: column; gap: 0.75rem;">
+          <div style="text-align: center; color: var(--text-muted); padding: 1.5rem; font-size: 0.85rem;">Memuat data grup...</div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- MODAL: Edit Welcome Message Template -->
+  <div id="modalEditWelcome" class="modal-backdrop">
+    <div class="modal-box" style="max-width: 540px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h3 style="margin: 0; font-size: 1.1rem;">✏️ Edit Pesan Sambutan</h3>
+        <button class="btn btn-secondary btn-sm" onclick="closeEditWelcomeModal()">✕</button>
+      </div>
+      <div style="margin-bottom: 0.85rem;">
+        <div style="font-size: 0.8rem; color: var(--text-muted);">Grup Target:</div>
+        <div id="editWelcomeGroupName" style="font-weight: 700; color: var(--text-main); font-size: 0.95rem;">-</div>
+        <input type="hidden" id="editWelcomeGroupJID">
+      </div>
+      <div style="margin-bottom: 1rem;">
+        <label style="font-size: 0.775rem; font-weight: 600; color: var(--text-sub); display: block; margin-bottom: 0.35rem;">Format Teks Welcome:</label>
+        <textarea id="editWelcomeTemplateInput" class="input-field" rows="5" style="width: 100%; resize: vertical; font-family: var(--font-mono); font-size: 0.85rem; line-height: 1.5; padding: 0.75rem; border-radius: 8px;" placeholder="Tulis format sambutan..."></textarea>
+        <div style="font-size: 0.725rem; color: var(--text-muted); margin-top: 0.35rem; line-height: 1.4;">
+          Tag yang tersedia:<br>
+          • <code>@user</code> / <code>{user}</code> : Mention member baru<br>
+          • <code>{group}</code> : Nama grup<br>
+          • <code>{desc}</code> : Deskripsi grup
+        </div>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+        <button class="btn btn-secondary btn-sm" onclick="resetWelcomeTemplateWeb()">🔄 Reset ke Bawaan</button>
+        <div style="display: flex; gap: 0.5rem;">
+          <button class="btn btn-secondary" onclick="closeEditWelcomeModal()">Batal</button>
+          <button class="btn btn-primary" onclick="saveWelcomeTemplateWeb()">💾 Simpan Template</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- MODAL: Tambah Jadibot -->
@@ -3020,6 +3114,234 @@
       }
       if (viewId === 'simi') {
         loadSimiWeb();
+      }
+      if (viewId === 'welcome') {
+        loadWelcomeWeb();
+      }
+    }
+
+    // -------------------------------------------------------------
+    // WELCOME MESSAGE JAVASCRIPT CONTROLLER
+    // -------------------------------------------------------------
+
+    let allWelcomeGroups = [];
+    let defaultWelcomeTemplate = '';
+
+    async function loadWelcomeWeb() {
+      const tableBody = document.getElementById('welcomeTableBody');
+      const mobileList = document.getElementById('welcomeMobileList');
+      if (tableBody) tableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Memuat data grup...</td></tr>';
+      if (mobileList) mobileList.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 1.5rem; font-size: 0.85rem;">Memuat data grup...</div>';
+
+      try {
+        const res = await fetch('/api/welcome/groups', {
+          headers: { 'Authorization': 'Bearer ' + authToken }
+        });
+        const json = await res.json();
+        if (!json.ok && json.error) {
+          showToast(json.error, 'danger');
+          if (tableBody) tableBody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--danger); padding: 1.5rem;">${escapeHtml(json.error)}</td></tr>`;
+          if (mobileList) mobileList.innerHTML = `<div style="text-align: center; color: var(--danger); padding: 1.5rem;">${escapeHtml(json.error)}</div>`;
+          return;
+        }
+
+        allWelcomeGroups = json.groups || [];
+        defaultWelcomeTemplate = json.default_template || '';
+        renderWelcomeGroups(allWelcomeGroups);
+      } catch (err) {
+        showToast('Gagal memuat grup: ' + err.message, 'danger');
+        if (tableBody) tableBody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--danger); padding: 1.5rem;">${escapeHtml(err.message)}</td></tr>`;
+      }
+    }
+
+    function filterWelcomeGroups() {
+      const query = (document.getElementById('welcomeGroupSearch')?.value || '').toLowerCase().trim();
+      if (!query) {
+        renderWelcomeGroups(allWelcomeGroups);
+        return;
+      }
+      const filtered = allWelcomeGroups.filter(g => 
+        (g.name || '').toLowerCase().includes(query) || 
+        (g.jid || '').toLowerCase().includes(query)
+      );
+      renderWelcomeGroups(filtered);
+    }
+
+    function renderWelcomeGroups(groups) {
+      const tableBody = document.getElementById('welcomeTableBody');
+      const mobileList = document.getElementById('welcomeMobileList');
+      if (!groups || groups.length === 0) {
+        const emptyMsg = 'Tidak ada grup WhatsApp yang ditemukan.';
+        if (tableBody) tableBody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">${emptyMsg}</td></tr>`;
+        if (mobileList) mobileList.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 1.5rem; font-size: 0.85rem;">${emptyMsg}</div>`;
+        return;
+      }
+
+      let tableHtml = '';
+      let mobileHtml = '';
+
+      groups.forEach((g) => {
+        const isEnabled = g.enabled;
+        const statusBadge = isEnabled 
+          ? '<span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 9999px;">🟢 Aktif</span>'
+          : '<span class="badge" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 9999px;">🔴 Nonaktif</span>';
+
+        const templateType = g.has_custom_msg 
+          ? '<span style="font-size: 0.75rem; color: var(--accent);">✏️ Kustom</span>'
+          : '<span style="font-size: 0.75rem; color: var(--text-muted);">Standard</span>';
+
+        const toggleBtn = isEnabled
+          ? `<button class="btn btn-danger btn-sm" onclick="toggleWelcomeWeb('${escapeHtml(g.jid)}', false)">Matikan</button>`
+          : `<button class="btn btn-primary btn-sm" onclick="toggleWelcomeWeb('${escapeHtml(g.jid)}', true)">Aktifkan</button>`;
+
+        // Desktop Row
+        tableHtml += `
+          <tr>
+            <td>
+              <div style="font-weight: 600; color: var(--text-main); font-size: 0.875rem;">${escapeHtml(g.name || 'Grup Tanpa Nama')}</div>
+              <div style="font-size: 0.725rem; color: var(--text-muted); font-family: var(--font-mono);">${escapeHtml(g.jid)} • ${g.participant_count || 0} Member</div>
+            </td>
+            <td>${statusBadge}</td>
+            <td>${templateType}</td>
+            <td style="text-align: right;">
+              <div style="display: inline-flex; gap: 0.4rem;">
+                <button class="btn btn-secondary btn-sm" onclick="openEditWelcomeModal('${escapeHtml(g.jid)}')">✏️ Edit Pesan</button>
+                ${toggleBtn}
+              </div>
+            </td>
+          </tr>
+        `;
+
+        // Mobile Card
+        mobileHtml += `
+          <div class="panel" style="padding: 0.85rem; border: 1px solid var(--border-color); border-radius: 8px;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">
+              <div>
+                <div style="font-weight: 600; color: var(--text-main); font-size: 0.875rem;">${escapeHtml(g.name || 'Grup Tanpa Nama')}</div>
+                <div style="font-size: 0.7rem; color: var(--text-muted); font-family: var(--font-mono);">${escapeHtml(g.jid)}</div>
+              </div>
+              <div>${statusBadge}</div>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.75rem; padding-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.05);">
+              <div style="font-size: 0.75rem;">${templateType}</div>
+              <div style="display: flex; gap: 0.35rem;">
+                <button class="btn btn-secondary btn-sm" onclick="openEditWelcomeModal('${escapeHtml(g.jid)}')">✏️ Edit</button>
+                ${toggleBtn}
+              </div>
+            </div>
+          </div>
+        `;
+      });
+
+      if (tableBody) tableBody.innerHTML = tableHtml;
+      if (mobileList) mobileList.innerHTML = mobileHtml;
+    }
+
+    async function toggleWelcomeWeb(jid, enable) {
+      try {
+        const res = await fetch('/api/welcome/toggle', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + authToken
+          },
+          body: JSON.stringify({ jid: jid, enabled: enable })
+        });
+        const json = await res.json();
+        if (!json.ok) {
+          showToast(json.error || 'Gagal mengubah status welcome', 'danger');
+          return;
+        }
+        showToast(`Fitur welcome berhasil ${enable ? 'diaktifkan' : 'dimatikan'}!`, 'success');
+        const target = allWelcomeGroups.find(g => g.jid === jid);
+        if (target) target.enabled = enable;
+        filterWelcomeGroups();
+      } catch (err) {
+        showToast('Error: ' + err.message, 'danger');
+      }
+    }
+
+    function openEditWelcomeModal(jid) {
+      const target = allWelcomeGroups.find(g => g.jid === jid);
+      if (!target) return;
+
+      document.getElementById('editWelcomeGroupJID').value = jid;
+      document.getElementById('editWelcomeGroupName').innerText = `${target.name || 'Grup'} (${jid})`;
+      document.getElementById('editWelcomeTemplateInput').value = target.template || defaultWelcomeTemplate;
+
+      document.getElementById('modalEditWelcome').classList.add('active');
+    }
+
+    function closeEditWelcomeModal() {
+      document.getElementById('modalEditWelcome').classList.remove('active');
+    }
+
+    async function saveWelcomeTemplateWeb() {
+      const jid = document.getElementById('editWelcomeGroupJID').value;
+      const tmpl = document.getElementById('editWelcomeTemplateInput').value;
+
+      if (!tmpl.trim()) {
+        showToast('Format pesan tidak boleh kosong', 'warning');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/welcome/template', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + authToken
+          },
+          body: JSON.stringify({ jid: jid, template: tmpl, action: 'set' })
+        });
+        const json = await res.json();
+        if (!json.ok) {
+          showToast(json.error || 'Gagal menyimpan template', 'danger');
+          return;
+        }
+        showToast('Template pesan sambutan berhasil disimpan!', 'success');
+        const target = allWelcomeGroups.find(g => g.jid === jid);
+        if (target) {
+          target.template = json.template;
+          target.has_custom_msg = json.has_custom_msg;
+        }
+        closeEditWelcomeModal();
+        filterWelcomeGroups();
+      } catch (err) {
+        showToast('Error: ' + err.message, 'danger');
+      }
+    }
+
+    async function resetWelcomeTemplateWeb() {
+      const jid = document.getElementById('editWelcomeGroupJID').value;
+      if (!confirm('Apakah kamu yakin ingin mengembalikan template grup ini ke bawaan sistem?')) {
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/welcome/template', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + authToken
+          },
+          body: JSON.stringify({ jid: jid, action: 'reset' })
+        });
+        const json = await res.json();
+        if (!json.ok) {
+          showToast(json.error || 'Gagal reset template', 'danger');
+          return;
+        }
+        showToast('Template berhasil di-reset ke bawaan!', 'success');
+        document.getElementById('editWelcomeTemplateInput').value = json.template;
+        const target = allWelcomeGroups.find(g => g.jid === jid);
+        if (target) {
+          target.template = json.template;
+          target.has_custom_msg = false;
+        }
+        filterWelcomeGroups();
+      } catch (err) {
+        showToast('Error: ' + err.message, 'danger');
       }
     }
 

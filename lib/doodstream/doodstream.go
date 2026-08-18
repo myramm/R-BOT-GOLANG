@@ -22,11 +22,10 @@ var (
 )
 
 type Result struct {
-	Title        string
-	FileCode     string
-	DownloadURL  string
-	Thumbnail    string
-	IsCloudflare bool
+	Title       string
+	FileCode    string
+	DownloadURL string
+	Thumbnail   string
 }
 
 // IsDoodURL menguji apakah URL merupakan domain DoodStream yang didukung.
@@ -115,14 +114,7 @@ func Resolve(ctx context.Context, rawURL string) (*Result, error) {
 	bodyEmbed := string(bodyEmbedBytes)
 
 	if !strings.Contains(bodyEmbed, "pass_md5") {
-		// Proteksi Cloudflare Turnstile terdeteksi
-		fallbackURL := fmt.Sprintf("https://9xbuddy.com/process?url=%s", url.QueryEscape(embedURL))
-		return &Result{
-			Title:        "DoodStream Video",
-			FileCode:     fileCode,
-			DownloadURL:  fallbackURL,
-			IsCloudflare: true,
-		}, nil
+		return nil, fmt.Errorf("file DoodStream tidak ditemukan, terhapus, atau terproteksi")
 	}
 
 	// Extract Title

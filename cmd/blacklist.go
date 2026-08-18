@@ -130,15 +130,47 @@ func blacklistHandler(ctx context.Context, c *command.Ctx) error {
 	}
 	c.React(ctx, "⛔")
 
-	var tags []string
-	for _, j := range mentions {
-		tags = append(tags, cmdfunc.MentionTag(j))
-	}
-	tagText := strings.Join(tags, " ")
-	if tagText == "" {
-		tagText = strings.Join(uniqueIDs, ", ")
+	var sb strings.Builder
+	// Pisahkan phone number dan LID dari uniqueIDs
+	var phones []string
+	var lids []string
+	for _, id := range uniqueIDs {
+		if len(id) >= 15 {
+			lids = append(lids, id)
+		} else {
+			phones = append(phones, id)
+		}
 	}
 
-	_, err := c.ReplyMentions(ctx, fmt.Sprintf("⛔ *User %s Berhasil Dimasukkan ke Global Blacklist (100%%)!*\nUser tersebut tidak dapat menggunakan bot di grup mana pun maupun di PM.", tagText), mentions)
+	if len(phones) > 0 {
+		for i, ph := range phones {
+			if i > 0 {
+				sb.WriteString("\n\n")
+			}
+			fmt.Fprintf(&sb, "%s ⛔ Blacklisted (100%%)", ph)
+			if i < len(lids) {
+				fmt.Fprintf(&sb, "\n||%s||", lids[i])
+			}
+		}
+	} else if len(lids) > 0 {
+		for i, lid := range lids {
+			if i > 0 {
+				sb.WriteString("\n\n")
+			}
+			fmt.Fprintf(&sb, "%s ⛔ Blacklisted (100%%)\n||%s||", lid, lid)
+		}
+	} else {
+		var tags []string
+		for _, j := range mentions {
+			tags = append(tags, cmdfunc.MentionTag(j))
+		}
+		tagText := strings.Join(tags, " ")
+		if tagText == "" {
+			tagText = strings.Join(uniqueIDs, ", ")
+		}
+		fmt.Fprintf(&sb, "%s ⛔ Blacklisted (100%%)", tagText)
+	}
+
+	_, err := c.ReplyMentions(ctx, sb.String(), mentions)
 	return err
 }

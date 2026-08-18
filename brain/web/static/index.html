@@ -1881,17 +1881,111 @@
           return;
         }
 
-        tbody.innerHTML = data.blacklist.map(id => `
+        const grouped = groupBlacklistItems(data.blacklist);
+
+        tbody.innerHTML = grouped.map(item => {
+          const idsAttr = encodeURIComponent(JSON.stringify(item.rawIds));
+          return `
           <tr>
-            <td style="font-family: var(--font-mono); font-weight: 600;">${id}</td>
-            <td><span style="color: var(--danger); font-weight: 600;">⛔ Blacklisted (100%)</span></td>
-            <td style="text-align: right;">
-              <button class="btn btn-secondary btn-sm" onclick="toggleBlacklistWeb('${id}', false)">✅ Unblacklist</button>
+            <td style="padding: 0.75rem 1rem;">
+              <div style="display: flex; flex-direction: column; gap: 0.35rem;">
+                <div style="display: flex; align-items: center; gap: 0.6rem; font-family: var(--font-mono); font-weight: 600;">
+                  <span>${item.phone}</span>
+                  <span style="color: var(--danger); font-weight: 600; font-size: 0.85rem; background: rgba(239, 68, 68, 0.12); padding: 0.15rem 0.5rem; border-radius: 4px;">⛔ Blacklisted (100%)</span>
+                </div>
+                ${item.lid ? `
+                  <div onclick="toggleLidSpoiler(this)" 
+                       style="cursor: pointer; user-select: none; font-size: 0.82rem; font-family: var(--font-mono); color: var(--text-muted); display: inline-flex; align-items: center; gap: 0.4rem; width: fit-content;" 
+                       title="Klik untuk membuka LID">
+                    <span class="lid-stars" style="background: rgba(255,255,255,0.08); padding: 0.15rem 0.5rem; border-radius: 4px; letter-spacing: 3px; font-weight: bold; color: var(--text-muted);">******</span>
+                    <span class="lid-val" style="display: none; background: rgba(255,255,255,0.12); padding: 0.15rem 0.5rem; border-radius: 4px; color: var(--text-main); font-weight: 600;">${item.lid}</span>
+                    <span style="font-size: 0.72rem; color: var(--text-sub); opacity: 0.7;">(LID)</span>
+                  </div>
+                ` : ''}
+              </div>
+            </td>
+            <td style="text-align: right; vertical-align: middle; padding: 0.75rem 1rem;">
+              <button class="btn btn-secondary btn-sm" onclick="toggleBlacklistGrouped('${idsAttr}', false)">✅ Unblacklist</button>
             </td>
           </tr>
-        `).join('');
+        `;
+        }).join('');
       } catch (err) {
         tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: var(--danger); padding: 1rem;">❌ Error: ${err.message}</td></tr>`;
+      }
+    }
+
+    function groupBlacklistItems(rawList) {
+      const phones = [];
+      const lids = [];
+      const others = [];
+
+      rawList.forEach(id => {
+        const clean = String(id).trim();
+        if (/^\d{15,}$/.test(clean)) {
+          lids.push(clean);
+        } else if (/^\d{8,14}$/.test(clean)) {
+          phones.push(clean);
+        } else {
+          others.push(clean);
+        }
+      });
+
+      const items = [];
+      const usedLids = new Set();
+
+      phones.forEach((phone, idx) => {
+        let matchedLid = null;
+        if (idx < lids.length) {
+          matchedLid = lids[idx];
+          usedLids.add(matchedLid);
+        }
+        items.push({ phone: phone, lid: matchedLid, rawIds: matchedLid ? [phone, matchedLid] : [phone] });
+      });
+
+      lids.forEach(lid => {
+        if (!usedLids.has(lid)) {
+          items.push({ phone: lid, lid: lid, rawIds: [lid] });
+        }
+      });
+
+      others.forEach(item => {
+        items.push({ phone: item, lid: null, rawIds: [item] });
+      });
+
+      return items;
+    }
+
+    function toggleLidSpoiler(el) {
+      const stars = el.querySelector('.lid-stars');
+      const val = el.querySelector('.lid-val');
+      if (!stars || !val) return;
+      if (val.style.display === 'none') {
+        val.style.display = 'inline';
+        stars.style.display = 'none';
+      } else {
+        val.style.display = 'none';
+        stars.style.display = 'inline';
+      }
+    }
+
+    async function toggleBlacklistGrouped(idsAttr, blacklisted) {
+      try {
+        const rawIds = JSON.parse(decodeURIComponent(idsAttr));
+        for (const t of rawIds) {
+          await fetch('/api/blacklist/toggle', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + authToken
+            },
+            body: JSON.stringify({ target: t, blacklisted: blacklisted })
+          });
+        }
+        showToast(blacklisted ? `User berhasil di-blacklist global` : `User berhasil di-unblacklist`, 'success');
+        loadBlacklistWeb();
+      } catch (err) {
+        showToast('Error: ' + err.message, 'danger');
       }
     }
 

@@ -2431,13 +2431,8 @@
           if (modal) modal.classList.remove('active');
           showToast('Selamat datang kembali!', 'success');
           setTimeout(() => {
-            try {
-              if (typeof initDashboard === 'function') initDashboard();
-              else location.reload();
-            } catch (err) {
-              location.reload();
-            }
-          }, 150);
+            location.reload();
+          }, 200);
         } else {
           if (errEl) {
             errEl.textContent = data.error || 'Password salah.';

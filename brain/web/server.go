@@ -576,7 +576,10 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Password == getPassword() {
+	inputPwd := strings.TrimSpace(req.Password)
+	targetPwd := getPassword()
+
+	if inputPwd == targetPwd {
 		loginMu.Lock()
 		delete(loginAttempts, ip)
 		loginMu.Unlock()

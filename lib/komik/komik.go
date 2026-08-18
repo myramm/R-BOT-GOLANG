@@ -98,6 +98,25 @@ func extractImages(htmlContent string) []string {
 	return images
 }
 
+func filterComicImages(images []string) []string {
+	var filtered []string
+	for _, img := range images {
+		if !strings.Contains(img, "ico.ico") &&
+			!strings.Contains(img, "jp.png") &&
+			!strings.Contains(img, "kr.png") &&
+			!strings.Contains(img, "cn.png") &&
+			!strings.Contains(img, "google.svg") &&
+			!strings.Contains(img, "avatar") &&
+			!strings.Contains(img, "wmkomiku") &&
+			!strings.Contains(img, "asset/img") &&
+			!strings.Contains(img, "komikuplus") &&
+			!strings.Contains(img, "gravatar.com") {
+			filtered = append(filtered, img)
+		}
+	}
+	return filtered
+}
+
 func extractChapterNum(title string) string {
 	m := reChapterNum.FindStringSubmatch(title)
 	if len(m) > 1 {
@@ -110,6 +129,31 @@ func isMatchSeries(s1, s2 string) bool {
 	s1 = strings.ToLower(strings.TrimSpace(s1))
 	s2 = strings.ToLower(strings.TrimSpace(s2))
 	return s1 == s2 || strings.HasPrefix(s1, s2) || strings.HasPrefix(s2, s1)
+}
+
+func fetchHTML(ctx context.Context, targetURL string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, targetURL, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", defaultUA)
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	return string(body), nil
 }
 
 func fetchPosts(ctx context.Context, apiURL string) ([]postItem, error) {
@@ -240,7 +284,7 @@ func SearchComics(ctx context.Context, query string) ([]Comic, error) {
 	return results, nil
 }
 
-// GetChapters mengambil SELURUH daftar chapter dari sebuah seri komik (paging)
+// GetChapters mengambil SELURUH daftar chapter dari sebuah seri komik
 func GetChapters(ctx context.Context, c Comic) ([]Chapter, error) {
 	var chapters []Chapter
 	seen := make(map[string]bool)
@@ -268,7 +312,7 @@ func GetChapters(ctx context.Context, c Comic) ([]Chapter, error) {
 						Title:  t,
 						URL:    p.Link,
 						Slug:   p.Slug,
-						Images: extractImages(p.Content.Rendered),
+						Images: filterComicImages(extractImages(p.Content.Rendered)),
 						Source: "komiktap",
 					})
 				}
@@ -309,7 +353,7 @@ func GetChapters(ctx context.Context, c Comic) ([]Chapter, error) {
 							Title:  t,
 							URL:    p.Link,
 							Slug:   p.Slug,
-							Images: extractImages(p.Content.Rendered),
+							Images: filterComicImages(extractImages(p.Content.Rendered)),
 							Source: c.Source,
 						})
 					}
@@ -343,6 +387,29 @@ func GetChapterImages(ctx context.Context, ch Chapter) ([]string, error) {
 		return ch.Images, nil
 	}
 
+	// 1. Jika Komiku atau jika data image di API kosong, fetch langsung dari halaman HTML reader
+	if ch.Source == "komiku" || ch.URL != "" {
+		pageURL := ch.URL
+		if pageURL == "" && ch.Slug != "" {
+			if ch.Source == "komiku" {
+				pageURL = fmt.Sprintf("https://komiku.org/%s/", ch.Slug)
+			} else {
+				pageURL = fmt.Sprintf("https://komiktap.info/%s/", ch.Slug)
+			}
+		}
+
+		if pageURL != "" {
+			htmlContent, err := fetchHTML(ctx, pageURL)
+			if err == nil {
+				imgs := filterComicImages(extractImages(htmlContent))
+				if len(imgs) > 0 {
+					return imgs, nil
+				}
+			}
+		}
+	}
+
+	// 2. Fallback: WP REST API post detail
 	var apiURL string
 	if ch.Source == "komiku" {
 		apiURL = fmt.Sprintf("https://komiku.org/wp-json/wp/v2/posts?slug=%s", url.QueryEscape(ch.Slug))
@@ -351,14 +418,12 @@ func GetChapterImages(ctx context.Context, ch Chapter) ([]string, error) {
 	}
 
 	posts, err := fetchPosts(ctx, apiURL)
-	if err != nil || len(posts) == 0 {
-		return nil, fmt.Errorf("post chapter tidak ditemukan atau HTTP error")
+	if err == nil && len(posts) > 0 {
+		imgs := filterComicImages(extractImages(posts[0].Content.Rendered))
+		if len(imgs) > 0 {
+			return imgs, nil
+		}
 	}
 
-	imgs := extractImages(posts[0].Content.Rendered)
-	if len(imgs) == 0 {
-		return nil, fmt.Errorf("tidak ada gambar terdeteksi pada chapter ini")
-	}
-
-	return imgs, nil
+	return nil, fmt.Errorf("tidak ada gambar terdeteksi pada chapter ini")
 }

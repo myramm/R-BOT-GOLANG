@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"math/rand"
 	"net/http"
 	"strings"
@@ -140,7 +141,12 @@ func HandleQuotedMessage(ctx context.Context, client *whatsmeow.Client, evt *eve
 		return false
 	}
 
-	ci := ExtractContextInfo(evt.Message)
+	rawMsg := unwrapMessage(evt.Message)
+	if rawMsg == nil {
+		return false
+	}
+
+	ci := ExtractContextInfo(rawMsg)
 	if ci == nil || ci.GetQuotedMessage() == nil {
 		return false
 	}
@@ -163,48 +169,48 @@ func HandleQuotedMessage(ctx context.Context, client *whatsmeow.Client, evt *eve
 	}
 
 	// 1. Tangani bila user membalas dengan Sticker
-	if evt.Message.GetStickerMessage() != nil {
+	if rawMsg.GetStickerMessage() != nil {
 		stickerData, ok := GetRandomSticker()
-		if !ok {
-			return false
+		if ok {
+			up, err := client.Upload(ctx, stickerData, whatsmeow.MediaImage)
+			if err == nil {
+				now := time.Now()
+				stickerMsg := &waE2E.Message{
+					StickerMessage: &waE2E.StickerMessage{
+						URL:               proto.String(up.URL),
+						DirectPath:        proto.String(up.DirectPath),
+						MediaKey:          up.MediaKey,
+						Mimetype:          proto.String("image/webp"),
+						FileEncSHA256:     up.FileEncSHA256,
+						FileSHA256:        up.FileSHA256,
+						FileLength:        proto.Uint64(up.FileLength),
+						Width:             proto.Uint32(512),
+						Height:            proto.Uint32(512),
+						MediaKeyTimestamp: proto.Int64(now.Unix()),
+						StickerSentTS:     proto.Int64(now.UnixMilli()),
+						ContextInfo: &waE2E.ContextInfo{
+							StanzaID:      proto.String(evt.Info.ID),
+							Participant:   proto.String(evt.Info.Sender.String()),
+							QuotedMessage: evt.Message,
+						},
+					},
+				}
+				_, _ = client.SendMessage(ctx, evt.Info.Chat, stickerMsg)
+				log.Printf("[rbot] [simi] balas sticker ke %s", senderID)
+				return true
+			}
 		}
-		up, err := client.Upload(ctx, stickerData, whatsmeow.MediaImage)
-		if err != nil {
-			return false
-		}
-		now := time.Now()
-		stickerMsg := &waE2E.Message{
-			StickerMessage: &waE2E.StickerMessage{
-				URL:               proto.String(up.URL),
-				DirectPath:        proto.String(up.DirectPath),
-				MediaKey:          up.MediaKey,
-				Mimetype:          proto.String("image/webp"),
-				FileEncSHA256:     up.FileEncSHA256,
-				FileSHA256:        up.FileSHA256,
-				FileLength:        proto.Uint64(up.FileLength),
-				Width:             proto.Uint32(512),
-				Height:            proto.Uint32(512),
-				MediaKeyTimestamp: proto.Int64(now.Unix()),
-				StickerSentTS:     proto.Int64(now.UnixMilli()),
-				ContextInfo: &waE2E.ContextInfo{
-					StanzaID:      proto.String(evt.Info.ID),
-					Participant:   proto.String(evt.Info.Sender.String()),
-					QuotedMessage: evt.Message,
-				},
-			},
-		}
-		_, _ = client.SendMessage(ctx, evt.Info.Chat, stickerMsg)
-		return true
 	}
 
 	// 2. Tangani bila user membalas dengan Pesan Teks
-	text := command.ExtractText(evt.Message)
+	text := command.ExtractText(rawMsg)
 	if text == "" {
 		return false
 	}
 
 	reply, err := AskSimi(ctx, text)
 	if err != nil || strings.TrimSpace(reply) == "" {
+		log.Printf("[rbot] [simi] gagal AskSimi untuk %s: %v", senderID, err)
 		return false
 	}
 
@@ -219,11 +225,33 @@ func HandleQuotedMessage(ctx context.Context, client *whatsmeow.Client, evt *eve
 		},
 	}
 	_, _ = client.SendMessage(ctx, evt.Info.Chat, msg)
+	log.Printf("[rbot] [simi] balas teks ke %s: %s", senderID, reply)
 	return true
+}
+
+func unwrapMessage(m *waE2E.Message) *waE2E.Message {
+	for m != nil {
+		switch {
+		case m.GetEphemeralMessage().GetMessage() != nil:
+			m = m.GetEphemeralMessage().GetMessage()
+		case m.GetViewOnceMessage().GetMessage() != nil:
+			m = m.GetViewOnceMessage().GetMessage()
+		case m.GetViewOnceMessageV2().GetMessage() != nil:
+			m = m.GetViewOnceMessageV2().GetMessage()
+		case m.GetViewOnceMessageV2Extension().GetMessage() != nil:
+			m = m.GetViewOnceMessageV2Extension().GetMessage()
+		case m.GetDocumentWithCaptionMessage().GetMessage() != nil:
+			m = m.GetDocumentWithCaptionMessage().GetMessage()
+		default:
+			return m
+		}
+	}
+	return nil
 }
 
 // ExtractContextInfo mengambil ContextInfo dari berbagai jenis pesan WhatsApp.
 func ExtractContextInfo(m *waE2E.Message) *waE2E.ContextInfo {
+	m = unwrapMessage(m)
 	if m == nil {
 		return nil
 	}
@@ -239,7 +267,16 @@ func ExtractContextInfo(m *waE2E.Message) *waE2E.ContextInfo {
 	if ci := m.GetVideoMessage().GetContextInfo(); ci != nil {
 		return ci
 	}
+	if ci := m.GetAudioMessage().GetContextInfo(); ci != nil {
+		return ci
+	}
 	if ci := m.GetDocumentMessage().GetContextInfo(); ci != nil {
+		return ci
+	}
+	if ci := m.GetContactMessage().GetContextInfo(); ci != nil {
+		return ci
+	}
+	if ci := m.GetLocationMessage().GetContextInfo(); ci != nil {
 		return ci
 	}
 	return nil
@@ -257,15 +294,37 @@ func IsQuotedBot(client *whatsmeow.Client, evt *events.Message, ci *waE2E.Contex
 	}
 
 	bareParticipant := config.BareNumber(participant)
-	if client != nil && client.Store != nil && client.Store.ID != nil {
-		if bareParticipant == config.BareNumber(client.Store.ID.User) ||
-			bareParticipant == config.BareNumber(client.Store.ID.String()) {
+	if bareParticipant == "" {
+		return false
+	}
+
+	// 1. Cek GetJID & GetLID dari store whatsmeow
+	if client != nil && client.Store != nil {
+		if jid := client.Store.GetJID(); !jid.IsEmpty() {
+			if bareParticipant == config.BareNumber(jid.User) || bareParticipant == config.BareNumber(jid.String()) {
+				return true
+			}
+		}
+		if lid := client.Store.GetLID(); !lid.IsEmpty() {
+			if bareParticipant == config.BareNumber(lid.User) || bareParticipant == config.BareNumber(lid.String()) {
+				return true
+			}
+		}
+		if client.Store.ID != nil {
+			if bareParticipant == config.BareNumber(client.Store.ID.User) ||
+				bareParticipant == config.BareNumber(client.Store.ID.String()) {
+				return true
+			}
+		}
+	}
+
+	// 2. Cek config BotNumber
+	if botNum := config.BareNumber(config.C.BotNumber); botNum != "" {
+		if bareParticipant == botNum {
 			return true
 		}
 	}
-	if botNum := config.BareNumber(config.C.BotNumber); botNum != "" && bareParticipant == botNum {
-		return true
-	}
+
 	return false
 }
 

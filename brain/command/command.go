@@ -477,6 +477,20 @@ func Dispatch(ctx context.Context, client *whatsmeow.Client, evt *events.Message
 	}
 
 	if cmd == nil {
+		if evt.Info.IsGroup {
+			groupID := evt.Info.Chat.String()
+			if settings.IsGroupMuted(groupID) {
+				return
+			}
+			if settings.IsUserBannedInGroup(groupID, cands) && !IsOwner(evt) {
+				return
+			}
+		}
+
+		// SimiHook: auto-reply jika me-reply pesan bot
+		if SimiHook != nil && SimiHook(ctx, client, evt) {
+			return
+		}
 		return
 	}
 	if cmd.OwnerOnly {

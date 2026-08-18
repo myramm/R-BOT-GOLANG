@@ -1860,6 +1860,96 @@
           <button id="forceUpdateBtn" class="btn btn-danger" onclick="applyWebUpdate(true)" style="display: none;">⚡ Force Update (Overwrite Local)</button>
         </div>
       </div>
+
+      <!-- Panel Kustomisasi Tema Visual Web -->
+      <div class="panel" style="margin-top: 1.25rem;">
+        <div class="panel-title">
+          <span>🎨 Tema Visual Web Dashboard</span>
+        </div>
+        <p style="font-size: 0.825rem; color: var(--text-sub); margin-bottom: 1rem;">
+          Pilih skema warna & tema tampilan dashboard sesuai kenyamanan mata Anda (Tersimpan otomatis di browser).
+        </p>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.85rem;">
+          <!-- Theme 1: Dark Cyber Indigo (Default) -->
+          <div class="theme-card" onclick="changeDashboardTheme('indigo')" id="theme-indigo" style="cursor: pointer; padding: 0.85rem; border-radius: 10px; border: 2px solid var(--accent); background: #0b0f17; transition: all 0.2s ease;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+              <span style="font-weight: 700; font-size: 0.85rem; color: #f3f4f6;">🌌 Cyber Indigo</span>
+              <span class="theme-badge" id="badge-indigo" style="font-size: 0.7rem; background: var(--accent); color: #fff; padding: 0.15rem 0.4rem; border-radius: 4px;">Aktif</span>
+            </div>
+            <div style="display: flex; gap: 0.35rem; height: 16px; border-radius: 4px; overflow: hidden;">
+              <div style="flex: 1; background: #0b0f17;"></div>
+              <div style="flex: 1; background: #151b28;"></div>
+              <div style="flex: 1; background: #6366f1;"></div>
+            </div>
+          </div>
+
+          <!-- Theme 2: OLED Pure Black -->
+          <div class="theme-card" onclick="changeDashboardTheme('oled')" id="theme-oled" style="cursor: pointer; padding: 0.85rem; border-radius: 10px; border: 1px solid var(--border-color); background: #000000; transition: all 0.2s ease;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+              <span style="font-weight: 700; font-size: 0.85rem; color: #ffffff;">⬛ OLED Black</span>
+              <span class="theme-badge" id="badge-oled" style="display: none; font-size: 0.7rem; background: #3b82f6; color: #fff; padding: 0.15rem 0.4rem; border-radius: 4px;">Aktif</span>
+            </div>
+            <div style="display: flex; gap: 0.35rem; height: 16px; border-radius: 4px; overflow: hidden;">
+              <div style="flex: 1; background: #000000;"></div>
+              <div style="flex: 1; background: #121212;"></div>
+              <div style="flex: 1; background: #3b82f6;"></div>
+            </div>
+          </div>
+
+          <!-- Theme 3: Emerald Cyberpunk -->
+          <div class="theme-card" onclick="changeDashboardTheme('emerald')" id="theme-emerald" style="cursor: pointer; padding: 0.85rem; border-radius: 10px; border: 1px solid var(--border-color); background: #06120e; transition: all 0.2s ease;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+              <span style="font-weight: 700; font-size: 0.85rem; color: #ecfdf5;">💚 Emerald Green</span>
+              <span class="theme-badge" id="badge-emerald" style="display: none; font-size: 0.7rem; background: #10b981; color: #fff; padding: 0.15rem 0.4rem; border-radius: 4px;">Aktif</span>
+            </div>
+            <div style="display: flex; gap: 0.35rem; height: 16px; border-radius: 4px; overflow: hidden;">
+              <div style="flex: 1; background: #06120e;"></div>
+              <div style="flex: 1; background: #10261f;"></div>
+              <div style="flex: 1; background: #10b981;"></div>
+            </div>
+          </div>
+
+          <!-- Theme 4: Midnight Deep Ocean -->
+          <div class="theme-card" onclick="changeDashboardTheme('navy')" id="theme-navy" style="cursor: pointer; padding: 0.85rem; border-radius: 10px; border: 1px solid var(--border-color); background: #0a1128; transition: all 0.2s ease;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+              <span style="font-weight: 700; font-size: 0.85rem; color: #e0f2fe;">🌊 Deep Ocean</span>
+              <span class="theme-badge" id="badge-navy" style="display: none; font-size: 0.7rem; background: #06b6d4; color: #fff; padding: 0.15rem 0.4rem; border-radius: 4px;">Aktif</span>
+            </div>
+            <div style="display: flex; gap: 0.35rem; height: 16px; border-radius: 4px; overflow: hidden;">
+              <div style="flex: 1; background: #0a1128;"></div>
+              <div style="flex: 1; background: #001f54;"></div>
+              <div style="flex: 1; background: #06b6d4;"></div>
+            </div>
+          </div>
+
+          <!-- Theme 5: Sunset Crimson -->
+          <div class="theme-card" onclick="changeDashboardTheme('crimson')" id="theme-crimson" style="cursor: pointer; padding: 0.85rem; border-radius: 10px; border: 1px solid var(--border-color); background: #120913; transition: all 0.2s ease;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+              <span style="font-weight: 700; font-size: 0.85rem; color: #fce7f3;">🌆 Neon Crimson</span>
+              <span class="theme-badge" id="badge-crimson" style="display: none; font-size: 0.7rem; background: #ec4899; color: #fff; padding: 0.15rem 0.4rem; border-radius: 4px;">Aktif</span>
+            </div>
+            <div style="display: flex; gap: 0.35rem; height: 16px; border-radius: 4px; overflow: hidden;">
+              <div style="flex: 1; background: #120913;"></div>
+              <div style="flex: 1; background: #28142b;"></div>
+              <div style="flex: 1; background: #ec4899;"></div>
+            </div>
+          </div>
+
+          <!-- Theme 6: Light Modern Mode -->
+          <div class="theme-card" onclick="changeDashboardTheme('light')" id="theme-light" style="cursor: pointer; padding: 0.85rem; border-radius: 10px; border: 1px solid var(--border-color); background: #f8fafc; transition: all 0.2s ease;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+              <span style="font-weight: 700; font-size: 0.85rem; color: #0f172a;">☀️ Light Modern</span>
+              <span class="theme-badge" id="badge-light" style="display: none; font-size: 0.7rem; background: #4f46e5; color: #fff; padding: 0.15rem 0.4rem; border-radius: 4px;">Aktif</span>
+            </div>
+            <div style="display: flex; gap: 0.35rem; height: 16px; border-radius: 4px; overflow: hidden;">
+              <div style="flex: 1; background: #f8fafc; border: 1px solid #cbd5e1;"></div>
+              <div style="flex: 1; background: #ffffff; border: 1px solid #cbd5e1;"></div>
+              <div style="flex: 1; background: #4f46e5;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- VIEW 7: TERMINAL -->
@@ -4788,6 +4878,133 @@
         showToast('Error koneksi update: ' + err.message, 'danger');
       });
     }
+
+    /* WEB DASHBOARD THEME CUSTOMIZER */
+    const themePresets = {
+      indigo: {
+        '--bg-app': '#0b0f17',
+        '--bg-sidebar': '#0f1420',
+        '--bg-card': '#151b28',
+        '--bg-card-hover': '#1a2233',
+        '--bg-input': '#121824',
+        '--border-color': 'rgba(255, 255, 255, 0.06)',
+        '--border-color-hover': 'rgba(255, 255, 255, 0.12)',
+        '--text-main': '#f3f4f6',
+        '--text-sub': '#9ca3af',
+        '--text-muted': '#6b7280',
+        '--accent': '#6366f1',
+        '--accent-hover': '#4f46e5',
+        '--accent-subtle': 'rgba(99, 102, 241, 0.12)'
+      },
+      oled: {
+        '--bg-app': '#000000',
+        '--bg-sidebar': '#080808',
+        '--bg-card': '#121212',
+        '--bg-card-hover': '#1e1e1e',
+        '--bg-input': '#0a0a0a',
+        '--border-color': 'rgba(255, 255, 255, 0.08)',
+        '--border-color-hover': 'rgba(255, 255, 255, 0.16)',
+        '--text-main': '#ffffff',
+        '--text-sub': '#a1a1aa',
+        '--text-muted': '#71717a',
+        '--accent': '#3b82f6',
+        '--accent-hover': '#2563eb',
+        '--accent-subtle': 'rgba(59, 130, 246, 0.15)'
+      },
+      emerald: {
+        '--bg-app': '#06120e',
+        '--bg-sidebar': '#0a1a14',
+        '--bg-card': '#10261f',
+        '--bg-card-hover': '#16332a',
+        '--bg-input': '#081712',
+        '--border-color': 'rgba(16, 185, 129, 0.12)',
+        '--border-color-hover': 'rgba(16, 185, 129, 0.22)',
+        '--text-main': '#ecfdf5',
+        '--text-sub': '#6ee7b7',
+        '--text-muted': '#34d399',
+        '--accent': '#10b981',
+        '--accent-hover': '#059669',
+        '--accent-subtle': 'rgba(16, 185, 129, 0.15)'
+      },
+      navy: {
+        '--bg-app': '#0a1128',
+        '--bg-sidebar': '#001f54',
+        '--bg-card': '#034078',
+        '--bg-card-hover': '#00509d',
+        '--bg-input': '#001538',
+        '--border-color': 'rgba(6, 182, 212, 0.15)',
+        '--border-color-hover': 'rgba(6, 182, 212, 0.25)',
+        '--text-main': '#f0f9ff',
+        '--text-sub': '#7dd3fc',
+        '--text-muted': '#38bdf8',
+        '--accent': '#06b6d4',
+        '--accent-hover': '#0891b2',
+        '--accent-subtle': 'rgba(6, 182, 212, 0.15)'
+      },
+      crimson: {
+        '--bg-app': '#120913',
+        '--bg-sidebar': '#1c0d1e',
+        '--bg-card': '#28142b',
+        '--bg-card-hover': '#351b3a',
+        '--bg-input': '#170b19',
+        '--border-color': 'rgba(236, 72, 153, 0.15)',
+        '--border-color-hover': 'rgba(236, 72, 153, 0.25)',
+        '--text-main': '#fdf2f8',
+        '--text-sub': '#f472b6',
+        '--text-muted': '#ec4899',
+        '--accent': '#ec4899',
+        '--accent-hover': '#db2777',
+        '--accent-subtle': 'rgba(236, 72, 153, 0.15)'
+      },
+      light: {
+        '--bg-app': '#f8fafc',
+        '--bg-sidebar': '#ffffff',
+        '--bg-card': '#ffffff',
+        '--bg-card-hover': '#f1f5f9',
+        '--bg-input': '#f1f5f9',
+        '--border-color': 'rgba(0, 0, 0, 0.1)',
+        '--border-color-hover': 'rgba(0, 0, 0, 0.18)',
+        '--text-main': '#0f172a',
+        '--text-sub': '#475569',
+        '--text-muted': '#64748b',
+        '--accent': '#4f46e5',
+        '--accent-hover': '#4338ca',
+        '--accent-subtle': 'rgba(79, 70, 229, 0.1)'
+      }
+    };
+
+    function changeDashboardTheme(themeKey, notify = true) {
+      const preset = themePresets[themeKey] || themePresets.indigo;
+      const root = document.documentElement;
+      
+      Object.keys(preset).forEach(prop => {
+        root.style.setProperty(prop, preset[prop]);
+      });
+
+      localStorage.setItem('rbot_web_theme', themeKey);
+
+      // Update Active Badges in UI
+      Object.keys(themePresets).forEach(k => {
+        const card = document.getElementById('theme-' + k);
+        const badge = document.getElementById('badge-' + k);
+        if (card) {
+          card.style.borderColor = (k === themeKey) ? 'var(--accent)' : 'var(--border-color)';
+        }
+        if (badge) {
+          badge.style.display = (k === themeKey) ? 'inline-block' : 'none';
+        }
+      });
+
+      if (notify) {
+        showToast(`Tema visual diubah ke: ${themeKey.toUpperCase()}`, 'success');
+      }
+    }
+
+    // Auto load saved theme on page load
+    (function initSavedTheme() {
+      const saved = localStorage.getItem('rbot_web_theme') || 'indigo';
+      changeDashboardTheme(saved, false);
+    })();
   </script>
 </body>
 </html>

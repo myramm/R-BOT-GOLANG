@@ -62,19 +62,26 @@ func simiHandler(ctx context.Context, c *command.Ctx) error {
 		_, err := c.Reply(ctx, msg)
 		return err
 
+	case "reset", "clear", "bersihkan":
+		sessionKey := simi.GetSessionKey(chatID, c.Sender().User, c.IsGroup())
+		simi.ClearSession(sessionKey)
+		_, err := c.Reply(ctx, "🔄 *Sesi Obrolan Simi Direset!*\n\nRiwayat obrolan sebelumnya telah dibersihkan. Memulai percakapan baru!")
+		return err
+
 	default:
 		status := "🟢 AKTIF"
 		if !simi.IsEnabled(chatID) {
 			status = "🔴 NONAKTIF"
 		}
 		help := fmt.Sprintf("🤖 *PENGATURAN SIMI-SIMI AI*\n\n"+
-			"Fitur Simi-Simi membuat bot otomatis membalas pesan saat me-reply (quote) pesan bot dengan gaya netizen sarkas & sticker random.\n\n"+
+			"Fitur Simi-Simi membuat bot otomatis membalas pesan santai dan me-reply obrolan dengan sesi berkelanjutan bergaya netizen sarkas.\n\n"+
 			"*Status saat ini:* %s\n\n"+
 			"*Perintah:*\n"+
 			"• `%ssimi on` — Aktifkan auto-reply Simi\n"+
 			"• `%ssimi off` — Matikan auto-reply Simi\n"+
-			"• `%ssimi status` — Cek status aktif",
-			status, mp, mp, mp)
+			"• `%ssimi reset` — Bersihkan riwayat sesi obrolan saat ini\n"+
+			"• `%ssimi status` — Cek status Simi di chat ini",
+			status, mp, mp, mp, mp)
 		_, err := c.Reply(ctx, help)
 		return err
 	}

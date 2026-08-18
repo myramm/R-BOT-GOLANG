@@ -2,6 +2,7 @@ package simi
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	"rbot/brain/config"
@@ -135,5 +136,38 @@ func TestStickerDeleteAndClear(t *testing.T) {
 
 	if len(GetAllStickers()) != 0 {
 		t.Errorf("total stickers setelah clear = %d, want 0", len(GetAllStickers()))
+	}
+}
+
+func TestSimiSession(t *testing.T) {
+	setupTestStore(t)
+	key := "test-chat:test-user"
+	ClearSession(key)
+
+	if HasActiveSession(key) {
+		t.Errorf("HasActiveSession harus false untuk sesi baru")
+	}
+
+	AddMessageToSession(key, "User", "Tanggapan lu tentang gw yg vibe coding")
+	AddMessageToSession(key, "Simi", "Vibe coding matamu, palingan cuma copas prompt ChatGPT 💀")
+
+	if !HasActiveSession(key) {
+		t.Errorf("HasActiveSession harus true setelah ada pesan")
+	}
+
+	prompt := BuildSessionPrompt(key, "Hm")
+	if !strings.Contains(prompt, "Riwayat Percakapan Sebelumnya:") {
+		t.Errorf("prompt harus mengandung riwayat percakapan")
+	}
+	if !strings.Contains(prompt, "Vibe coding matamu") {
+		t.Errorf("prompt harus mengandung pesan sebelumnya")
+	}
+	if !strings.Contains(prompt, "User: Hm") {
+		t.Errorf("prompt harus mengandung pesan input baru")
+	}
+
+	ClearSession(key)
+	if HasActiveSession(key) {
+		t.Errorf("HasActiveSession harus false setelah ClearSession")
 	}
 }

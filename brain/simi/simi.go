@@ -53,6 +53,121 @@ func init() {
 
 const promptStoreKey = "simi:system_prompt"
 
+// ChatMessage adalah entri pesan dalam riwayat sesi percakapan Simi-Simi.
+type ChatMessage struct {
+	Role    string    `json:"role"`
+	Content string    `json:"content"`
+	Time    time.Time `json:"time"`
+}
+
+// SimiSession menyimpan riwayat percakapan aktif per sesi user/chat.
+type SimiSession struct {
+	ChatID     string
+	SenderID   string
+	LastActive time.Time
+	Messages   []ChatMessage
+}
+
+var (
+	sessionMu sync.Mutex
+	sessions  = map[string]*SimiSession{}
+)
+
+const (
+	sessionTimeout     = 5 * time.Minute
+	maxHistoryMessages = 10
+)
+
+// GetSessionKey mengembalikan identifier unik untuk sesi chat.
+func GetSessionKey(chatID, senderID string, isGroup bool) string {
+	if isGroup {
+		return chatID + ":" + senderID
+	}
+	return senderID
+}
+
+// HasActiveSession mengecek apakah user memiliki sesi obrolan aktif dengan Simi.
+func HasActiveSession(sessionKey string) bool {
+	if sessionKey == "" {
+		return false
+	}
+	sessionMu.Lock()
+	defer sessionMu.Unlock()
+	s, ok := sessions[sessionKey]
+	if !ok || s == nil {
+		return false
+	}
+	if time.Since(s.LastActive) > sessionTimeout {
+		delete(sessions, sessionKey)
+		return false
+	}
+	return len(s.Messages) > 0
+}
+
+// AddMessageToSession menambahkan riwayat pesan ke sesi obrolan.
+func AddMessageToSession(sessionKey, role, content string) {
+	if sessionKey == "" || strings.TrimSpace(content) == "" {
+		return
+	}
+	sessionMu.Lock()
+	defer sessionMu.Unlock()
+
+	s, ok := sessions[sessionKey]
+	if !ok || s == nil || time.Since(s.LastActive) > sessionTimeout {
+		s = &SimiSession{
+			LastActive: time.Now(),
+			Messages:   make([]ChatMessage, 0, maxHistoryMessages),
+		}
+		sessions[sessionKey] = s
+	}
+
+	s.LastActive = time.Now()
+	s.Messages = append(s.Messages, ChatMessage{
+		Role:    role,
+		Content: strings.TrimSpace(content),
+		Time:    time.Now(),
+	})
+
+	if len(s.Messages) > maxHistoryMessages {
+		s.Messages = s.Messages[len(s.Messages)-maxHistoryMessages:]
+	}
+}
+
+// ClearSession mereset riwayat sesi percakapan Simi.
+func ClearSession(sessionKey string) {
+	sessionMu.Lock()
+	defer sessionMu.Unlock()
+	delete(sessions, sessionKey)
+}
+
+// BuildSessionPrompt membangun prompt lengkap berisi system persona dan riwayat percakapan sebelumnya.
+func BuildSessionPrompt(sessionKey, currentInput string) string {
+	sessionMu.Lock()
+	defer sessionMu.Unlock()
+
+	var sb strings.Builder
+	sb.WriteString("[System: ")
+	sb.WriteString(DefaultPersonaPrompt())
+	sb.WriteString("]")
+
+	if sessionKey != "" {
+		s, ok := sessions[sessionKey]
+		if ok && s != nil && len(s.Messages) > 0 && time.Since(s.LastActive) < sessionTimeout {
+			sb.WriteString("\n\nRiwayat Percakapan Sebelumnya:")
+			for _, m := range s.Messages {
+				sb.WriteString("\n")
+				sb.WriteString(m.Role)
+				sb.WriteString(": ")
+				sb.WriteString(m.Content)
+			}
+		}
+	}
+
+	sb.WriteString("\n\nUser: ")
+	sb.WriteString(currentInput)
+	return sb.String()
+}
+
 // DefaultPersonaPrompt mengembalikan system prompt untuk Simi-Simi.
 func DefaultPersonaPrompt() string {
 	var customPrompt string
@@ -77,8 +192,8 @@ func DefaultPersonaPrompt() string {
 		"   - Jika user minta coding, tugas sekolah, atau tanya hal serius, tolak dan roasting mereka (suruh mikir/googling sendiri)."
 }
 
-// AskSimi mengirim teks input ke Gemini Interactions API dengan persona netizen sarkas.
-func AskSimi(ctx context.Context, input string) (string, error) {
+// AskSimiWithSession mengirim teks input dengan konteks sesi percakapan sebelumnya.
+func AskSimiWithSession(ctx context.Context, sessionKey, input string) (string, error) {
 	trimmed := strings.TrimSpace(input)
 	if trimmed == "" {
 		return "", errors.New("input pesan kosong")
@@ -94,7 +209,7 @@ func AskSimi(ctx context.Context, input string) (string, error) {
 		model = defaultModel
 	}
 
-	prompt := fmt.Sprintf("[System: %s]\n\nUser: %s", DefaultPersonaPrompt(), trimmed)
+	prompt := BuildSessionPrompt(sessionKey, trimmed)
 	reqBody, err := json.Marshal(map[string]any{
 		"model": model,
 		"input": prompt,
@@ -177,7 +292,12 @@ func AskSimi(ctx context.Context, input string) (string, error) {
 			if step.Type == "model_output" {
 				for _, c := range step.Content {
 					if strings.TrimSpace(c.Text) != "" {
-						return strings.TrimSpace(c.Text), nil
+						replyText := strings.TrimSpace(c.Text)
+						if sessionKey != "" {
+							AddMessageToSession(sessionKey, "User", trimmed)
+							AddMessageToSession(sessionKey, "Simi", replyText)
+						}
+						return replyText, nil
 					}
 				}
 			}
@@ -185,7 +305,12 @@ func AskSimi(ctx context.Context, input string) (string, error) {
 		for _, cand := range item.Candidates {
 			for _, part := range cand.Content.Parts {
 				if strings.TrimSpace(part.Text) != "" {
-					return strings.TrimSpace(part.Text), nil
+					replyText := strings.TrimSpace(part.Text)
+					if sessionKey != "" {
+						AddMessageToSession(sessionKey, "User", trimmed)
+						AddMessageToSession(sessionKey, "Simi", replyText)
+					}
+					return replyText, nil
 				}
 			}
 		}
@@ -194,7 +319,12 @@ func AskSimi(ctx context.Context, input string) (string, error) {
 	return "", errors.New("tidak ada respon teks dari API Simi: " + string(trimmedBody))
 }
 
-// HandleQuotedMessage memproses pesan masuk yang mengutip (quote) pesan bot.
+// AskSimi mengirim teks input ke Gemini Interactions API dengan persona netizen sarkas (tanpa sesi).
+func AskSimi(ctx context.Context, input string) (string, error) {
+	return AskSimiWithSession(ctx, "", input)
+}
+
+// HandleQuotedMessage memproses pesan masuk yang mengutip (quote) pesan bot atau bagian dari sesi aktif.
 // Mengembalikan true bila pesan ditangani oleh Simi.
 func HandleQuotedMessage(ctx context.Context, client *whatsmeow.Client, evt *events.Message) bool {
 	if evt == nil || evt.Message == nil || evt.Info.IsFromMe || client == nil {
@@ -203,15 +333,6 @@ func HandleQuotedMessage(ctx context.Context, client *whatsmeow.Client, evt *eve
 
 	rawMsg := unwrapMessage(evt.Message)
 	if rawMsg == nil {
-		return false
-	}
-
-	ci := ExtractContextInfo(rawMsg)
-	if ci == nil || ci.GetQuotedMessage() == nil {
-		return false
-	}
-
-	if !IsQuotedBot(client, evt, ci) {
 		return false
 	}
 
@@ -224,6 +345,18 @@ func HandleQuotedMessage(ctx context.Context, client *whatsmeow.Client, evt *eve
 	if senderID == "" {
 		senderID = config.BareNumber(evt.Info.Sender.String())
 	}
+
+	sessionKey := GetSessionKey(chatID, senderID, evt.Info.IsGroup)
+
+	ci := ExtractContextInfo(rawMsg)
+	isQuotingBot := ci != nil && ci.GetQuotedMessage() != nil && IsQuotedBot(client, evt, ci)
+	hasActiveSession := HasActiveSession(sessionKey)
+
+	// Harus mengutip pesan bot ATAU memiliki sesi chat aktif yang sedang berjalan
+	if !isQuotingBot && !hasActiveSession {
+		return false
+	}
+
 	if !CheckCooldown(senderID) {
 		return false
 	}
@@ -307,9 +440,9 @@ func HandleQuotedMessage(ctx context.Context, client *whatsmeow.Client, evt *eve
 		_ = client.SendChatPresence(context.Background(), evt.Info.Chat, types.ChatPresencePaused, types.ChatPresenceMediaText)
 	}()
 
-	reply, err := AskSimi(ctx, text)
+	reply, err := AskSimiWithSession(ctx, sessionKey, text)
 	if err != nil || strings.TrimSpace(reply) == "" {
-		log.Printf("[rbot] [simi] gagal AskSimi untuk %s: %v", senderID, err)
+		log.Printf("[rbot] [simi] gagal AskSimiWithSession untuk %s: %v", senderID, err)
 		return false
 	}
 

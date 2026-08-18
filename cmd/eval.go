@@ -2,24 +2,25 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"runtime"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/robertkrimen/otto"
+	"github.com/traefik/yaegi/interp"
+	"github.com/traefik/yaegi/stdlib"
 
 	"rbot/brain/command"
-	"rbot/brain/config"
 )
 
 func init() {
 	command.Register(&command.Command{
 		Name:        ">",
 		Category:    "Owner",
-		Alias:       []string{"c", "eval", "e"},
-		Description: "Evaluasi kode JavaScript di server (owner). Contoh: > 1 + 1 | .eval JSON.stringify(config)",
+		Alias:       []string{"c", "eval", "e", "go"},
+		Description: "Evaluasi & eksekusi kode Golang di server (owner). Contoh: > 1 + 1 | .eval fmt.Println(\"Halo\") | > package main...",
 		OwnerOnly:   true,
 		Handler:     evalHandler,
 	})
@@ -28,52 +29,102 @@ func init() {
 func evalHandler(ctx context.Context, c *command.Ctx) error {
 	code := strings.TrimSpace(c.ArgStr())
 	if code == "" {
-		_, err := c.Reply(ctx, "Masukkan kode JavaScript yang ingin dievaluasi.\n\n*Contoh:*\n• `> 1 + 1`\n• `.eval JSON.stringify(config)`")
+		_, err := c.Reply(ctx, "Masukkan kode Golang yang ingin dievaluasi.\n\n*Contoh:*\n• `> 1 + 1`\n• `> fmt.Sprintf(\"Bot: %s\", \"R-BOT\")`\n• `.eval package main; import \"fmt\"; func main() { fmt.Println(\"Halo Golang!\") }`")
 		return err
 	}
 
-	vm := otto.New()
+	c.React(ctx, "⚙️")
 
-	// Interrupter timeout 10s untuk mencegah infinite loop
-	vm.Interrupt = make(chan func(), 1)
-	timer := time.AfterFunc(10*time.Second, func() {
-		vm.Interrupt <- func() {
-			panic("eval timeout (10 detik)")
-		}
-	})
-	defer timer.Stop()
-
-	// Inject context & helper ke VM Otto
-	_ = vm.Set("c", c)
-	_ = vm.Set("sender", c.Sender().String())
-	_ = vm.Set("chat", c.Chat().String())
-	_ = vm.Set("isOwner", command.IsOwner(c.Evt))
-	_ = vm.Set("config", map[string]interface{}{
-		"botName":     config.C.BotName,
-		"ownerNumber": config.C.OwnerNumber,
-		"mainPrefix":  config.MainPrefix(),
-		"goVersion":   runtime.Version(),
-	})
-
-	val, err := vm.Run(code)
+	output, err := runGoEvalCode(ctx, c, code)
 	if err != nil {
-		_, e := c.Reply(ctx, fmt.Sprintf("❌ *Eval Error:*\n```%s```", err.Error()))
+		c.React(ctx, "❌")
+		_, e := c.Reply(ctx, fmt.Sprintf("❌ *Golang Eval Error:*\n```%s```", err.Error()))
 		return e
 	}
 
-	output := val.String()
-	if val.IsObject() {
-		export, _ := val.Export()
-		if b, err := json.MarshalIndent(export, "", "  "); err == nil {
-			output = string(b)
-		}
-	}
-
 	if output == "" {
-		output = "(undefined)"
+		output = "(tanpa output)"
 	}
 
+	c.React(ctx, "✅")
 	output = truncRunes(output, 4000)
 	_, e := c.Reply(ctx, fmt.Sprintf("```%s```", output))
 	return e
+}
+
+func runGoEvalCode(ctx context.Context, c *command.Ctx, code string) (string, error) {
+	// 1. Jika kode berisi "package main" atau "func main", kompilasi & jalankan via `go run`
+	if strings.Contains(code, "package main") || strings.Contains(code, "func main()") {
+		tmpFile := filepath.Join(os.TempDir(), fmt.Sprintf("eval_%d.go", time.Now().UnixNano()))
+		if !strings.HasPrefix(code, "package main") {
+			code = "package main\n" + code
+		}
+		if err := os.WriteFile(tmpFile, []byte(code), 0644); err != nil {
+			return "", err
+		}
+		defer os.Remove(tmpFile)
+
+		runCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+		defer cancel()
+
+		cmd := exec.CommandContext(runCtx, "go", "run", tmpFile)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return "", fmt.Errorf("%v: %s", err, string(out))
+		}
+		return strings.TrimSpace(string(out)), nil
+	}
+
+	// 2. Evaluasi ekspresi Golang secara dinamis via Yaegi Interpreter
+	i := interp.New(interp.Options{})
+	_ = i.Use(stdlib.Symbols)
+
+	// Pisahkan import dan baris kode utama
+	lines := strings.Split(code, "\n")
+	var importLines []string
+	var codeLines []string
+	for _, l := range lines {
+		trimmed := strings.TrimSpace(l)
+		if strings.HasPrefix(trimmed, "import ") {
+			importLines = append(importLines, trimmed)
+		} else {
+			codeLines = append(codeLines, l)
+		}
+	}
+
+	for _, imp := range importLines {
+		_, _ = i.Eval(imp)
+	}
+
+	bodyCode := strings.TrimSpace(strings.Join(codeLines, "\n"))
+	if bodyCode == "" {
+		return "(imported)", nil
+	}
+
+	res, err := i.Eval(bodyCode)
+	if err != nil {
+		// Fallback: Bungkus ke dalam package main dan jalankan dengan `go run`
+		imports := "import \"fmt\"\n"
+		if len(importLines) > 0 {
+			imports = strings.Join(importLines, "\n") + "\n"
+		}
+		fullGo := fmt.Sprintf("package main\n%sfunc main() {\n\tfmt.Println(%s)\n}", imports, bodyCode)
+		tmpFile := filepath.Join(os.TempDir(), fmt.Sprintf("eval_%d.go", time.Now().UnixNano()))
+		if e := os.WriteFile(tmpFile, []byte(fullGo), 0644); e == nil {
+			defer os.Remove(tmpFile)
+			runCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+			defer cancel()
+			cmd := exec.CommandContext(runCtx, "go", "run", tmpFile)
+			if out, e2 := cmd.CombinedOutput(); e2 == nil {
+				return strings.TrimSpace(string(out)), nil
+			}
+		}
+		return "", err
+	}
+
+	if !res.IsValid() {
+		return "(nil)", nil
+	}
+
+	return fmt.Sprintf("%v", res.Interface()), nil
 }

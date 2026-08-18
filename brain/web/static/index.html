@@ -585,9 +585,21 @@
       box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
     }
 
+    .terminal-status-dot.reconnecting {
+      background: var(--warning);
+      box-shadow: 0 0 10px rgba(245, 158, 11, 0.6);
+      animation: pulseDot 1.2s infinite ease-in-out;
+    }
+
     .terminal-status-dot.disconnected {
       background: var(--danger);
       box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
+    }
+
+    @keyframes pulseDot {
+      0% { opacity: 0.3; transform: scale(0.9); }
+      50% { opacity: 1; transform: scale(1.2); }
+      100% { opacity: 0.3; transform: scale(0.9); }
     }
 
     .terminal-title-text {
@@ -2807,7 +2819,19 @@
       }
     }
 
+    let termReconnectTimer = null;
+    let isTermIntentionallyClosed = false;
+
     function connectTerminalWS() {
+      if (termReconnectTimer) {
+        clearTimeout(termReconnectTimer);
+        termReconnectTimer = null;
+      }
+
+      if (wsTerm && (wsTerm.readyState === WebSocket.OPEN || wsTerm.readyState === WebSocket.CONNECTING)) {
+        return;
+      }
+
       const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
       const url = `${protocol}//${location.host}/ws/terminal?token=${encodeURIComponent(authToken)}`;
 
@@ -2815,15 +2839,26 @@
 
       wsTerm = new WebSocket(url);
       wsTerm.onopen = () => {
+        isTermIntentionallyClosed = false;
         updateTermStatus('connected');
         sendResize();
       };
+
       wsTerm.onmessage = (e) => { 
         if (term) term.write(e.data); 
       };
+
       wsTerm.onclose = () => { 
-        updateTermStatus('disconnected');
-        if (term) term.write('\r\n\x1b[31m[Koneksi terminal terputus]\x1b[0m\r\n'); 
+        if (!isTermIntentionallyClosed) {
+          updateTermStatus('reconnecting');
+          if (term) term.write('\r\n\x1b[33m[Koneksi terputus. Menyambungkan kembali dalam 3 detik...]\x1b[0m\r\n'); 
+          termReconnectTimer = setTimeout(() => {
+            connectTerminalWS();
+          }, 3000);
+        } else {
+          updateTermStatus('disconnected');
+          if (term) term.write('\r\n\x1b[31m[Koneksi terminal terputus]\x1b[0m\r\n');
+        }
       };
     }
 
@@ -2837,15 +2872,47 @@
         text.textContent = 'Connected';
         text.style.color = 'var(--success)';
       } else if (status === 'connecting') {
-        dot.className = 'terminal-status-dot';
+        dot.className = 'terminal-status-dot reconnecting';
         text.textContent = 'Connecting...';
-        text.style.color = 'var(--text-muted)';
+        text.style.color = 'var(--warning)';
+      } else if (status === 'reconnecting') {
+        dot.className = 'terminal-status-dot reconnecting';
+        text.textContent = 'Menyambungkan ulang...';
+        text.style.color = 'var(--warning)';
       } else {
         dot.className = 'terminal-status-dot disconnected';
-        text.textContent = 'Disconnected';
+        text.textContent = 'Terputus';
         text.style.color = 'var(--danger)';
       }
     }
+
+    function restartTerminal() {
+      isTermIntentionallyClosed = true;
+      if (termReconnectTimer) clearTimeout(termReconnectTimer);
+      if (wsTerm) wsTerm.close();
+      if (term) term.clear();
+      setTimeout(() => {
+        isTermIntentionallyClosed = false;
+        connectTerminalWS();
+      }, 300);
+      showToast('Shell di-restart', 'info');
+    }
+
+    // Auto-reconnect saat layar HP/tab browser aktif kembali dari background
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) {
+        if (!wsTerm || wsTerm.readyState === WebSocket.CLOSED || wsTerm.readyState === WebSocket.CLOSING) {
+          if (term) term.write('\r\n\x1b[36m[Layar aktif kembali. Menyambungkan shell...]\x1b[0m\r\n');
+          connectTerminalWS();
+        }
+      }
+    });
+
+    window.addEventListener('focus', () => {
+      if (!wsTerm || wsTerm.readyState === WebSocket.CLOSED || wsTerm.readyState === WebSocket.CLOSING) {
+        connectTerminalWS();
+      }
+    });
 
     function sendResize() {
       if (term && wsTerm && wsTerm.readyState === WebSocket.OPEN) {

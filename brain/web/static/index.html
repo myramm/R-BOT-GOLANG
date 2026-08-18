@@ -2418,23 +2418,46 @@
       wsLogs.onclose = () => setTimeout(connectLogsWS, 3000);
     }
 
+    function ansiToHtml(str) {
+      if (!str) return '';
+      let html = str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+
+      html = html
+        .replace(/\x1b\[32m|\x1b\[1;32m|\033\[32m|\033\[1;32m/g, '<span style="color: #22c55e; font-weight: 600;">')
+        .replace(/\x1b\[1;37m|\x1b\[97m|\033\[1;37m|\033\[97m/g, '<span style="color: #ffffff; font-weight: 600;">')
+        .replace(/\x1b\[0m|\033\[0m/g, '</span>');
+
+      return html;
+    }
+
     function appendLogLine(line) {
       rawLogs.push(line);
       if (rawLogs.length > 1500) rawLogs.shift();
 
-      if (line.includes('[rbot]') || line.includes('command') || line.includes('connect')) {
-        addActivityEvent(line.replace(/\[rbot\]\s*/g, ''), 'Log Event');
+      const cleanLine = line.replace(/\x1b\[[0-9;]*m|\033\[[0-9;]*m/g, '');
+      if (cleanLine.includes('[rbot]') || cleanLine.includes('info: user:')) {
+        addActivityEvent(cleanLine.replace(/\[rbot\]\s*/g, ''), 'Log Event');
       }
 
       const consoleEl = document.getElementById('logConsole');
       const query = (document.getElementById('logSearchInput').value || '').toLowerCase();
 
-      if (!query || line.toLowerCase().includes(query)) {
+      if (!query || cleanLine.toLowerCase().includes(query)) {
         const div = document.createElement('div');
-        div.textContent = line;
-        if (line.includes('[ERROR]')) div.style.color = 'var(--danger)';
-        else if (line.includes('[WARN]')) div.style.color = 'var(--warning)';
-        else if (line.includes('[rbot]')) div.style.color = 'var(--accent)';
+        div.style.lineHeight = '1.45';
+        div.style.fontFamily = 'var(--font-mono)';
+
+        if (line.includes('\x1b[') || line.includes('\033[')) {
+          div.innerHTML = ansiToHtml(line);
+        } else {
+          div.textContent = line;
+          if (line.includes('[ERROR]')) div.style.color = 'var(--danger)';
+          else if (line.includes('[WARN]')) div.style.color = 'var(--warning)';
+          else if (line.includes('[rbot]')) div.style.color = 'var(--accent)';
+        }
         consoleEl.appendChild(div);
 
         if (autoScroll) consoleEl.scrollTop = consoleEl.scrollHeight;
@@ -2447,12 +2470,20 @@
       consoleEl.innerHTML = '';
 
       rawLogs.forEach(line => {
-        if (!query || line.toLowerCase().includes(query)) {
+        const cleanLine = line.replace(/\x1b\[[0-9;]*m|\033\[[0-9;]*m/g, '');
+        if (!query || cleanLine.toLowerCase().includes(query)) {
           const div = document.createElement('div');
-          div.textContent = line;
-          if (line.includes('[ERROR]')) div.style.color = 'var(--danger)';
-          else if (line.includes('[WARN]')) div.style.color = 'var(--warning)';
-          else if (line.includes('[rbot]')) div.style.color = 'var(--accent)';
+          div.style.lineHeight = '1.45';
+          div.style.fontFamily = 'var(--font-mono)';
+
+          if (line.includes('\x1b[') || line.includes('\033[')) {
+            div.innerHTML = ansiToHtml(line);
+          } else {
+            div.textContent = line;
+            if (line.includes('[ERROR]')) div.style.color = 'var(--danger)';
+            else if (line.includes('[WARN]')) div.style.color = 'var(--warning)';
+            else if (line.includes('[rbot]')) div.style.color = 'var(--accent)';
+          }
           consoleEl.appendChild(div);
         }
       });

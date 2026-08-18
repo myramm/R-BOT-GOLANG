@@ -118,7 +118,7 @@ func run(ctx context.Context) error {
 			if evt.Info.IsFromMe || evt.Info.Chat.Server == "broadcast" {
 				return
 			}
-			logIncomingMessage(evt)
+			logIncomingMessage(client, evt, "rbot")
 			stats.AddChat(evt)
 			// Autoread: tandai pesan masuk sebagai dibaca bila diaktifkan owner
 			// (.set autoread on). Best-effort; error hanya di-log agar tak
@@ -232,25 +232,106 @@ func forwardCommandError(ctx context.Context, c *command.Ctx, commandErr error) 
 	}
 }
 
-func logIncomingMessage(evt *events.Message) {
+func logIncomingMessage(client *whatsmeow.Client, evt *events.Message, botTag string) {
 	if evt == nil {
 		return
 	}
 	text := command.ExtractText(evt.Message)
+	msgType := getMessageType(evt, text)
+
 	if text == "" {
 		text = messageType(evt.Message)
 	}
+
 	text = strings.ReplaceAll(strings.ReplaceAll(text, "\n", "\\n"), "\r", "\\r")
 	text = truncateLogText(text, 500)
+
 	chatType := "private"
 	if evt.Info.IsGroup {
 		chatType = "group"
 	}
+
 	name := strings.TrimSpace(evt.Info.PushName)
 	if name == "" {
 		name = "unknown"
 	}
-	log.Printf("[rbot] incoming user=%q sender=%s chat=%s type=%s msg=%q", name, evt.Info.Sender, evt.Info.Chat, chatType, text)
+
+	senderLID := evt.Info.Sender.String()
+	chatIDStr := getChatIDString(client, evt)
+	tStr := time.Now().Format("2006/01/02 15:04:05")
+
+	if botTag == "" {
+		botTag = "rbot"
+	}
+
+	// ANSI color codes:
+	// \033[32m = Green (timestamp & MSG_TYPE)
+	// \033[1;37m = Bold White (bot username & cmd/input)
+	// \033[0m = Reset
+	logLine := fmt.Sprintf("\033[32m%s\033[0m \033[1;37m[%s]\033[0m = \033[32m%s\033[0m, info: user: %q, lid:%q, id:%q, type:%q, input:\033[1;37m%q\033[0m",
+		tStr, botTag, msgType, name, senderLID, chatIDStr, chatType, text)
+
+	fmt.Println(logLine)
+	web.Broadcaster.AddLine(logLine)
+}
+
+func getChatIDString(client *whatsmeow.Client, evt *events.Message) string {
+	if evt == nil {
+		return ""
+	}
+	chatID := evt.Info.Chat.String()
+	if evt.Info.IsGroup && client != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if info, err := client.GetGroupInfo(ctx, evt.Info.Chat); err == nil && strings.TrimSpace(info.Name) != "" {
+			return fmt.Sprintf("%s (%s)", strings.TrimSpace(info.Name), chatID)
+		}
+	}
+	return chatID
+}
+
+func getMessageType(evt *events.Message, text string) string {
+	if evt == nil || evt.Message == nil {
+		return "PESAN TEXT"
+	}
+
+	msg := evt.Message
+	prefix := config.MainPrefix()
+
+	trimmedText := strings.TrimSpace(text)
+	if trimmedText != "" {
+		if strings.HasPrefix(trimmedText, prefix) || strings.HasPrefix(trimmedText, ".") || strings.HasPrefix(trimmedText, "!") || strings.HasPrefix(trimmedText, "/") || strings.HasPrefix(trimmedText, "#") {
+			return "CMD"
+		}
+	}
+
+	if msg.ImageMessage != nil {
+		mime := strings.ToLower(msg.ImageMessage.GetMimetype())
+		if strings.Contains(mime, "png") {
+			return "MEDIA PNG"
+		}
+		if strings.Contains(mime, "jpeg") || strings.Contains(mime, "jpg") {
+			return "MEDIA JPEG"
+		}
+		return "MEDIA IMAGE"
+	}
+	if msg.VideoMessage != nil {
+		return "MEDIA VIDEO"
+	}
+	if msg.AudioMessage != nil {
+		return "MEDIA AUDIO"
+	}
+	if msg.StickerMessage != nil {
+		return "STICKER"
+	}
+	if msg.DocumentMessage != nil {
+		return "DOCUMENT"
+	}
+	if msg.PtvMessage != nil || msg.LocationMessage != nil || msg.ContactMessage != nil {
+		return "MEDIA DLL"
+	}
+
+	return "PESAN TEXT"
 }
 
 func truncateLogText(text string, maxRunes int) string {

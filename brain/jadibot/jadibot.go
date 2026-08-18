@@ -14,6 +14,7 @@ import (
 
 	_ "github.com/mattn/go-sqlite3"
 	"go.mau.fi/whatsmeow"
+	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
@@ -328,9 +329,8 @@ func (m *Manager) StartPairing(ctx context.Context, phone string, senderJID type
 			if sb != nil {
 				sb.MessageCount++
 			}
-			msgTxt := command.ExtractText(evt.Message)
-			if msgTxt != "" {
-				log.Printf("[jadibot:%s] incoming user=%q sender=%s chat=%s msg=%q", phoneDigits, evt.Info.PushName, evt.Info.Sender, evt.Info.Chat, msgTxt)
+			if !evt.Info.IsFromMe && evt.Info.Chat.Server != "broadcast" {
+				logIncomingSubBot(client, evt, "jadibot:"+phoneDigits)
 			}
 			go command.Dispatch(ctx, client, evt, true)
 		case *events.Connected:
@@ -596,9 +596,8 @@ func (m *Manager) Restart(ctx context.Context, phone string) error {
 			if sb != nil {
 				sb.MessageCount++
 			}
-			msgTxt := command.ExtractText(evt.Message)
-			if msgTxt != "" {
-				log.Printf("[jadibot:%s] incoming user=%q sender=%s chat=%s msg=%q", phoneDigits, evt.Info.PushName, evt.Info.Sender, evt.Info.Chat, msgTxt)
+			if !evt.Info.IsFromMe && evt.Info.Chat.Server != "broadcast" {
+				logIncomingSubBot(client, evt, "jadibot:"+phoneDigits)
 			}
 			go command.Dispatch(ctx, client, evt, true)
 		case *events.LoggedOut:
@@ -617,6 +616,124 @@ func (m *Manager) Restart(ctx context.Context, phone string) error {
 	m.mu.Unlock()
 
 	return nil
+}
+
+func logIncomingSubBot(client *whatsmeow.Client, evt *events.Message, botTag string) {
+	if evt == nil {
+		return
+	}
+	text := command.ExtractText(evt.Message)
+	msgType := getMessageTypeSubBot(evt, text)
+	if text == "" {
+		text = messageTypeSubBot(evt.Message)
+	}
+
+	text = strings.ReplaceAll(strings.ReplaceAll(text, "\n", "\\n"), "\r", "\\r")
+	runes := []rune(text)
+	if len(runes) > 500 {
+		text = string(runes[:500]) + "…"
+	}
+
+	chatType := "private"
+	if evt.Info.IsGroup {
+		chatType = "group"
+	}
+
+	name := strings.TrimSpace(evt.Info.PushName)
+	if name == "" {
+		name = "unknown"
+	}
+
+	senderLID := evt.Info.Sender.String()
+	chatIDStr := getChatIDSubBot(client, evt)
+	tStr := time.Now().Format("2006/01/02 15:04:05")
+
+	logLine := fmt.Sprintf("\033[32m%s\033[0m \033[1;37m[%s]\033[0m = \033[32m%s\033[0m, info: user: %q, lid:%q, id:%q, type:%q, input:\033[1;37m%q\033[0m",
+		tStr, botTag, msgType, name, senderLID, chatIDStr, chatType, text)
+
+	log.Println(logLine)
+}
+
+func getChatIDSubBot(client *whatsmeow.Client, evt *events.Message) string {
+	if evt == nil {
+		return ""
+	}
+	chatID := evt.Info.Chat.String()
+	if evt.Info.IsGroup && client != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if info, err := client.GetGroupInfo(ctx, evt.Info.Chat); err == nil && strings.TrimSpace(info.Name) != "" {
+			return fmt.Sprintf("%s (%s)", strings.TrimSpace(info.Name), chatID)
+		}
+	}
+	return chatID
+}
+
+func getMessageTypeSubBot(evt *events.Message, text string) string {
+	if evt == nil || evt.Message == nil {
+		return "PESAN TEXT"
+	}
+	msg := evt.Message
+	prefix := config.MainPrefix()
+
+	trimmedText := strings.TrimSpace(text)
+	if trimmedText != "" {
+		if strings.HasPrefix(trimmedText, prefix) || strings.HasPrefix(trimmedText, ".") || strings.HasPrefix(trimmedText, "!") || strings.HasPrefix(trimmedText, "/") || strings.HasPrefix(trimmedText, "#") {
+			return "CMD"
+		}
+	}
+
+	if msg.ImageMessage != nil {
+		mime := strings.ToLower(msg.ImageMessage.GetMimetype())
+		if strings.Contains(mime, "png") {
+			return "MEDIA PNG"
+		}
+		if strings.Contains(mime, "jpeg") || strings.Contains(mime, "jpg") {
+			return "MEDIA JPEG"
+		}
+		return "MEDIA IMAGE"
+	}
+	if msg.VideoMessage != nil {
+		return "MEDIA VIDEO"
+	}
+	if msg.AudioMessage != nil {
+		return "MEDIA AUDIO"
+	}
+	if msg.StickerMessage != nil {
+		return "STICKER"
+	}
+	if msg.DocumentMessage != nil {
+		return "DOCUMENT"
+	}
+	if msg.PtvMessage != nil || msg.LocationMessage != nil || msg.ContactMessage != nil {
+		return "MEDIA DLL"
+	}
+
+	return "PESAN TEXT"
+}
+
+func messageTypeSubBot(msg *waE2E.Message) string {
+	if msg == nil {
+		return "empty"
+	}
+	switch {
+	case msg.ImageMessage != nil:
+		return "[image]"
+	case msg.VideoMessage != nil:
+		return "[video]"
+	case msg.AudioMessage != nil:
+		return "[audio]"
+	case msg.StickerMessage != nil:
+		return "[sticker]"
+	case msg.DocumentMessage != nil:
+		return "[document]"
+	case msg.ContactMessage != nil:
+		return "[contact]"
+	case msg.LocationMessage != nil:
+		return "[location]"
+	default:
+		return "[message]"
+	}
 }
 
 // Delete menghentikan sub-bot dan menghapus permanen data session SQLite miliknya.

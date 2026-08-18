@@ -1783,7 +1783,7 @@
           <span>🖼️ Ganti Foto Profil Bot (WhatsApp Profile Picture)</span>
         </div>
         <p style="font-size: 0.825rem; color: var(--text-sub); margin-bottom: 1rem;">
-          Unggah gambar baru atau masukkan URL gambar untuk memperbarui foto profil bot WhatsApp (Otomatis di-crop 1:1 dan di-resize ke 720x720 JPEG).
+          Unggah gambar baru atau masukkan URL gambar untuk memperbarui foto profil bot WhatsApp. Pilih resolusi custom sesuai kebutuhan!
         </p>
         
         <div style="display: flex; flex-direction: column; gap: 1rem; max-width: 600px;">
@@ -1797,6 +1797,17 @@
           <div>
             <label style="font-size: 0.775rem; font-weight: 600; color: var(--text-sub); display: block; margin-bottom: 0.35rem;">2. URL Gambar Online (http:// atau https://):</label>
             <input type="text" id="botPPUrlInput" class="input-field" placeholder="https://example.com/foto-profil.jpg">
+          </div>
+
+          <div>
+            <label style="font-size: 0.775rem; font-weight: 600; color: var(--text-sub); display: block; margin-bottom: 0.35rem;">3. Custom Ukuran Resolusi (Persegi 1:1):</label>
+            <select id="botPPSizeSelect" class="input-field">
+              <option value="720" selected>720 x 720 px (HD Standard — Direkomendasikan)</option>
+              <option value="1080">1080 x 1080 px (Full HD Ultra Clarity)</option>
+              <option value="640">640 x 640 px (Medium High)</option>
+              <option value="500">500 x 500 px (Standard)</option>
+              <option value="320">320 x 320 px (Low Bandwidth / Compact)</option>
+            </select>
           </div>
 
           <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.5rem;">
@@ -4600,10 +4611,12 @@
     function submitSetBotPP() {
       const fileInput = document.getElementById('botPPFileInput');
       const urlInput = document.getElementById('botPPUrlInput');
+      const sizeSelect = document.getElementById('botPPSizeSelect');
       const btn = document.getElementById('submitBotPPBtn');
 
       const file = fileInput && fileInput.files && fileInput.files[0];
       const url = urlInput ? urlInput.value.trim() : '';
+      const size = sizeSelect ? parseInt(sizeSelect.value, 10) || 720 : 720;
 
       if (!file && !url) {
         showToast('Pilih file gambar atau masukkan URL gambar yang valid!', 'warning');
@@ -4640,6 +4653,7 @@
       if (file) {
         const formData = new FormData();
         formData.append('image', file);
+        formData.append('size', size);
 
         fetch('/api/bot/setpp', {
           method: 'POST',
@@ -4656,7 +4670,7 @@
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${authToken}`
           },
-          body: JSON.stringify({ url: url })
+          body: JSON.stringify({ url: url, size: size })
         })
         .then(res => res.json())
         .then(handlePPResponse)

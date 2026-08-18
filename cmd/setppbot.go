@@ -131,6 +131,20 @@ func fetchImageFromURL(ctx context.Context, urlStr string) ([]byte, error) {
 }
 
 func ProcessProfilePicture(ctx context.Context, data []byte) ([]byte, error) {
+	return ProcessProfilePictureWithSize(ctx, data, 720)
+}
+
+func ProcessProfilePictureWithSize(ctx context.Context, data []byte, targetDim int) ([]byte, error) {
+	if targetDim <= 0 {
+		targetDim = 720
+	}
+	if targetDim < 96 {
+		targetDim = 96
+	}
+	if targetDim > 2048 {
+		targetDim = 2048
+	}
+
 	src, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
 		// Jika decode bawaan (image/png, image/jpeg, image/webp) gagal, coba konversi stiker via ffmpeg
@@ -172,12 +186,11 @@ func ProcessProfilePicture(ctx context.Context, data []byte) ([]byte, error) {
 		cropped = rgba
 	}
 
-	targetDim := 720
 	dst := image.NewRGBA(image.Rect(0, 0, targetDim, targetDim))
 	draw.BiLinear.Scale(dst, dst.Bounds(), cropped, cropped.Bounds(), draw.Over, nil)
 
 	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, dst, &jpeg.Options{Quality: 85}); err != nil {
+	if err := jpeg.Encode(&buf, dst, &jpeg.Options{Quality: 90}); err != nil {
 		return nil, fmt.Errorf("gagal encode JPEG foto profil: %w", err)
 	}
 

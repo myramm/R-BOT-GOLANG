@@ -2358,11 +2358,15 @@ func handleSetPPBotWeb(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var rawBytes []byte
+	var targetDim int
 	var err error
 
 	// 1. Cek upload file multipart form
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
 		if parseErr := r.ParseMultipartForm(16 << 20); parseErr == nil {
+			if sVal := r.FormValue("size"); sVal != "" {
+				targetDim, _ = strconv.Atoi(sVal)
+			}
 			file, _, fErr := r.FormFile("image")
 			if fErr == nil {
 				defer file.Close()
@@ -2371,12 +2375,16 @@ func handleSetPPBotWeb(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 2. Cek JSON payload { "url": "https://..." }
+	// 2. Cek JSON payload { "url": "https://...", "size": 1080 }
 	if len(rawBytes) == 0 {
 		var req struct {
-			URL string `json:"url"`
+			URL  string `json:"url"`
+			Size int    `json:"size"`
 		}
 		if json.NewDecoder(r.Body).Decode(&req) == nil && strings.TrimSpace(req.URL) != "" {
+			if req.Size > 0 {
+				targetDim = req.Size
+			}
 			targetURL := strings.TrimSpace(req.URL)
 			if !strings.HasPrefix(targetURL, "http://") && !strings.HasPrefix(targetURL, "https://") {
 				w.Header().Set("Content-Type", "application/json")
@@ -2408,11 +2416,15 @@ func handleSetPPBotWeb(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 3. Crop 1:1 & Resize 720x720 JPEG menggunakan cmd.ProcessProfilePicture
+	if targetDim <= 0 {
+		targetDim = 720
+	}
+
+	// 3. Crop 1:1 & Resize ke targetDim x targetDim JPEG menggunakan cmd.ProcessProfilePictureWithSize
 	procCtx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
 	defer cancel()
 
-	imgJpeg, err := cmd.ProcessProfilePicture(procCtx, rawBytes)
+	imgJpeg, err := cmd.ProcessProfilePictureWithSize(procCtx, rawBytes, targetDim)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)

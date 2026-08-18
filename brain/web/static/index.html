@@ -1924,10 +1924,13 @@
 
       rawList.forEach(id => {
         const clean = String(id).trim();
-        if (/^\d{15,}$/.test(clean)) {
-          lids.push(clean);
-        } else if (/^\d{8,14}$/.test(clean)) {
-          phones.push(clean);
+        if (!clean) return;
+        if (/^\d+$/.test(clean)) {
+          if (clean.length >= 14 || clean.startsWith('238')) {
+            lids.push(clean);
+          } else {
+            phones.push(clean);
+          }
         } else {
           others.push(clean);
         }

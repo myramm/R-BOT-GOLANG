@@ -1507,6 +1507,14 @@ func handleBlacklistList(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func isLIDNumber(id string) bool {
+	clean := strings.TrimSpace(id)
+	if !isDigitsOnly(clean) {
+		return false
+	}
+	return len(clean) >= 14 || strings.HasPrefix(clean, "238")
+}
+
 func getGroupedBlacklistEntries(blMap map[string]bool) []BlacklistEntry {
 	var phones []string
 	var lids []string
@@ -1514,11 +1522,14 @@ func getGroupedBlacklistEntries(blMap map[string]bool) []BlacklistEntry {
 
 	for k := range blMap {
 		clean := strings.TrimSpace(k)
-		if len(clean) >= 15 && isDigitsOnly(clean) {
+		if clean == "" {
+			continue
+		}
+		if isLIDNumber(clean) {
 			lids = append(lids, clean)
-		} else if len(clean) >= 8 && len(clean) <= 14 && isDigitsOnly(clean) {
+		} else if isDigitsOnly(clean) {
 			phones = append(phones, clean)
-		} else if clean != "" {
+		} else {
 			others = append(others, clean)
 		}
 	}

@@ -18,7 +18,7 @@ func init() {
 		Name:        "swgc",
 		Category:    "Owner",
 		Alias:       []string{"statusswgc", "swg"},
-		Description: "Kirim status story ke grup WhatsApp (Group Status SWGC). Balas media/teks dengan .swgc",
+		Description: "Kirim status story ke grup WhatsApp (Group Status SWGC). Balas media/teks dengan .swgc atau .swgc <JID_Grup>",
 		OwnerOnly:   true,
 		Handler:     swgcHandler,
 	})
@@ -75,10 +75,7 @@ unwrapped:
 	return nil, ""
 }
 
-func swgcHandler(ctx context.Context, c *command.Ctx) error {
-	prefix := config.MainPrefix()
-	caption := strings.TrimSpace(c.ArgStr())
-
+func extractMediaAndCaption(ctx context.Context, c *command.Ctx, skipFirstArg bool) ([]byte, string, string, error) {
 	ci := c.ContextInfo()
 	var mediaMsg *waE2E.Message
 	var mime string
@@ -92,26 +89,66 @@ func swgcHandler(ctx context.Context, c *command.Ctx) error {
 		mediaMsg, mime = getMediaMessage(c.Evt.Message)
 	}
 
+	caption := ""
+	if skipFirstArg && len(c.Args) > 1 {
+		caption = strings.TrimSpace(strings.Join(c.Args[1:], " "))
+	} else if !skipFirstArg {
+		caption = strings.TrimSpace(c.ArgStr())
+	}
+
 	var data []byte
 	if mediaMsg != nil {
 		var err error
 		data, err = c.Client.DownloadAny(ctx, mediaMsg)
-		if err != nil || len(data) == 0 {
-			_, replyErr := c.Reply(ctx, "❌ Gagal mengunduh media dari pesan: "+err.Error())
-			return replyErr
+		if err != nil {
+			return nil, "", "", fmt.Errorf("gagal mengunduh media dari pesan: %w", err)
 		}
 	} else if caption != "" {
 		mime = "text"
 	} else {
-		_, err := c.Reply(ctx, fmt.Sprintf("⚠️ *Cara Penggunaan SWGC:*\nKirim atau balas gambar/video/audio dengan caption *%sswgc <caption?>*\natau ketik *%sswgc <teks status>* untuk status berupa teks.", prefix, prefix))
-		return err
+		return nil, "", "", fmt.Errorf("media atau caption tidak ditemukan")
 	}
 
-	// Simpan media/teks ke buffer sender
+	return data, mime, caption, nil
+}
+
+func swgcHandler(ctx context.Context, c *command.Ctx) error {
+	prefix := config.MainPrefix()
+
+	// Cek apakah argumen pertama adalah JID grup langsung (.swgc 120363xxx@g.us)
+	if len(c.Args) > 0 {
+		firstArg := strings.TrimSpace(c.Args[0])
+		if idx := strings.Index(firstArg, "|"); idx >= 0 {
+			firstArg = strings.TrimSpace(firstArg[:idx])
+		}
+		if targetJID, err := types.ParseJID(firstArg); err == nil && targetJID.Server == types.GroupServer {
+			// Langsung kirim ke JID grup jika media/teks tersedia di pesan/reply
+			data, mime, caption, err := extractMediaAndCaption(ctx, c, true)
+			if err == nil {
+				c.React(ctx, "⏳")
+				sendErr := swgc.SendGroupStatus(ctx, c.Client, targetJID, mime, data, caption)
+				if sendErr != nil {
+					c.React(ctx, "❌")
+					_, replyErr := c.Reply(ctx, "❌ Gagal mengirim SWGC: "+sendErr.Error())
+					return replyErr
+				}
+				c.React(ctx, "✅")
+				_, replyErr := c.Reply(ctx, fmt.Sprintf("✅ *Berhasil mengirim Group Status (SWGC)!*\n\n🎯 *Target Grup:* %s", targetJID.String()))
+				return replyErr
+			}
+		}
+	}
+
+	// Alur 2-step: Ekstrak media/teks dan simpan ke buffer
+	data, mime, caption, err := extractMediaAndCaption(ctx, c, false)
+	if err != nil {
+		_, replyErr := c.Reply(ctx, fmt.Sprintf("⚠️ *Cara Penggunaan SWGC:*\n• Reply media/teks langsung: *%sswgc <JID_grup>*\n• Alur pilih grup: Kirim/reply media dengan *%sswgc* lalu pilih grup dari list.", prefix, prefix))
+		return replyErr
+	}
+
 	senderKey := c.SenderPhone()
 	swgc.SetBuffer(senderKey, data, mime, caption)
 
-	// Ambil daftar grup yang diikuti bot
 	groups, err := c.Client.GetJoinedGroups(ctx)
 	if err != nil {
 		_, replyErr := c.Reply(ctx, "❌ Gagal mengambil daftar grup: "+err.Error())
@@ -155,7 +192,6 @@ func swgcProcessHandler(ctx context.Context, c *command.Ctx) error {
 	}
 
 	targetJIDRaw := strings.TrimSpace(c.Args[0])
-	// Split jika ada pipe '|' dari format custom
 	if idx := strings.Index(targetJIDRaw, "|"); idx >= 0 {
 		targetJIDRaw = strings.TrimSpace(targetJIDRaw[:idx])
 	}
@@ -166,23 +202,39 @@ func swgcProcessHandler(ctx context.Context, c *command.Ctx) error {
 		return replyErr
 	}
 
-	senderKey := c.SenderPhone()
-	buf, ok := swgc.GetBuffer(senderKey)
-	if !ok {
-		_, replyErr := c.Reply(ctx, fmt.Sprintf("❌ Media/teks status tidak tersedia di buffer. Kirim/reply media dulu dengan *%sswgc*", prefix))
-		return replyErr
+	var data []byte
+	var mime string
+	var caption string
+
+	// 1. Coba ekstrak media langsung jika user melakukan reply saat menjalankan .swgc_process
+	directData, directMime, directCap, directErr := extractMediaAndCaption(ctx, c, true)
+	if directErr == nil && (len(directData) > 0 || directCap != "") {
+		data = directData
+		mime = directMime
+		caption = directCap
+	} else {
+		// 2. Jika tidak ada reply media di pesan saat ini, gunakan buffer tersimpan
+		senderKey := c.SenderPhone()
+		buf, ok := swgc.GetBuffer(senderKey)
+		if !ok {
+			_, replyErr := c.Reply(ctx, fmt.Sprintf("❌ Media/teks status tidak tersedia di buffer. Kirim/reply media dulu dengan *%sswgc*", prefix))
+			return replyErr
+		}
+		data = buf.Media
+		mime = buf.Mime
+		caption = buf.Caption
+		swgc.ClearBuffer(senderKey)
 	}
 
 	c.React(ctx, "⏳")
 
-	err = swgc.SendGroupStatus(ctx, c.Client, targetJID, buf.Mime, buf.Media, buf.Caption)
+	err = swgc.SendGroupStatus(ctx, c.Client, targetJID, mime, data, caption)
 	if err != nil {
 		c.React(ctx, "❌")
 		_, replyErr := c.Reply(ctx, "❌ Gagal mengirim SWGC: "+err.Error())
 		return replyErr
 	}
 
-	swgc.ClearBuffer(senderKey)
 	c.React(ctx, "✅")
 	_, err = c.Reply(ctx, fmt.Sprintf("✅ *Berhasil mengirim Group Status (SWGC)!*\n\n🎯 *Target Grup:* %s", targetJID.String()))
 	return err

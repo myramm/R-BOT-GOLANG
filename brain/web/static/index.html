@@ -561,6 +561,94 @@
       color: var(--text-sub);
     }
 
+    /* Mobile File List Rows & Navigation */
+    .file-mobile-row {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 0.75rem 0.85rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      cursor: pointer;
+      transition: background 0.15s ease;
+      position: relative;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .file-mobile-row:active {
+      background: var(--bg-card-hover);
+    }
+    .file-mobile-icon {
+      font-size: 1.25rem;
+      flex-shrink: 0;
+    }
+    .file-mobile-info {
+      flex: 1;
+      min-width: 0;
+    }
+    .file-mobile-name {
+      font-weight: 600;
+      font-size: 0.875rem;
+      color: var(--text-main);
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      font-family: var(--font-mono);
+    }
+    .file-mobile-meta {
+      font-size: 0.725rem;
+      color: var(--text-muted);
+      margin-top: 0.15rem;
+    }
+    .file-mobile-chevron {
+      color: var(--text-muted);
+      font-size: 1.1rem;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+    .file-mobile-action {
+      position: relative;
+      flex-shrink: 0;
+    }
+    .file-action-dropdown {
+      position: absolute;
+      top: 36px;
+      right: 0;
+      background: #111726;
+      border: 1px solid var(--border-color-hover);
+      border-radius: 8px;
+      padding: 0.35rem;
+      min-width: 130px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.6);
+      display: none;
+      flex-direction: column;
+      gap: 0.2rem;
+      z-index: 150;
+    }
+    .file-action-dropdown.active {
+      display: flex;
+    }
+
+    /* CodeMirror Full Viewport Integration */
+    .CodeMirror {
+      height: 100% !important;
+      font-family: var(--font-mono) !important;
+      font-size: 13px !important;
+      line-height: 1.5 !important;
+      background: #080b11 !important;
+    }
+    .CodeMirror-scroll {
+      height: 100% !important;
+      max-height: 100% !important;
+    }
+    #codeEditorContainer {
+      flex: 1;
+      height: 100%;
+      min-height: 0;
+      position: relative;
+      overflow: hidden;
+    }
+
     /* Tables */
     .table-responsive {
       width: 100%;
@@ -1062,6 +1150,15 @@
         max-width: 94vw;
         max-height: 85vh;
         overflow-y: auto;
+      }
+
+      #editorModal .modal-box {
+        width: 100vw !important;
+        max-width: 100vw !important;
+        height: 100dvh !important;
+        max-height: 100dvh !important;
+        padding: 0 !important;
+        border-radius: 0 !important;
       }
 
       #jadibotCardsGrid {
@@ -1913,32 +2010,32 @@
 
     <!-- VIEW 9: FILE MANAGER & CODE EDITOR -->
     <section id="view-files" class="view-container">
-      <div class="greeting-header" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem;">
-        <div>
-          <h2 style="margin: 0; font-size: 1.35rem;">📁 File Manager & Code Editor</h2>
-          <p style="margin: 0.25rem 0 0 0; color: var(--text-sub); font-size: 0.85rem;">Kelola, edit, buat, backup, dan pantau seluruh source code R-BOT secara langsung.</p>
-        </div>
-        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-          <button class="btn btn-secondary btn-sm" onclick="openCreateFileModal('file')">📄 File Baru</button>
-          <button class="btn btn-secondary btn-sm" onclick="openCreateFileModal('folder')">📁 Folder Baru</button>
-          <button class="btn btn-primary btn-sm" onclick="triggerFileUpload()">📤 Upload File</button>
-          <input type="file" id="fileUploadInput" style="display: none;" onchange="handleFileUpload(event)">
-        </div>
+      <div class="greeting-header" style="margin-bottom: 1rem;">
+        <h2 style="margin: 0; font-size: 1.35rem;">📁 File Manager & Code Editor</h2>
+        <p style="margin: 0.25rem 0 0 0; color: var(--text-sub); font-size: 0.85rem;">Kelola, edit, buat, backup, dan pantau seluruh source code R-BOT secara langsung.</p>
+      </div>
+
+      <!-- Action Buttons Toolbar -->
+      <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.85rem;">
+        <button class="btn btn-secondary btn-sm" onclick="openCreateFileModal('file')">📄 + File</button>
+        <button class="btn btn-secondary btn-sm" onclick="openCreateFileModal('folder')">📁 + Folder</button>
+        <button class="btn btn-primary btn-sm" onclick="triggerFileUpload()">📤 Upload</button>
+        <input type="file" id="fileUploadInput" style="display: none;" onchange="handleFileUpload(event)">
       </div>
 
       <!-- File Navigation Breadcrumb & Search -->
-      <div class="panel-card" style="margin-bottom: 1rem; padding: 0.85rem;">
+      <div class="panel" style="margin-bottom: 1rem; padding: 0.85rem;">
         <div style="display: flex; flex-direction: column; gap: 0.75rem;">
           <div id="fileBreadcrumb" style="display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; font-family: var(--font-mono); font-size: 0.85rem;"></div>
-          <div style="display: flex; gap: 0.5rem;">
-            <input type="text" id="fileSearchInput" class="input-field" placeholder="🔍 Cari file di workspace..." onkeyup="handleFileSearch(event)">
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <input type="text" id="fileSearchInput" class="input-field" placeholder="🔍 Cari file di workspace..." onkeyup="handleFileSearch(event)" style="flex: 1; min-width: 180px;">
             <button class="btn btn-secondary btn-sm" onclick="fetchFileList(currentFileDir)">🔄 Refresh</button>
           </div>
         </div>
       </div>
 
-      <!-- File List Table Container -->
-      <div class="panel-card" style="padding: 0; overflow: hidden;">
+      <!-- Desktop File Table Container (visible on > 768px) -->
+      <div class="panel desktop-only" style="padding: 0; overflow: hidden;">
         <div class="table-responsive">
           <table>
             <thead>
@@ -1955,40 +2052,45 @@
           </table>
         </div>
       </div>
+
+      <!-- Mobile File Card List Container (visible on <= 768px) -->
+      <div id="fileMobileList" class="mobile-only" style="display: flex; flex-direction: column; gap: 0.5rem; width: 100%;">
+        <div style="text-align: center; color: var(--text-muted); padding: 1.5rem; font-size: 0.85rem;">Memuat daftar file...</div>
+      </div>
     </section>
 
   <!-- CODE EDITOR FULL-SCREEN MODAL -->
   <div id="editorModal" class="modal-backdrop">
-    <div class="modal-box" style="width: 95vw; max-width: 1200px; height: 92vh; max-height: 92vh; display: flex; flex-direction: column; padding: 0; overflow: hidden; border-radius: 12px; background: #090d16;">
+    <div class="modal-box" style="width: 96vw; max-width: 1200px; height: 94dvh; max-height: 94dvh; display: flex; flex-direction: column; padding: 0; overflow: hidden; border-radius: 12px; background: #090d16;">
       
       <!-- Editor Header -->
-      <div style="padding: 0.65rem 1rem; background: #0d121e; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap;">
-        <div style="display: flex; align-items: center; gap: 0.65rem;">
-          <button class="btn btn-secondary btn-sm" onclick="attemptCloseEditor()">← Kembali</button>
-          <span id="editorFileName" style="font-family: var(--font-mono); font-weight: 600; font-size: 0.9rem; color: var(--text-main);">filename.go</span>
-          <span id="editorStatusBadge" class="badge badge-success" style="font-size: 0.725rem;">● Saved</span>
+      <div style="padding: 0.5rem 0.85rem; background: #0d121e; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap;">
+        <div style="display: flex; align-items: center; gap: 0.5rem; min-width: 0; flex: 1;">
+          <button class="btn btn-secondary btn-sm" style="padding: 0.25rem 0.5rem;" onclick="attemptCloseEditor()">←</button>
+          <span id="editorFileName" style="font-family: var(--font-mono); font-weight: 600; font-size: 0.85rem; color: var(--text-main); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">filename.go</span>
+          <span id="editorStatusBadge" class="badge badge-success" style="font-size: 0.7rem; padding: 0.15rem 0.4rem;">● Saved</span>
         </div>
-        <div style="display: flex; align-items: center; gap: 0.5rem;">
-          <button id="editorFormatBtn" class="btn btn-secondary btn-sm" style="display: none;" onclick="formatJsonEditor()">✨ Format JSON</button>
-          <button class="btn btn-primary btn-sm" onclick="saveActiveFile()">💾 Save (Ctrl+S)</button>
-          <button class="btn btn-secondary btn-sm" onclick="attemptCloseEditor()">✕</button>
+        <div style="display: flex; align-items: center; gap: 0.35rem;">
+          <button id="editorFormatBtn" class="btn btn-secondary btn-sm" style="display: none; padding: 0.25rem 0.5rem;" onclick="formatJsonEditor()">✨ Format</button>
+          <button class="btn btn-primary btn-sm" style="padding: 0.25rem 0.65rem;" onclick="saveActiveFile()">💾 Save</button>
+          <button class="btn btn-secondary btn-sm" style="padding: 0.25rem 0.5rem;" onclick="attemptCloseEditor()">✕</button>
         </div>
       </div>
 
       <!-- JSON Validation Error Banner -->
-      <div id="editorJsonErrorBanner" style="display: none; background: rgba(239, 68, 68, 0.15); border-bottom: 1px solid var(--danger); padding: 0.5rem 1rem; color: #f87171; font-family: var(--font-mono); font-size: 0.78rem;">
+      <div id="editorJsonErrorBanner" style="display: none; background: rgba(239, 68, 68, 0.15); border-bottom: 1px solid var(--danger); padding: 0.4rem 0.85rem; color: #f87171; font-family: var(--font-mono); font-size: 0.75rem;">
         ⚠️ <span id="editorJsonErrorText">Invalid JSON</span>
       </div>
 
       <!-- CodeMirror / Editor Container -->
-      <div id="codeEditorContainer" style="flex: 1; position: relative; overflow: hidden;">
+      <div id="codeEditorContainer" style="flex: 1; position: relative; overflow: hidden; height: 100%;">
         <textarea id="codeEditorTextarea" style="width: 100%; height: 100%; background: #080b11; color: #f3f4f6; font-family: var(--font-mono); font-size: 13px; padding: 0.75rem; border: none; outline: none; resize: none;"></textarea>
       </div>
 
       <!-- Compact Footer Info Bar -->
-      <div style="padding: 0.35rem 1rem; background: #0a0e17; border-top: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted);">
-        <div>Path: <span id="editorFilePath"></span></div>
-        <div>Ukuran: <span id="editorFileSize">0 B</span> | Backup Otomatis Ditaktifkan</div>
+      <div style="padding: 0.3rem 0.85rem; background: #0a0e17; border-top: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-muted); flex-wrap: wrap; gap: 0.25rem;">
+        <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%;">Path: <span id="editorFilePath"></span></div>
+        <div><span id="editorFileSize">0 B</span> · Backup ON</div>
       </div>
     </div>
   </div>
@@ -3834,21 +3936,42 @@
       fetchFileList(currentFileDir);
     }
 
-    function fetchFileList(dir) {
+    function initFileManager() {
+      fetchFileList(currentFileDir, false);
+    }
+
+    function fetchFileList(dir, pushState = true) {
       currentFileDir = dir || '';
+      if (pushState && window.history && window.history.pushState) {
+        window.history.pushState({ view: 'files', dir: currentFileDir }, '', '#view-files');
+      }
+
+      const tbody = document.getElementById('fileTableBody');
+      const mobileList = document.getElementById('fileMobileList');
+      if (tbody) tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Memuat daftar file...</td></tr>`;
+      if (mobileList) mobileList.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 1.5rem; font-size: 0.85rem;">Memuat daftar file...</div>`;
+
       fetch(`/api/files/list?path=${encodeURIComponent(currentFileDir)}`, {
         headers: { 'Authorization': `Bearer ${authToken}` }
       })
       .then(res => res.json())
       .then(data => {
         if (!data.ok) {
-          showToast(data.error || 'Gagal memuat direktori', 'danger');
+          const errMsg = data.error || 'Folder tidak dapat dibuka.';
+          showToast(errMsg, 'danger');
+          if (tbody) tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--danger); padding: 1.5rem;">❌ ${escapeHtml(errMsg)}</td></tr>`;
+          if (mobileList) mobileList.innerHTML = `<div style="text-align: center; color: var(--danger); padding: 1.5rem; font-size: 0.85rem;">❌ ${escapeHtml(errMsg)}</div>`;
           return;
         }
         renderFileBreadcrumb(data.currentPath);
         renderFileList(data.items, data.parentPath);
       })
-      .catch(err => showToast('Gagal memuat file: ' + err.message, 'danger'));
+      .catch(err => {
+        const errMsg = 'Gagal memuat file: ' + err.message;
+        showToast(errMsg, 'danger');
+        if (tbody) tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--danger); padding: 1.5rem;">❌ ${escapeHtml(errMsg)}</td></tr>`;
+        if (mobileList) mobileList.innerHTML = `<div style="text-align: center; color: var(--danger); padding: 1.5rem; font-size: 0.85rem;">❌ ${escapeHtml(errMsg)}</div>`;
+      });
     }
 
     function renderFileBreadcrumb(pathStr) {
@@ -3865,9 +3988,9 @@
         const currentPath = acc;
         html += `<span style="color: var(--text-muted);">/</span>`;
         if (idx === parts.length - 1) {
-          html += `<span style="font-weight: 600; color: var(--accent);">${p}</span>`;
+          html += `<span style="font-weight: 600; color: var(--accent);">${escapeHtml(p)}</span>`;
         } else {
-          html += `<button class="btn btn-secondary btn-sm" style="padding: 0.15rem 0.45rem;" onclick="fetchFileList('${currentPath}')">${p}</button>`;
+          html += `<button class="btn btn-secondary btn-sm" style="padding: 0.15rem 0.45rem;" onclick="fetchFileList('${escapeHtml(currentPath)}')">${escapeHtml(p)}</button>`;
         }
       });
       bc.innerHTML = html;
@@ -3897,60 +4020,146 @@
 
     function renderFileList(items, parentPath) {
       const tbody = document.getElementById('fileTableBody');
-      if (!tbody) return;
+      const mobileList = document.getElementById('fileMobileList');
 
+      // Empty State Rendering
       if (!items || items.length === 0) {
-        let emptyHtml = '';
+        const emptyHtml = `
+          <div style="text-align: center; color: var(--text-muted); padding: 2rem 1rem;">
+            <div style="font-size: 2rem; margin-bottom: 0.5rem;">📁</div>
+            <div style="font-weight: 600; color: var(--text-main); margin-bottom: 0.25rem;">Folder kosong</div>
+            <div style="font-size: 0.8rem; margin-bottom: 1rem;">Tidak ada file di directory ini.</div>
+            <button class="btn btn-secondary btn-sm" onclick="openCreateFileModal('file')">📄 + Buat File Baru</button>
+          </div>
+        `;
+        if (tbody) tbody.innerHTML = `<tr><td colspan="4">${emptyHtml}</td></tr>`;
+        if (mobileList) mobileList.innerHTML = emptyHtml;
+        return;
+      }
+
+      // Desktop Table Rendering
+      if (tbody) {
+        let tableHtml = '';
         if (parentPath !== undefined && parentPath !== null && currentFileDir !== '') {
-          emptyHtml += `
+          tableHtml += `
             <tr style="cursor: pointer;" onclick="fetchFileList('${parentPath}')">
               <td colspan="4" style="color: var(--accent); font-family: var(--font-mono); font-size: 0.85rem; background: rgba(99, 102, 241, 0.05);">📁 .. (Kembali ke folder induk)</td>
             </tr>`;
         }
-        emptyHtml += `<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Direktori ini kosong</td></tr>`;
-        tbody.innerHTML = emptyHtml;
-        return;
+
+        items.forEach(item => {
+          const icon = getFileIcon(item);
+          const isEditable = !item.isDir && ['.go','.js','.ts','.json','.yaml','.yml','.toml','.html','.css','.md','.sh','.txt','.env','.log','.mod','.sum'].includes(item.ext);
+          
+          tableHtml += `
+            <tr>
+              <td>
+                <div style="display: flex; align-items: center; gap: 0.5rem; font-family: var(--font-mono); font-size: 0.85rem;">
+                  <span>${icon}</span>
+                  ${item.isDir ? 
+                    `<a href="#" onclick="fetchFileList('${item.path}'); return false;" style="color: var(--text-main); font-weight: 600; text-decoration: none;">${escapeHtml(item.name)}</a>` :
+                    `<span style="color: var(--text-main);">${escapeHtml(item.name)}</span>`
+                  }
+                </div>
+              </td>
+              <td style="font-family: var(--font-mono); font-size: 0.775rem; color: var(--text-sub);">${item.isDir ? '-' : formatFileSize(item.size)}</td>
+              <td style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted);">${item.modTime}</td>
+              <td style="text-align: right;">
+                <div style="display: flex; justify-content: flex-end; gap: 0.35rem;">
+                  ${isEditable ? `<button class="btn btn-secondary btn-sm" onclick="openFileEditor('${item.path}')">✏️ Edit</button>` : ''}
+                  ${!item.isDir ? `<a class="btn btn-secondary btn-sm" href="/api/files/download?path=${encodeURIComponent(item.path)}&token=${encodeURIComponent(authToken)}" download>📥</a>` : ''}
+                  <button class="btn btn-secondary btn-sm" onclick="openRenameModal('${item.path}', '${escapeHtml(item.name)}')">✏️</button>
+                  <button class="btn btn-danger btn-sm" onclick="promptDeleteFile('${item.path}', ${item.isDir})">🗑️</button>
+                </div>
+              </td>
+            </tr>
+          `;
+        });
+        tbody.innerHTML = tableHtml;
       }
 
-      let html = '';
-      if (parentPath !== undefined && parentPath !== null && currentFileDir !== '') {
-        html += `
-          <tr style="cursor: pointer;" onclick="fetchFileList('${parentPath}')">
-            <td colspan="4" style="color: var(--accent); font-family: var(--font-mono); font-size: 0.85rem; background: rgba(99, 102, 241, 0.05);">📁 .. (Kembali ke folder induk)</td>
-          </tr>`;
+      // Mobile Card List Rendering
+      if (mobileList) {
+        let mobileHtml = '';
+        if (parentPath !== undefined && parentPath !== null && currentFileDir !== '') {
+          mobileHtml += `
+            <div class="file-mobile-row" onclick="fetchFileList('${parentPath}')" style="background: rgba(99, 102, 241, 0.08); border-color: var(--accent);">
+              <div class="file-mobile-icon">📁</div>
+              <div class="file-mobile-info">
+                <div class="file-mobile-name" style="color: var(--accent);">.. (Kembali ke folder induk)</div>
+              </div>
+              <div class="file-mobile-chevron">←</div>
+            </div>`;
+        }
+
+        items.forEach((item, idx) => {
+          const icon = getFileIcon(item);
+          const isEditable = !item.isDir && ['.go','.js','.ts','.json','.yaml','.yml','.toml','.html','.css','.md','.sh','.txt','.env','.log','.mod','.sum'].includes(item.ext);
+          const menuId = `fileMenu-${idx}`;
+
+          if (item.isDir) {
+            mobileHtml += `
+              <div class="file-mobile-row" onclick="fetchFileList('${item.path}')">
+                <div class="file-mobile-icon">📁</div>
+                <div class="file-mobile-info">
+                  <div class="file-mobile-name">${escapeHtml(item.name)}</div>
+                  <div class="file-mobile-meta">Folder</div>
+                </div>
+                <div class="file-mobile-action" onclick="event.stopPropagation()">
+                  <button class="btn btn-secondary btn-sm" style="padding: 0.2rem 0.5rem;" onclick="toggleFileActionDropdown('${menuId}', event)">⋮</button>
+                  <div id="${menuId}" class="file-action-dropdown">
+                    <button class="dropdown-item" onclick="openRenameModal('${item.path}', '${escapeHtml(item.name)}'); closeAllFileDropdowns();">✏️ Rename</button>
+                    <button class="dropdown-item danger" onclick="promptDeleteFile('${item.path}', true); closeAllFileDropdowns();">🗑️ Hapus</button>
+                  </div>
+                </div>
+                <div class="file-mobile-chevron">›</div>
+              </div>
+            `;
+          } else {
+            mobileHtml += `
+              <div class="file-mobile-row" onclick="openFileEditor('${item.path}')">
+                <div class="file-mobile-icon">${icon}</div>
+                <div class="file-mobile-info">
+                  <div class="file-mobile-name">${escapeHtml(item.name)}</div>
+                  <div class="file-mobile-meta">${formatFileSize(item.size)} · ${item.modTime}</div>
+                </div>
+                <div class="file-mobile-action" onclick="event.stopPropagation()">
+                  <button class="btn btn-secondary btn-sm" style="padding: 0.2rem 0.5rem;" onclick="toggleFileActionDropdown('${menuId}', event)">⋮</button>
+                  <div id="${menuId}" class="file-action-dropdown">
+                    ${isEditable ? `<button class="dropdown-item" onclick="openFileEditor('${item.path}'); closeAllFileDropdowns();">✏️ Edit</button>` : ''}
+                    <a class="dropdown-item" href="/api/files/download?path=${encodeURIComponent(item.path)}&token=${encodeURIComponent(authToken)}" download onclick="closeAllFileDropdowns()">📥 Download</a>
+                    <button class="dropdown-item" onclick="openRenameModal('${item.path}', '${escapeHtml(item.name)}'); closeAllFileDropdowns();">✏️ Rename</button>
+                    <button class="dropdown-item danger" onclick="promptDeleteFile('${item.path}', false); closeAllFileDropdowns();">🗑️ Hapus</button>
+                  </div>
+                </div>
+              </div>
+            `;
+          }
+        });
+
+        mobileList.innerHTML = mobileHtml;
       }
-
-      items.forEach(item => {
-        const icon = getFileIcon(item);
-        const isEditable = !item.isDir && ['.go','.js','.ts','.json','.yaml','.yml','.toml','.html','.css','.md','.sh','.txt','.env','.log','.mod','.sum'].includes(item.ext);
-        
-        html += `
-          <tr>
-            <td>
-              <div style="display: flex; align-items: center; gap: 0.5rem; font-family: var(--font-mono); font-size: 0.85rem;">
-                <span>${icon}</span>
-                ${item.isDir ? 
-                  `<a href="#" onclick="fetchFileList('${item.path}'); return false;" style="color: var(--text-main); font-weight: 600; text-decoration: none;">${item.name}</a>` :
-                  `<span style="color: var(--text-main);">${item.name}</span>`
-                }
-              </div>
-            </td>
-            <td style="font-family: var(--font-mono); font-size: 0.775rem; color: var(--text-sub);">${item.isDir ? '-' : formatFileSize(item.size)}</td>
-            <td style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted);">${item.modTime}</td>
-            <td style="text-align: right;">
-              <div style="display: flex; justify-content: flex-end; gap: 0.35rem;">
-                ${isEditable ? `<button class="btn btn-secondary btn-sm" onclick="openFileEditor('${item.path}')">✏️ Edit</button>` : ''}
-                ${!item.isDir ? `<a class="btn btn-secondary btn-sm" href="/api/files/download?path=${encodeURIComponent(item.path)}&token=${encodeURIComponent(authToken)}" download>📥</a>` : ''}
-                <button class="btn btn-secondary btn-sm" onclick="openRenameModal('${item.path}', '${item.name}')">✏️</button>
-                <button class="btn btn-danger btn-sm" onclick="promptDeleteFile('${item.path}', ${item.isDir})">🗑️</button>
-              </div>
-            </td>
-          </tr>
-        `;
-      });
-
-      tbody.innerHTML = html;
     }
+
+    function toggleFileActionDropdown(id, e) {
+      if (e) e.stopPropagation();
+      closeAllFileDropdowns(id);
+      const el = document.getElementById(id);
+      if (el) el.classList.toggle('active');
+    }
+
+    function closeAllFileDropdowns(exceptId) {
+      document.querySelectorAll('.file-action-dropdown').forEach(d => {
+        if (!exceptId || d.id !== exceptId) d.classList.remove('active');
+      });
+    }
+
+    window.addEventListener('click', () => closeAllFileDropdowns());
+    window.addEventListener('popstate', (e) => {
+      if (e.state && e.state.view === 'files') {
+        fetchFileList(e.state.dir || '', false);
+      }
+    });
 
     function openFileEditor(pathStr) {
       fetch(`/api/files/read?path=${encodeURIComponent(pathStr)}`, {
@@ -3997,7 +4206,7 @@
           lineNumbers: true,
           mode: mode,
           theme: 'one-dark',
-          lineWrapping: true,
+          lineWrapping: false,
           viewportMargin: Infinity
         });
 
@@ -4020,7 +4229,9 @@
           'Cmd-S': function() { saveActiveFile(); }
         });
 
-        setTimeout(() => cmInstance.refresh(), 100);
+        setTimeout(() => {
+          if (cmInstance) cmInstance.refresh();
+        }, 150);
       } else {
         textarea.style.display = 'block';
         textarea.addEventListener('input', () => {
@@ -4050,20 +4261,25 @@
 
     function updateEditorStatus(status, errorMsg) {
       const badge = document.getElementById('editorStatusBadge');
+      const saveBtn = document.getElementById('editorSaveBtn');
       if (!badge) return;
 
       if (status === 'saved') {
         badge.className = 'badge badge-success';
         badge.textContent = '● Saved';
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '💾 Save'; }
       } else if (status === 'unsaved') {
         badge.className = 'badge badge-warning';
-        badge.textContent = '● Unsaved changes';
+        badge.textContent = '● Unsaved';
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '💾 Save'; }
       } else if (status === 'saving') {
         badge.className = 'badge badge-info';
         badge.textContent = '● Saving...';
+        if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving...'; }
       } else if (status === 'error') {
         badge.className = 'badge badge-danger';
-        badge.textContent = '● Error: ' + (errorMsg || 'Failed');
+        badge.textContent = '● Save failed';
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '💾 Save'; }
       }
     }
 
@@ -4122,7 +4338,7 @@
         isFileDirty = false;
         updateEditorStatus('saved');
         showToast('File berhasil disimpan! (Backup atomic otomatis dibuat)', 'success');
-        fetchFileList(currentFileDir);
+        fetchFileList(currentFileDir, false);
       })
       .catch(err => {
         updateEditorStatus('error', err.message);
@@ -4132,11 +4348,10 @@
 
     function attemptCloseEditor() {
       if (isFileDirty) {
-        openConfirmModal('Unsaved Changes', 'Perubahan pada file belum disimpan. Yakin ingin keluar?', () => {
-          closeConfirmModal();
+        if (confirm('Perubahan belum disimpan. Yakin ingin keluar dan menghapus perubahan?')) {
           document.getElementById('editorModal').classList.remove('active');
           isFileDirty = false;
-        });
+        }
       } else {
         document.getElementById('editorModal').classList.remove('active');
       }

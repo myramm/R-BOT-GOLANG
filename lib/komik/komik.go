@@ -16,13 +16,14 @@ import (
 )
 
 type Comic struct {
-	ID     string `json:"id"`
-	Title  string `json:"title"`
-	Slug   string `json:"slug"`
-	Source string `json:"source"` // "komiktap" | "komiku"
-	Count  int    `json:"count"`
-	Link   string `json:"link"`
-	CatID  int    `json:"cat_id,omitempty"`
+	ID       string    `json:"id"`
+	Title    string    `json:"title"`
+	Slug     string    `json:"slug"`
+	Source   string    `json:"source"` // "komiktap" | "komiku"
+	Count    int       `json:"count"`
+	Link     string    `json:"link"`
+	CatID    int       `json:"cat_id,omitempty"`
+	Chapters []Chapter `json:"chapters,omitempty"`
 }
 
 type Chapter struct {
@@ -57,9 +58,10 @@ type postItem struct {
 }
 
 var (
-	reImgTag   = regexp.MustCompile(`(?i)<img[^>]+src=["']([^"']+)["']`)
-	reChapter  = regexp.MustCompile(`(?i)(?:chapter|ch\.?)\s*([0-9]+(?:\.[0-9]+)?)`)
-	httpClient = &http.Client{Timeout: 15 * time.Second}
+	reImgTag        = regexp.MustCompile(`(?i)<img[^>]+src=["']([^"']+)["']`)
+	reChapterNum    = regexp.MustCompile(`(?i)(?:chapter|ch\.?)\s*([0-9]+(?:\.[0-9]+)?)`)
+	reChapterSuffix = regexp.MustCompile(`(?i)\s*[-:]?\s*(?:chapter|ch\.?)\s*[0-9]+(?:\.[0-9]+)?.*$`)
+	httpClient      = &http.Client{Timeout: 15 * time.Second}
 )
 
 func cleanTitle(s string) string {
@@ -67,6 +69,16 @@ func cleanTitle(s string) string {
 	s = strings.ReplaceAll(s, "&#8211;", "-")
 	s = strings.ReplaceAll(s, "&#8217;", "'")
 	return strings.TrimSpace(s)
+}
+
+func ExtractSeriesTitle(rawTitle string) string {
+	cleaned := cleanTitle(rawTitle)
+	series := reChapterSuffix.ReplaceAllString(cleaned, "")
+	series = strings.TrimSpace(series)
+	if series == "" {
+		return cleaned
+	}
+	return series
 }
 
 func extractImages(htmlContent string) []string {
@@ -87,14 +99,14 @@ func extractImages(htmlContent string) []string {
 }
 
 func extractChapterNum(title string) string {
-	m := reChapter.FindStringSubmatch(title)
+	m := reChapterNum.FindStringSubmatch(title)
 	if len(m) > 1 {
 		return m[1]
 	}
 	return ""
 }
 
-// SearchComics mencari komik dari KomikTap & Komiku
+// SearchComics mencari komik dan mengelompokkannya per SERI (bukan per chapter)
 func SearchComics(ctx context.Context, query string) ([]Comic, error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
@@ -102,10 +114,10 @@ func SearchComics(ctx context.Context, query string) ([]Comic, error) {
 	}
 
 	var results []Comic
-	seen := make(map[string]bool)
+	seriesMap := make(map[string]*Comic)
 
-	// 1. Cari Kategori di KomikTap (Judul Komik)
-	ktCatURL := fmt.Sprintf("https://komiktap.info/wp-json/wp/v2/categories?search=%s&per_page=15", url.QueryEscape(query))
+	// 1. Cari Kategori di KomikTap (Judul Serial Komik)
+	ktCatURL := fmt.Sprintf("https://komiktap.info/wp-json/wp/v2/categories?search=%s&per_page=20", url.QueryEscape(query))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, ktCatURL, nil)
 	if err == nil {
 		req.Header.Set("User-Agent", defaultUA)
@@ -118,10 +130,9 @@ func SearchComics(ctx context.Context, query string) ([]Comic, error) {
 			if json.Unmarshal(body, &cats) == nil {
 				for _, c := range cats {
 					t := cleanTitle(c.Name)
-					key := "komiktap:" + strings.ToLower(c.Slug)
-					if !seen[key] {
-						seen[key] = true
-						results = append(results, Comic{
+					key := "kt:" + strings.ToLower(c.Slug)
+					if _, exists := seriesMap[key]; !exists {
+						comic := Comic{
 							ID:     strconv.Itoa(c.ID),
 							Title:  t,
 							Slug:   c.Slug,
@@ -129,15 +140,17 @@ func SearchComics(ctx context.Context, query string) ([]Comic, error) {
 							Count:  c.Count,
 							Link:   c.Link,
 							CatID:  c.ID,
-						})
+						}
+						seriesMap[key] = &comic
+						results = append(results, comic)
 					}
 				}
 			}
 		}
 	}
 
-	// 2. Cari Post di KomikTap (Fallback jika tidak ada kategori atau untuk melengkapi)
-	ktPostURL := fmt.Sprintf("https://komiktap.info/wp-json/wp/v2/posts?search=%s&per_page=10", url.QueryEscape(query))
+	// 2. Cari Post di KomikTap & Kelompokkan per Seri
+	ktPostURL := fmt.Sprintf("https://komiktap.info/wp-json/wp/v2/posts?search=%s&per_page=50", url.QueryEscape(query))
 	req2, err := http.NewRequestWithContext(ctx, http.MethodGet, ktPostURL, nil)
 	if err == nil {
 		req2.Header.Set("User-Agent", defaultUA)
@@ -149,37 +162,55 @@ func SearchComics(ctx context.Context, query string) ([]Comic, error) {
 			var posts []postItem
 			if json.Unmarshal(body, &posts) == nil {
 				for _, p := range posts {
-					t := cleanTitle(p.Title.Rendered)
-					// Hapus suffix "Chapter X" jika ada untuk memulihkan nama serial komik
-					seriesTitle := reChapter.ReplaceAllString(t, "")
-					seriesTitle = strings.TrimSpace(strings.TrimSuffix(seriesTitle, "-"))
-					if seriesTitle == "" {
-						seriesTitle = t
+					postTitle := cleanTitle(p.Title.Rendered)
+					seriesTitle := ExtractSeriesTitle(postTitle)
+					seriesSlug := strings.ToLower(regexp.MustCompile(`[^\w]+`).ReplaceAllString(seriesTitle, "-"))
+					seriesSlug = strings.Trim(seriesSlug, "-")
+
+					key := "kt:" + seriesSlug
+					chNum := extractChapterNum(postTitle)
+					if chNum == "" {
+						chNum = "1"
 					}
-					slug := p.Slug
-					key := "komiktap:" + strings.ToLower(slug)
-					if !seen[key] {
-						seen[key] = true
+
+					ch := Chapter{
+						ID:     strconv.Itoa(p.ID),
+						Num:    chNum,
+						Title:  postTitle,
+						URL:    p.Link,
+						Slug:   p.Slug,
+						Images: extractImages(p.Content.Rendered),
+						Source: "komiktap",
+					}
+
+					if existing, exists := seriesMap[key]; exists {
+						existing.Chapters = append(existing.Chapters, ch)
+						existing.Count = len(existing.Chapters)
+					} else {
 						catID := 0
 						if len(p.Categories) > 0 {
 							catID = p.Categories[0]
 						}
-						results = append(results, Comic{
-							ID:     strconv.Itoa(p.ID),
-							Title:  t,
-							Slug:   slug,
-							Source: "komiktap",
-							Link:   p.Link,
-							CatID:  catID,
-						})
+						comic := Comic{
+							ID:       strconv.Itoa(p.ID),
+							Title:    seriesTitle,
+							Slug:     seriesSlug,
+							Source:   "komiktap",
+							Link:     p.Link,
+							CatID:    catID,
+							Chapters: []Chapter{ch},
+							Count:    1,
+						}
+						seriesMap[key] = &comic
+						results = append(results, comic)
 					}
 				}
 			}
 		}
 	}
 
-	// 3. Cari Post di Komiku
-	kmURL := fmt.Sprintf("https://komiku.org/wp-json/wp/v2/posts?search=%s&per_page=10", url.QueryEscape(query))
+	// 3. Cari Post di Komiku & Kelompokkan per Seri
+	kmURL := fmt.Sprintf("https://komiku.org/wp-json/wp/v2/posts?search=%s&per_page=50", url.QueryEscape(query))
 	req3, err := http.NewRequestWithContext(ctx, http.MethodGet, kmURL, nil)
 	if err == nil {
 		req3.Header.Set("User-Agent", defaultUA)
@@ -191,28 +222,70 @@ func SearchComics(ctx context.Context, query string) ([]Comic, error) {
 			var posts []postItem
 			if json.Unmarshal(body, &posts) == nil {
 				for _, p := range posts {
-					t := cleanTitle(p.Title.Rendered)
-					key := "komiku:" + strings.ToLower(p.Slug)
-					if !seen[key] {
-						seen[key] = true
-						results = append(results, Comic{
-							ID:     strconv.Itoa(p.ID),
-							Title:  t,
-							Slug:   p.Slug,
-							Source: "komiku",
-							Link:   p.Link,
-						})
+					postTitle := cleanTitle(p.Title.Rendered)
+					seriesTitle := ExtractSeriesTitle(postTitle)
+					seriesSlug := strings.ToLower(regexp.MustCompile(`[^\w]+`).ReplaceAllString(seriesTitle, "-"))
+					seriesSlug = strings.Trim(seriesSlug, "-")
+
+					key := "km:" + seriesSlug
+					chNum := extractChapterNum(postTitle)
+					if chNum == "" {
+						chNum = "1"
+					}
+
+					ch := Chapter{
+						ID:     strconv.Itoa(p.ID),
+						Num:    chNum,
+						Title:  postTitle,
+						URL:    p.Link,
+						Slug:   p.Slug,
+						Images: extractImages(p.Content.Rendered),
+						Source: "komiku",
+					}
+
+					if existing, exists := seriesMap[key]; exists {
+						existing.Chapters = append(existing.Chapters, ch)
+						existing.Count = len(existing.Chapters)
+					} else {
+						comic := Comic{
+							ID:       strconv.Itoa(p.ID),
+							Title:    seriesTitle,
+							Slug:     seriesSlug,
+							Source:   "komiku",
+							Link:     p.Link,
+							Chapters: []Chapter{ch},
+							Count:    1,
+						}
+						seriesMap[key] = &comic
+						results = append(results, comic)
 					}
 				}
 			}
 		}
 	}
 
+	// Update pointer slice results dengan isi seriesMap
+	for i := range results {
+		key := "kt:" + results[i].Slug
+		if results[i].Source == "komiku" {
+			key = "km:" + results[i].Slug
+		}
+		if s, ok := seriesMap[key]; ok {
+			results[i] = *s
+		}
+	}
+
 	return results, nil
 }
 
-// GetChapters mengambil daftar chapter dari sebuah komik
+// GetChapters mengambil daftar chapter dari sebuah seri komik
 func GetChapters(ctx context.Context, c Comic) ([]Chapter, error) {
+	// Jika sudah ada chapter yang terkumpul saat pencarian
+	if len(c.Chapters) > 0 {
+		sortChapters(c.Chapters)
+		return c.Chapters, nil
+	}
+
 	var chapters []Chapter
 
 	if c.Source == "komiktap" && c.CatID > 0 {
@@ -262,15 +335,15 @@ func GetChapters(ctx context.Context, c Comic) ([]Chapter, error) {
 			})
 		}
 	} else {
-		// Single post atau komiku
-		apiURL := ""
+		// Cari posts berdasarkan judul seri komik
+		searchURL := ""
 		if c.Source == "komiktap" {
-			apiURL = fmt.Sprintf("https://komiktap.info/wp-json/wp/v2/posts?slug=%s", url.QueryEscape(c.Slug))
+			searchURL = fmt.Sprintf("https://komiktap.info/wp-json/wp/v2/posts?search=%s&per_page=100", url.QueryEscape(c.Title))
 		} else {
-			apiURL = fmt.Sprintf("https://komiku.org/wp-json/wp/v2/posts?slug=%s", url.QueryEscape(c.Slug))
+			searchURL = fmt.Sprintf("https://komiku.org/wp-json/wp/v2/posts?search=%s&per_page=100", url.QueryEscape(c.Title))
 		}
 
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, searchURL, nil)
 		if err == nil {
 			req.Header.Set("User-Agent", defaultUA)
 			resp, err := httpClient.Do(req)
@@ -279,30 +352,38 @@ func GetChapters(ctx context.Context, c Comic) ([]Chapter, error) {
 				resp.Body.Close()
 
 				var posts []postItem
-				if json.Unmarshal(body, &posts) == nil && len(posts) > 0 {
-					p := posts[0]
-					t := cleanTitle(p.Title.Rendered)
-					num := extractChapterNum(t)
-					if num == "" {
-						num = "1"
-					}
-					imgs := extractImages(p.Content.Rendered)
+				if json.Unmarshal(body, &posts) == nil {
+					for _, p := range posts {
+						t := cleanTitle(p.Title.Rendered)
+						seriesTitle := ExtractSeriesTitle(t)
+						if strings.EqualFold(seriesTitle, c.Title) || strings.Contains(strings.ToLower(seriesTitle), strings.ToLower(c.Title)) {
+							num := extractChapterNum(t)
+							if num == "" {
+								num = "1"
+							}
+							imgs := extractImages(p.Content.Rendered)
 
-					chapters = append(chapters, Chapter{
-						ID:     strconv.Itoa(p.ID),
-						Num:    num,
-						Title:  t,
-						URL:    p.Link,
-						Slug:   p.Slug,
-						Images: imgs,
-						Source: c.Source,
-					})
+							chapters = append(chapters, Chapter{
+								ID:     strconv.Itoa(p.ID),
+								Num:    num,
+								Title:  t,
+								URL:    p.Link,
+								Slug:   p.Slug,
+								Images: imgs,
+								Source: c.Source,
+							})
+						}
+					}
 				}
 			}
 		}
 	}
 
-	// Urutkan chapter berdasarkan nomor chapter secara asendens (Chapter 1, 2, 3...)
+	sortChapters(chapters)
+	return chapters, nil
+}
+
+func sortChapters(chapters []Chapter) {
 	sort.Slice(chapters, func(i, j int) bool {
 		n1, e1 := strconv.ParseFloat(chapters[i].Num, 64)
 		n2, e2 := strconv.ParseFloat(chapters[j].Num, 64)
@@ -311,8 +392,6 @@ func GetChapters(ctx context.Context, c Comic) ([]Chapter, error) {
 		}
 		return chapters[i].Num < chapters[j].Num
 	})
-
-	return chapters, nil
 }
 
 // GetChapterImages mendapatkan daftar URL gambar untuk chapter tertentu
@@ -321,7 +400,6 @@ func GetChapterImages(ctx context.Context, ch Chapter) ([]string, error) {
 		return ch.Images, nil
 	}
 
-	// Ambil ulang dari WP REST API post detail
 	var apiURL string
 	if ch.Source == "komiku" {
 		apiURL = fmt.Sprintf("https://komiku.org/wp-json/wp/v2/posts?slug=%s", url.QueryEscape(ch.Slug))

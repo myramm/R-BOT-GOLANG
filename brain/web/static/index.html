@@ -2425,10 +2425,15 @@
     let wsMetricsDelay = 1000;
     let wsMetricsTimer = null;
 
+    let statusIntervalTimer = null;
+
     function initDashboard() {
       fetchStatus();
       connectMetricsWS();
       connectLogsWS();
+      if (!statusIntervalTimer) {
+        statusIntervalTimer = setInterval(fetchStatus, 3000);
+      }
     }
 
     function connectMetricsWS() {

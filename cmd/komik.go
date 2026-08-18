@@ -117,6 +117,9 @@ func komikHandler(ctx context.Context, c *command.Ctx) error {
 			results, err := komik.SearchComics(ctx, query)
 			if err != nil || len(results) == 0 {
 				c.React(ctx, "❌")
+				if err != nil {
+					c.ReportError(ctx, err)
+				}
 				_, e := c.Reply(ctx, fmt.Sprintf("Komik '%s' tidak ditemukan.", query))
 				return e
 			}
@@ -127,6 +130,9 @@ func komikHandler(ctx context.Context, c *command.Ctx) error {
 			chapters, err := komik.GetChapters(ctx, topComic)
 			if err != nil || len(chapters) == 0 {
 				c.React(ctx, "❌")
+				if err != nil {
+					c.ReportError(ctx, err)
+				}
 				_, e := c.Reply(ctx, fmt.Sprintf("Gagal mengambil chapter untuk '%s'.", topComic.Title))
 				return e
 			}
@@ -152,6 +158,7 @@ func komikHandler(ctx context.Context, c *command.Ctx) error {
 	results, err := komik.SearchComics(ctx, argStr)
 	if err != nil {
 		c.React(ctx, "❌")
+		c.ReportError(ctx, err)
 		_, e := c.Reply(ctx, fmt.Sprintf("Gagal mencari komik: %s", err.Error()))
 		return e
 	}
@@ -222,6 +229,9 @@ func handleKomikSessionReply(ctx context.Context, client *whatsmeow.Client, evt 
 		chapters, err := komik.GetChapters(ctx, selected)
 		if err != nil || len(chapters) == 0 {
 			c.React(ctx, "❌")
+			if err != nil {
+				c.ReportError(ctx, err)
+			}
 			_, _ = c.Reply(ctx, fmt.Sprintf("Gagal mengambil daftar chapter untuk '%s'.", selected.Title))
 			clearKomikSession(key)
 			return true
@@ -289,7 +299,9 @@ func processAndSendPDF(ctx context.Context, c *command.Ctx, comic komik.Comic, c
 	imageURLs, err := komik.GetChapterImages(bgCtx, ch)
 	if err != nil || len(imageURLs) == 0 {
 		c.React(bgCtx, "❌")
-		_, _ = c.Reply(bgCtx, fmt.Sprintf("Gagal mendapatkan gambar chapter %s: %v", ch.Num, err))
+		errMsg := fmt.Sprintf("Gagal mendapatkan gambar chapter %s: %v", ch.Num, err)
+		c.ReportErrorMessage(bgCtx, errMsg)
+		_, _ = c.Reply(bgCtx, errMsg)
 		return
 	}
 
@@ -298,7 +310,9 @@ func processAndSendPDF(ctx context.Context, c *command.Ctx, comic komik.Comic, c
 	pdfBytes, valid, total, err := komik.ImagesToPDF(bgCtx, imageURLs, comic.Link)
 	if err != nil || len(pdfBytes) == 0 {
 		c.React(bgCtx, "❌")
-		_, _ = c.Reply(bgCtx, fmt.Sprintf("❌ Gagal membuat PDF: %v", err))
+		errMsg := fmt.Sprintf("❌ Gagal membuat PDF: %v", err)
+		c.ReportErrorMessage(bgCtx, errMsg)
+		_, _ = c.Reply(bgCtx, errMsg)
 		return
 	}
 
@@ -314,7 +328,9 @@ func processAndSendPDF(ctx context.Context, c *command.Ctx, comic komik.Comic, c
 
 	if err := c.SendMediaBytes(bgCtx, pdfBytes, command.MediaDocument, caption, fileName, "application/pdf"); err != nil {
 		c.React(bgCtx, "❌")
-		_, _ = c.Reply(bgCtx, fmt.Sprintf("PDF berhasil dirakit (%.1f MB) tetapi gagal dikirim ke WhatsApp: %v", fileSizeMB, err))
+		errMsg := fmt.Sprintf("PDF berhasil dirakit (%.1f MB) tetapi gagal dikirim ke WhatsApp: %v", fileSizeMB, err)
+		c.ReportErrorMessage(bgCtx, errMsg)
+		_, _ = c.Reply(bgCtx, errMsg)
 		return
 	}
 

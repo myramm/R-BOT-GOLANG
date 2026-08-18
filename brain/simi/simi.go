@@ -3,11 +3,13 @@
 package simi
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"math/rand"
 	"net/http"
@@ -106,42 +108,84 @@ func AskSimi(ctx context.Context, input string) (string, error) {
 	}
 	defer resp.Body.Close()
 
-	var data struct {
-		Status string `json:"status"`
-		Steps  []struct {
-			Type    string `json:"type"`
-			Content []struct {
-				Type string `json:"type"`
-				Text string `json:"text"`
-			} `json:"content"`
-		} `json:"steps"`
-		Error struct {
-			Message string `json:"message"`
-		} `json:"error"`
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("baca respon simi: %w", err)
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		return "", fmt.Errorf("decode respon simi: %w", err)
+	type stepItem struct {
+		Type    string `json:"type"`
+		Content []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"content"`
+	}
+	type errorItem struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+		Status  string `json:"status"`
+	}
+	type interactionResp struct {
+		Status     string     `json:"status"`
+		Steps      []stepItem `json:"steps"`
+		Error      *errorItem `json:"error"`
+		Candidates []struct {
+			Content struct {
+				Parts []struct {
+					Text string `json:"text"`
+				} `json:"parts"`
+			} `json:"content"`
+		} `json:"candidates"`
+	}
+
+	var items []interactionResp
+	trimmedBody := bytes.TrimSpace(bodyBytes)
+	if len(trimmedBody) > 0 && trimmedBody[0] == '[' {
+		if err := json.Unmarshal(trimmedBody, &items); err != nil {
+			return "", fmt.Errorf("decode array respon simi: %w", err)
+		}
+	} else {
+		var single interactionResp
+		if err := json.Unmarshal(trimmedBody, &single); err != nil {
+			return "", fmt.Errorf("decode object respon simi: %w", err)
+		}
+		items = append(items, single)
+	}
+
+	if len(items) == 0 {
+		return "", fmt.Errorf("respon simi kosong (HTTP %d)", resp.StatusCode)
+	}
+
+	for _, item := range items {
+		if item.Error != nil && item.Error.Message != "" {
+			return "", fmt.Errorf("Gemini API: %s", item.Error.Message)
+		}
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		if data.Error.Message != "" {
-			return "", fmt.Errorf("%s", data.Error.Message)
-		}
-		return "", fmt.Errorf("HTTP %d", resp.StatusCode)
+		return "", fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(trimmedBody))
 	}
 
-	for _, step := range data.Steps {
-		if step.Type == "model_output" {
-			for _, item := range step.Content {
-				if item.Text != "" {
-					return strings.TrimSpace(item.Text), nil
+	for _, item := range items {
+		for _, step := range item.Steps {
+			if step.Type == "model_output" {
+				for _, c := range step.Content {
+					if strings.TrimSpace(c.Text) != "" {
+						return strings.TrimSpace(c.Text), nil
+					}
+				}
+			}
+		}
+		for _, cand := range item.Candidates {
+			for _, part := range cand.Content.Parts {
+				if strings.TrimSpace(part.Text) != "" {
+					return strings.TrimSpace(part.Text), nil
 				}
 			}
 		}
 	}
 
-	return "", errors.New("tidak ada respon teks dari API Simi")
+	return "", errors.New("tidak ada respon teks dari API Simi: " + string(trimmedBody))
 }
 
 // HandleQuotedMessage memproses pesan masuk yang mengutip (quote) pesan bot.

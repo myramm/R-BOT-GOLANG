@@ -1301,7 +1301,7 @@
         <h3 style="font-size: 1.15rem; font-weight: 700;">R-BOT Control Center</h3>
         <p style="color: var(--text-sub); font-size: 0.8rem; margin-top: 0.2rem;">Masukkan password admin.</p>
       </div>
-      <form onsubmit="handleLogin(event)">
+      <form onsubmit="handleLogin(event); return false;">
         <div style="margin-bottom: 1rem;">
           <input type="password" id="loginPassword" class="input-field" placeholder="Password admin..." required autofocus style="padding: 0.65rem 0.85rem;">
         </div>

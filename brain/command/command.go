@@ -400,8 +400,8 @@ func Dispatch(ctx context.Context, client *whatsmeow.Client, evt *events.Message
 
 	prefix := config.MatchPrefix(text)
 	if prefix == "" {
-		// Tanpa prefix: coba lanjutkan sesi interaktif (bukan sub-bot, ada teks).
-		if !subBot && text != "" && ResumeHook != nil {
+		// Tanpa prefix: coba lanjutkan sesi interaktif (ada teks).
+		if text != "" && ResumeHook != nil {
 			ResumeHook(ctx, client, evt, text)
 		}
 		return

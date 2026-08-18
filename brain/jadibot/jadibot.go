@@ -328,7 +328,11 @@ func (m *Manager) StartPairing(ctx context.Context, phone string, senderJID type
 			if sb != nil {
 				sb.MessageCount++
 			}
-			command.Dispatch(ctx, client, evt, true)
+			msgTxt := command.ExtractText(evt.Message)
+			if msgTxt != "" {
+				log.Printf("[jadibot:%s] incoming user=%q sender=%s chat=%s msg=%q", phoneDigits, evt.Info.PushName, evt.Info.Sender, evt.Info.Chat, msgTxt)
+			}
+			go command.Dispatch(ctx, client, evt, true)
 		case *events.Connected:
 			if client.Store != nil && client.Store.ID != nil {
 				sb.JID = *client.Store.ID
@@ -592,7 +596,11 @@ func (m *Manager) Restart(ctx context.Context, phone string) error {
 			if sb != nil {
 				sb.MessageCount++
 			}
-			command.Dispatch(ctx, client, evt, true)
+			msgTxt := command.ExtractText(evt.Message)
+			if msgTxt != "" {
+				log.Printf("[jadibot:%s] incoming user=%q sender=%s chat=%s msg=%q", phoneDigits, evt.Info.PushName, evt.Info.Sender, evt.Info.Chat, msgTxt)
+			}
+			go command.Dispatch(ctx, client, evt, true)
 		case *events.LoggedOut:
 			log.Printf("[jadibot] sub-bot %s logged out", phoneDigits)
 			_ = m.Stop(context.Background(), phoneDigits, types.JID{}, true)

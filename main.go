@@ -129,7 +129,7 @@ func run(ctx context.Context) error {
 					log.Printf("[rbot] autoread gagal: %v", err)
 				}
 			}
-			command.Dispatch(ctx, client, evt, false)
+			go command.Dispatch(ctx, client, evt, false)
 		case *events.Connected:
 			log.Printf("[rbot] terhubung ke WhatsApp sebagai %s", client.Store.ID)
 			web.BroadcastMetricsNow()

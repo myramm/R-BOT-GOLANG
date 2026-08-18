@@ -1645,6 +1645,31 @@
             </table>
           </div>
         </div>
+
+        <!-- GROUP MUTE / ADMIN-ONLY CONTROL PANEL -->
+        <div class="panel">
+          <div class="panel-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+            <span>🔇 Group Mute / Admin-Only Control (Owner Web)</span>
+            <button class="btn btn-secondary btn-sm" onclick="loadSWGCGroups()">🔄 Refresh</button>
+          </div>
+          <p style="color: var(--text-sub); font-size: 0.8rem; margin: 0 0 0.85rem 0;">Mute atau unmute grup secara instan dari Web Dashboard agar bot hanya bisa merespon Admin Grup & Owner di grup tersebut.</p>
+
+          <div class="table-responsive">
+            <table>
+              <thead>
+                <tr>
+                  <th>Nama Grup</th>
+                  <th>Anggota</th>
+                  <th>Status Mute</th>
+                  <th style="text-align: right;">Aksi Mute</th>
+                </tr>
+              </thead>
+              <tbody id="groupMuteTableBody">
+                <tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 1rem;">Memuat daftar grup...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -2007,28 +2032,6 @@
 
         <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
           <button id="groupMsgSubmitBtn" class="btn btn-primary" onclick="submitGroupMsgForm()">💬 Kirim Pesan ke Grup</button>
-        </div>
-      </div>
-
-      <!-- CARD 3: MODERASI MUTE / UNMUTE GRUP (ADMIN ONLY MODE) -->
-      <div class="card" style="max-width: 720px; margin: 1.5rem auto 0 auto; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.5rem;">
-        <h3 style="font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin: 0 0 0.5rem 0;">🔇 Group Mute / Admin-Only Control (Owner Web)</h3>
-        <p style="color: var(--text-sub); font-size: 0.825rem; margin: 0 0 1rem 0;">Mute atau unmute grup secara instan dari Web Dashboard agar bot hanya bisa merespon Admin Grup & Owner di grup tersebut.</p>
-
-        <div class="table-responsive">
-          <table class="table" style="width: 100%;">
-            <thead>
-              <tr>
-                <th>Nama Grup</th>
-                <th>Anggota</th>
-                <th>Status Mute</th>
-                <th style="text-align: right;">Aksi Mute</th>
-              </tr>
-            </thead>
-            <tbody id="groupMuteTableBody">
-              <tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 1rem;">Memuat daftar grup...</td></tr>
-            </tbody>
-          </table>
         </div>
       </div>
     </section>
@@ -2516,6 +2519,7 @@
       }
       if (viewId === 'users') {
         loadBlacklistWeb();
+        loadSWGCGroups();
       }
     }
 

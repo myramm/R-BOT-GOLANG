@@ -73,9 +73,8 @@ func simiHandler(ctx context.Context, c *command.Ctx) error {
 			"*Perintah:*\n"+
 			"• `%ssimi on` — Aktifkan auto-reply Simi\n"+
 			"• `%ssimi off` — Matikan auto-reply Simi\n"+
-			"• `%ssimi status` — Cek status aktif\n"+
-			"• `%stestsimi <pesan>` — Coba respon Simi langsung",
-			status, mp, mp, mp, mp)
+			"• `%ssimi status` — Cek status aktif",
+			status, mp, mp, mp)
 		_, err := c.Reply(ctx, help)
 		return err
 	}

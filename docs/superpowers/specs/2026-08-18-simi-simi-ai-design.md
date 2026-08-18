@@ -11,7 +11,6 @@ The **Simi-Simi AI** feature turns the WhatsApp bot into an engaging, humorous, 
 - **Quote-Based Auto-Reply**: Simi-Simi triggers only when an incoming message is a non-command and is quoting/replying to a message originally sent by the bot (`quoted.Participant == botJID` or sent by bot).
 - **Scope**: Active in both Group Chats and Direct Messages (DM).
 - **Toggle Control**: Can be enabled/disabled per chat via `.simi [on|off|status]`.
-- **Direct Test Command**: `.testsimi <pesan>` allows testing the Simi text response directly without needing to quote a bot message.
 
 ### 2. Personality & System Prompt (Gemini Interactions API)
 - **Endpoint**: `https://generativelanguage.googleapis.com/v1/interactions`
@@ -50,9 +49,8 @@ The **Simi-Simi AI** feature turns the WhatsApp bot into an engaging, humorous, 
   - If sticker message: send random sticker.
   - If text message: call `simi.AskSimi` and reply with generated text.
 
-### 3. Commands (`cmd/simi.go`, `cmd/testsimi.go`)
+### 3. Commands (`cmd/simi.go`)
 - `cmd/simi.go`: Toggle `.simi on`, `.simi off`, `.simi status`.
-- `cmd/testsimi.go`: Direct test command `.testsimi <pesan>`.
 
 ---
 

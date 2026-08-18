@@ -14,12 +14,4 @@ func TestSimiCommandRegistered(t *testing.T) {
 	if cmd.Category != "AI" {
 		t.Errorf("kategori command 'simi' harus 'AI', dapat %s", cmd.Category)
 	}
-
-	testCmd := command.Resolve("testsimi")
-	if testCmd == nil {
-		t.Fatalf("command 'testsimi' harus terdaftar")
-	}
-	if testCmd.Category != "AI" {
-		t.Errorf("kategori command 'testsimi' harus 'AI', dapat %s", testCmd.Category)
-	}
 }

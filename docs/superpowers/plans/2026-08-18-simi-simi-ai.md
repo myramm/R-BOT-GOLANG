@@ -20,7 +20,6 @@
 
 ## Phase 3: Commands
 1. Implement `cmd/simi.go` (`.simi on`, `.simi off`, `.simi status`).
-2. Implement `cmd/testsimi.go` (`.testsimi <pesan>`).
 
 ## Phase 4: Verification & Git Push
 1. Run all unit tests with `go test ./...`.

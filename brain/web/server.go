@@ -34,6 +34,7 @@ import (
 	"rbot/brain/jadibot"
 	"rbot/brain/lifecycle"
 	"rbot/brain/settings"
+	"rbot/brain/simi"
 	"rbot/brain/stats"
 	"rbot/brain/store"
 	"rbot/brain/swgc"
@@ -483,6 +484,13 @@ func Start(ctx context.Context) {
 	mux.HandleFunc("/api/bot/setpp", handleSetPPBotWeb)
 	mux.HandleFunc("/api/update/check", handleUpdateCheck)
 	mux.HandleFunc("/api/update/apply", handleUpdateApply)
+
+	// Simi-Simi AI Endpoints
+	mux.HandleFunc("/api/simi/data", handleSimiData)
+	mux.HandleFunc("/api/simi/persona", handleSimiPersona)
+	mux.HandleFunc("/api/simi/stickers/upload", handleSimiStickerUpload)
+	mux.HandleFunc("/api/simi/stickers/delete", handleSimiStickerDelete)
+	mux.HandleFunc("/api/simi/stickers/clear", handleSimiStickerClear)
 
 	// File Manager API Endpoints
 	mux.HandleFunc("/api/files/list", handleFileList)
@@ -2509,5 +2517,167 @@ func handleUpdateApply(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"ok":      true,
 		"message": fmt.Sprintf("Sukses update dari GitHub (branch: %s)! Engine berhasil di-build ulang dan akan restart otomatis dalam 1 detik.", applyRes.Branch),
+	})
+}
+
+// -------------------------------------------------------------
+// SIMI-SIMI AI WEB HANDLERS
+// -------------------------------------------------------------
+
+func handleSimiData(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	data := simi.GetSimiData()
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":   true,
+		"data": data,
+	})
+}
+
+func handleSimiPersona(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Action string `json:"action"` // "save" | "reset"
+		Prompt string `json:"prompt"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	if req.Action == "reset" {
+		_ = simi.ResetCustomPersona()
+		RecordAudit(r, "SIMI_PERSONA", "Reset persona Simi-Simi ke bawaan")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":     true,
+			"prompt": simi.DefaultPersonaPrompt(),
+		})
+		return
+	}
+
+	if strings.TrimSpace(req.Prompt) == "" {
+		http.Error(w, "Prompt tidak boleh kosong", http.StatusBadRequest)
+		return
+	}
+
+	if err := simi.SetCustomPersona(req.Prompt); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	RecordAudit(r, "SIMI_PERSONA", "Memperbarui persona Simi-Simi via Web Dashboard")
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":     true,
+		"prompt": simi.DefaultPersonaPrompt(),
+	})
+}
+
+func handleSimiStickerUpload(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if err := r.ParseMultipartForm(10 * 1024 * 1024); err != nil {
+		http.Error(w, "Upload terlalu besar", http.StatusBadRequest)
+		return
+	}
+
+	file, _, err := r.FormFile("sticker")
+	if err != nil {
+		http.Error(w, "File sticker tidak ditemukan", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(file)
+	if err != nil || len(data) == 0 {
+		http.Error(w, "File sticker kosong", http.StatusBadRequest)
+		return
+	}
+
+	if err := simi.SaveGroupSticker(data); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	RecordAudit(r, "SIMI_STICKER_UPLOAD", fmt.Sprintf("Upload sticker Simi (%d bytes)", len(data)))
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":             true,
+		"total_stickers": len(simi.GetAllStickers()),
+	})
+}
+
+func handleSimiStickerDelete(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Index int `json:"index"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	if err := simi.DeleteSticker(req.Index); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	RecordAudit(r, "SIMI_STICKER_DELETE", fmt.Sprintf("Hapus sticker Simi indeks %d", req.Index))
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":             true,
+		"total_stickers": len(simi.GetAllStickers()),
+	})
+}
+
+func handleSimiStickerClear(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	_ = simi.ClearAllStickers()
+	RecordAudit(r, "SIMI_STICKER_CLEAR", "Mengosongkan seluruh koleksi sticker Simi")
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":             true,
+		"total_stickers": 0,
 	})
 }

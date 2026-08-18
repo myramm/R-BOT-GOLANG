@@ -77,3 +77,63 @@ func TestStickerSaveAndGet(t *testing.T) {
 		t.Errorf("data sticker tidak cocok: got %s, want %s", string(got), string(dummySticker))
 	}
 }
+
+func TestPersonaManagement(t *testing.T) {
+	setupTestStore(t)
+
+	custom := "Kamu adalah AI cuek dan sarkas."
+	if err := SetCustomPersona(custom); err != nil {
+		t.Fatalf("SetCustomPersona gagal: %v", err)
+	}
+
+	if !HasCustomPersona() {
+		t.Errorf("HasCustomPersona harus true setelah SetCustomPersona")
+	}
+
+	if DefaultPersonaPrompt() != custom {
+		t.Errorf("DefaultPersonaPrompt = %q, want %q", DefaultPersonaPrompt(), custom)
+	}
+
+	if err := ResetCustomPersona(); err != nil {
+		t.Fatalf("ResetCustomPersona gagal: %v", err)
+	}
+
+	if HasCustomPersona() {
+		t.Errorf("HasCustomPersona harus false setelah ResetCustomPersona")
+	}
+}
+
+func TestStickerDeleteAndClear(t *testing.T) {
+	setupTestStore(t)
+
+	_ = SaveGroupSticker([]byte("sticker-1"))
+	_ = SaveGroupSticker([]byte("sticker-2"))
+	_ = SaveGroupSticker([]byte("sticker-3"))
+
+	stickers := GetAllStickers()
+	if len(stickers) != 3 {
+		t.Fatalf("total stickers = %d, want 3", len(stickers))
+	}
+
+	if err := DeleteSticker(1); err != nil {
+		t.Fatalf("DeleteSticker(1) gagal: %v", err)
+	}
+
+	stickers = GetAllStickers()
+	if len(stickers) != 2 {
+		t.Fatalf("total stickers setelah delete = %d, want 2", len(stickers))
+	}
+
+	data := GetSimiData()
+	if data["total_stickers"] != 2 {
+		t.Errorf("total_stickers di GetSimiData = %v, want 2", data["total_stickers"])
+	}
+
+	if err := ClearAllStickers(); err != nil {
+		t.Fatalf("ClearAllStickers gagal: %v", err)
+	}
+
+	if len(GetAllStickers()) != 0 {
+		t.Errorf("total stickers setelah clear = %d, want 0", len(GetAllStickers()))
+	}
+}

@@ -48,8 +48,15 @@ func init() {
 	command.SimiHook = HandleQuotedMessage
 }
 
+const promptStoreKey = "simi:system_prompt"
+
 // DefaultPersonaPrompt mengembalikan system prompt untuk Simi-Simi.
 func DefaultPersonaPrompt() string {
+	var customPrompt string
+	found, err := store.Get(promptStoreKey, &customPrompt)
+	if err == nil && found && strings.TrimSpace(customPrompt) != "" {
+		return strings.TrimSpace(customPrompt)
+	}
 	if p := strings.TrimSpace(config.C.Simi.SystemPrompt); p != "" {
 		return p
 	}
@@ -442,4 +449,63 @@ func GetRandomSticker() ([]byte, bool) {
 		return nil, false
 	}
 	return data, true
+}
+
+// SetCustomPersona menyimpan kustomisasi prompt persona Simi-Simi ke database LMDB.
+func SetCustomPersona(prompt string) error {
+	return store.Set(promptStoreKey, strings.TrimSpace(prompt))
+}
+
+// ResetCustomPersona menghapus prompt kustom di LMDB dan kembali ke bawaan prompt netizen.
+func ResetCustomPersona() error {
+	return store.Delete(promptStoreKey)
+}
+
+// HasCustomPersona mengembalikan true bila terdapat prompt kustom di LMDB.
+func HasCustomPersona() bool {
+	var customPrompt string
+	found, err := store.Get(promptStoreKey, &customPrompt)
+	return err == nil && found && strings.TrimSpace(customPrompt) != ""
+}
+
+// GetAllStickers mengembalikan seluruh daftar sticker WebP (base64) dari LMDB.
+func GetAllStickers() []string {
+	var list []string
+	_, _ = store.Get(stickersStoreKey, &list)
+	return list
+}
+
+// DeleteSticker menghapus satu sticker di LMDB berdasarkan indeks.
+func DeleteSticker(index int) error {
+	var list []string
+	found, err := store.Get(stickersStoreKey, &list)
+	if err != nil || !found || len(list) == 0 {
+		return errors.New("tidak ada sticker yang tersimpan")
+	}
+	if index < 0 || index >= len(list) {
+		return fmt.Errorf("indeks sticker %d tidak valid", index)
+	}
+	list = append(list[:index], list[index+1:]...)
+	return store.Set(stickersStoreKey, list)
+}
+
+// ClearAllStickers mengosongkan seluruh koleksi sticker di LMDB.
+func ClearAllStickers() error {
+	return store.Delete(stickersStoreKey)
+}
+
+// GetSimiData mengumpulkan status dan data Simi-Simi untuk tampilan Web Dashboard.
+func GetSimiData() map[string]any {
+	var stickers []string
+	_, _ = store.Get(stickersStoreKey, &stickers)
+
+	return map[string]any{
+		"enabled_default":  config.C.Simi.EnabledByDefault,
+		"model":            config.C.Simi.Model,
+		"has_api_key":      strings.TrimSpace(config.C.Simi.APIKey) != "",
+		"system_prompt":    DefaultPersonaPrompt(),
+		"is_custom_prompt": HasCustomPersona(),
+		"total_stickers":   len(stickers),
+		"stickers":         stickers,
+	}
 }

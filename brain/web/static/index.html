@@ -1441,6 +1441,11 @@
           <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
           Group Status (SWGC)
         </button>
+
+        <button class="nav-item" onclick="switchNav('simi', this); closeMobileDrawer();">
+          <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
+          Simi-Simi AI
+        </button>
       </nav>
 
       <div class="sidebar-footer">
@@ -1585,6 +1590,11 @@
       <button class="nav-item" onclick="switchNav('swgc', this)">
         <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
         Group Status (SWGC)
+      </button>
+
+      <button class="nav-item" onclick="switchNav('simi', this)">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
+        Simi-Simi AI
       </button>
     </nav>
 
@@ -2399,6 +2409,76 @@
       </div>
     </section>
 
+    <!-- VIEW 10: SIMI-SIMI AI & STICKER DATABASE -->
+    <section id="view-simi" class="view-container">
+      <div class="greeting-header" style="margin-bottom: 1rem;">
+        <h2 style="margin: 0; font-size: 1.35rem;">🤖 Simi-Simi AI & Sticker Database</h2>
+        <p style="margin: 0.25rem 0 0 0; color: var(--text-sub); font-size: 0.85rem;">Kelola prompt persona AI, status aktif, dan database sticker LMDB secara langsung.</p>
+      </div>
+
+      <!-- Quick Status Badges -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+        <div class="panel" style="display: flex; align-items: center; gap: 0.75rem; padding: 1rem;">
+          <div style="font-size: 1.75rem;">🤖</div>
+          <div>
+            <div style="font-size: 0.75rem; color: var(--text-muted);">AI Model</div>
+            <div id="simiModelBadge" style="font-weight: 700; color: var(--text-main); font-size: 1rem;">gemini-3.5-flash</div>
+          </div>
+        </div>
+
+        <div class="panel" style="display: flex; align-items: center; gap: 0.75rem; padding: 1rem;">
+          <div style="font-size: 1.75rem;">🔑</div>
+          <div>
+            <div style="font-size: 0.75rem; color: var(--text-muted);">Gemini API Key</div>
+            <div id="simiApiKeyBadge" style="font-weight: 700; font-size: 1rem;">Memeriksa...</div>
+          </div>
+        </div>
+
+        <div class="panel" style="display: flex; align-items: center; gap: 0.75rem; padding: 1rem;">
+          <div style="font-size: 1.75rem;">🖼️</div>
+          <div>
+            <div style="font-size: 0.75rem; color: var(--text-muted);">Koleksi Sticker LMDB</div>
+            <div id="simiTotalStickersBadge" style="font-weight: 700; color: var(--accent); font-size: 1rem;">0 Sticker</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Persona Prompt Editor Panel -->
+      <div class="panel" style="margin-bottom: 1rem; padding: 1.25rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+          <div>
+            <h3 style="margin: 0; font-size: 1.05rem;">🧠 Prompt Persona AI Simi-Simi</h3>
+            <p style="margin: 0.2rem 0 0 0; color: var(--text-muted); font-size: 0.775rem;">Ubah gaya bicara, kosakata, dan sarkasme bot secara live tanpa restart.</p>
+          </div>
+          <div style="display: flex; gap: 0.5rem;">
+            <button class="btn btn-secondary btn-sm" onclick="resetSimiPersona()">🔄 Reset ke Bawaan</button>
+            <button class="btn btn-primary btn-sm" onclick="saveSimiPersona()">💾 Simpan Persona</button>
+          </div>
+        </div>
+        <textarea id="simiPersonaPrompt" class="input-field" rows="6" style="width: 100%; resize: vertical; font-family: var(--font-mono); font-size: 0.85rem; line-height: 1.5; padding: 0.75rem; border-radius: 8px;" placeholder="Tulis instruksi persona Simi-Simi di sini..."></textarea>
+      </div>
+
+      <!-- Sticker Database Manager Panel -->
+      <div class="panel" style="padding: 1.25rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+          <div>
+            <h3 style="margin: 0; font-size: 1.05rem;">🖼️ Database Koleksi Sticker (LMDB)</h3>
+            <p style="margin: 0.2rem 0 0 0; color: var(--text-muted); font-size: 0.775rem;">Sticker yang digunakan bot untuk membalas pesan sticker user secara acak.</p>
+          </div>
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <button class="btn btn-primary btn-sm" onclick="triggerSimiStickerUpload()">📤 Unggah Sticker (.webp)</button>
+            <input type="file" id="simiStickerUploadInput" accept="image/webp,image/png,image/jpeg" style="display: none;" onchange="handleSimiStickerUploadFile(event)">
+            <button class="btn btn-danger btn-sm" onclick="clearSimiStickers()">🗑️ Hapus Semua</button>
+            <button class="btn btn-secondary btn-sm" onclick="loadSimiWeb()">🔄 Refresh</button>
+          </div>
+        </div>
+
+        <div id="simiStickerGallery" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 0.85rem; max-height: 480px; overflow-y: auto; padding: 0.5rem; background: rgba(0,0,0,0.2); border-radius: 8px; border: 1px solid var(--border-color);">
+          <div style="grid-column: 1 / -1; text-align: center; color: var(--text-muted); padding: 2rem;">Memuat database sticker...</div>
+        </div>
+      </div>
+    </section>
+
   </div>
 
   <!-- MODAL: Tambah Jadibot -->
@@ -2937,6 +3017,199 @@
       if (viewId === 'users') {
         loadBlacklistWeb();
         loadSWGCGroups();
+      }
+      if (viewId === 'simi') {
+        loadSimiWeb();
+      }
+    }
+
+    // -------------------------------------------------------------
+    // SIMI-SIMI AI JAVASCRIPT CONTROLLER
+    // -------------------------------------------------------------
+
+    async function loadSimiWeb() {
+      try {
+        const res = await fetch('/api/simi/data', {
+          headers: { 'Authorization': 'Bearer ' + authToken }
+        });
+        const json = await res.json();
+        if (!json.ok) {
+          showToast(json.error || 'Gagal memuat data Simi', 'danger');
+          return;
+        }
+        const data = json.data;
+        const modelEl = document.getElementById('simiModelBadge');
+        if (modelEl) modelEl.textContent = data.model || 'gemini-3.5-flash';
+
+        const apiKeyEl = document.getElementById('simiApiKeyBadge');
+        if (apiKeyEl) {
+          if (data.has_api_key) {
+            apiKeyEl.innerHTML = '<span style="color: var(--success);">● Terpasang</span>';
+          } else {
+            apiKeyEl.innerHTML = '<span style="color: var(--danger);">● Belum Diisi</span>';
+          }
+        }
+
+        const totalEl = document.getElementById('simiTotalStickersBadge');
+        if (totalEl) totalEl.textContent = `${data.total_stickers || 0} Sticker`;
+
+        const promptEl = document.getElementById('simiPersonaPrompt');
+        if (promptEl) {
+          promptEl.value = data.system_prompt || '';
+        }
+
+        renderSimiStickerGallery(data.stickers || []);
+      } catch (err) {
+        showToast('Gagal memuat data Simi: ' + err.message, 'danger');
+      }
+    }
+
+    function renderSimiStickerGallery(stickers) {
+      const gallery = document.getElementById('simiStickerGallery');
+      if (!gallery) return;
+
+      if (!stickers || stickers.length === 0) {
+        gallery.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; color: var(--text-muted); padding: 2rem;">Belum ada sticker yang tersimpan di LMDB.<br><small style="color: var(--text-muted);">Sticker akan otomatis terkumpul saat user kirim sticker di grup atau bisa diunggah di atas.</small></div>';
+        return;
+      }
+
+      gallery.innerHTML = stickers.map((b64, idx) => `
+        <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.5rem; display: flex; flex-direction: column; align-items: center; gap: 0.5rem; position: relative;">
+          <img src="data:image/webp;base64,${b64}" alt="Sticker #${idx+1}" style="width: 80px; height: 80px; object-fit: contain; border-radius: 4px;" loading="lazy">
+          <div style="display: flex; justify-content: space-between; width: 100%; align-items: center; font-size: 0.7rem; color: var(--text-muted);">
+            <span>#${idx+1}</span>
+            <button class="btn btn-danger btn-sm" style="padding: 0.15rem 0.4rem; font-size: 0.7rem;" onclick="deleteSimiSticker(${idx})" title="Hapus Sticker">🗑️</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function saveSimiPersona() {
+      const promptEl = document.getElementById('simiPersonaPrompt');
+      if (!promptEl || !promptEl.value.trim()) {
+        showToast('Prompt persona tidak boleh kosong!', 'warning');
+        return;
+      }
+      try {
+        const res = await fetch('/api/simi/persona', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + authToken
+          },
+          body: JSON.stringify({ action: 'save', prompt: promptEl.value.trim() })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast('Persona Simi-Simi berhasil disimpan ke LMDB!', 'success');
+          loadSimiWeb();
+        } else {
+          showToast('Gagal menyimpan persona: ' + (data.error || 'Unknown error'), 'danger');
+        }
+      } catch (err) {
+        showToast('Error koneksi: ' + err.message, 'danger');
+      }
+    }
+
+    async function resetSimiPersona() {
+      if (!confirm('Apakah kamu yakin ingin mengembalikan persona Simi-Simi ke format netizen bawaan?')) return;
+      try {
+        const res = await fetch('/api/simi/persona', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + authToken
+          },
+          body: JSON.stringify({ action: 'reset' })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast('Persona Simi-Simi di-reset ke bawaan netizen!', 'info');
+          const promptEl = document.getElementById('simiPersonaPrompt');
+          if (promptEl) promptEl.value = data.prompt || '';
+          loadSimiWeb();
+        } else {
+          showToast('Gagal me-reset persona: ' + (data.error || 'Unknown error'), 'danger');
+        }
+      } catch (err) {
+        showToast('Error koneksi: ' + err.message, 'danger');
+      }
+    }
+
+    function triggerSimiStickerUpload() {
+      const fileInput = document.getElementById('simiStickerUploadInput');
+      if (fileInput) fileInput.click();
+    }
+
+    async function handleSimiStickerUploadFile(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      event.target.value = '';
+
+      const formData = new FormData();
+      formData.append('sticker', file);
+
+      try {
+        showToast('Mengunggah sticker ke LMDB...', 'info');
+        const res = await fetch('/api/simi/stickers/upload', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + authToken },
+          body: formData
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast(`Sticker berhasil diunggah! Total: ${data.total_stickers} sticker`, 'success');
+          loadSimiWeb();
+        } else {
+          showToast('Gagal mengunggah sticker: ' + (data.error || 'Unknown error'), 'danger');
+        }
+      } catch (err) {
+        showToast('Error upload: ' + err.message, 'danger');
+      }
+    }
+
+    async function deleteSimiSticker(idx) {
+      if (!confirm(`Hapus sticker #${idx+1} dari database LMDB?`)) return;
+      try {
+        const res = await fetch('/api/simi/stickers/delete', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + authToken
+          },
+          body: JSON.stringify({ index: idx })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast(`Sticker #${idx+1} berhasil dihapus.`, 'success');
+          loadSimiWeb();
+        } else {
+          showToast('Gagal menghapus sticker: ' + (data.error || 'Unknown error'), 'danger');
+        }
+      } catch (err) {
+        showToast('Error: ' + err.message, 'danger');
+      }
+    }
+
+    async function clearSimiStickers() {
+      if (!confirm('Apakah kamu yakin ingin MENGHAPUS SEMUA sticker Simi-Simi di database LMDB?')) return;
+      try {
+        const res = await fetch('/api/simi/stickers/clear', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + authToken
+          }
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast('Seluruh koleksi sticker Simi berhasil dikosongkan.', 'success');
+          loadSimiWeb();
+        } else {
+          showToast('Gagal mengosongkan sticker: ' + (data.error || 'Unknown error'), 'danger');
+        }
+      } catch (err) {
+        showToast('Error: ' + err.message, 'danger');
       }
     }
 

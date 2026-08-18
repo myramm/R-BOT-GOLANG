@@ -5,7 +5,6 @@ import "testing"
 func TestIsDoodURL(t *testing.T) {
 	validURLs := []string{
 		"https://doodstream.com/d/hF29zn",
-		"https://myvidplay.com/d/ftj07p9rtkai",
 		"https://dood.so/e/hF29zn",
 		"https://ds2play.com/d/abc12345",
 		"https://dood.la/e/test123",

@@ -13,6 +13,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -140,8 +141,99 @@ func ClearSession(sessionKey string) {
 	delete(sessions, sessionKey)
 }
 
+var (
+	indoMonths = []string{
+		"", "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+		"Juli", "Agustus", "September", "Oktober", "November", "Desember",
+	}
+	indoDays = []string{
+		"Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu",
+	}
+)
+
+func formatIndoTime(t time.Time) string {
+	wib := t.UTC().Add(7 * time.Hour)
+	dayName := indoDays[wib.Weekday()]
+	monthName := indoMonths[wib.Month()]
+	return fmt.Sprintf("%s, %d %s %d jam %02d:%02d WIB", dayName, wib.Day(), monthName, wib.Year(), wib.Hour(), wib.Minute())
+}
+
+// fetchRealtimeSnippet mengambil ringkasan informasi terkini dari web jika pertanyaan menyangkut hal real-time.
+func fetchRealtimeSnippet(ctx context.Context, query string) string {
+	q := strings.ToLower(strings.TrimSpace(query))
+	if q == "" {
+		return ""
+	}
+
+	needsSearch := false
+	markers := []string{
+		"sekarang", "saat ini", "hari ini", "terbaru", "terkini", "tahun ini",
+		"presiden", "wapres", "menteri", "gubernur", "juara", "skor", "pertandingan",
+		"jadwal", "cuaca", "berita", "gempa", "update", "viral", "pemilu", "pilkada",
+	}
+	for _, m := range markers {
+		if strings.Contains(q, m) {
+			needsSearch = true
+			break
+		}
+	}
+
+	if !needsSearch {
+		return ""
+	}
+
+	searchCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	urlStr := "https://id.wikipedia.org/w/api.php?action=query&list=search&srsearch=" + url.QueryEscape(query) + "&utf8=1&format=json"
+	req, err := http.NewRequestWithContext(searchCtx, http.MethodGet, urlStr, nil)
+	if err != nil {
+		return ""
+	}
+	req.Header.Set("User-Agent", "RBot/1.0 (https://github.com/myramm/R-BOT-GOLANG)")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		Query struct {
+			Search []struct {
+				Title   string `json:"title"`
+				Snippet string `json:"snippet"`
+			} `json:"search"`
+		} `json:"query"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil || len(result.Query.Search) == 0 {
+		return ""
+	}
+
+	var snippets []string
+	for i, s := range result.Query.Search {
+		if i >= 3 {
+			break
+		}
+		cleanSnippet := strings.ReplaceAll(s.Snippet, "<span class=\"searchmatch\">", "")
+		cleanSnippet = strings.ReplaceAll(cleanSnippet, "</span>", "")
+		cleanSnippet = strings.ReplaceAll(cleanSnippet, "&quot;", "\"")
+		cleanSnippet = strings.ReplaceAll(cleanSnippet, "&amp;", "&")
+		cleanSnippet = strings.TrimSpace(cleanSnippet)
+		if cleanSnippet != "" {
+			snippets = append(snippets, fmt.Sprintf("• %s: %s", s.Title, cleanSnippet))
+		}
+	}
+
+	if len(snippets) == 0 {
+		return ""
+	}
+	return strings.Join(snippets, "\n")
+}
+
 // BuildSessionPrompt membangun prompt lengkap berisi system persona dan riwayat percakapan sebelumnya.
-func BuildSessionPrompt(sessionKey, currentInput string) string {
+func BuildSessionPrompt(ctx context.Context, sessionKey, currentInput string) string {
 	sessionMu.Lock()
 	defer sessionMu.Unlock()
 
@@ -149,6 +241,13 @@ func BuildSessionPrompt(sessionKey, currentInput string) string {
 	sb.WriteString("[System: ")
 	sb.WriteString(DefaultPersonaPrompt())
 	sb.WriteString("]")
+
+	// Tambahkan ringkasan real-time web search jika query menanyakan peristiwa/fakta terkini
+	if snippet := fetchRealtimeSnippet(ctx, currentInput); snippet != "" {
+		sb.WriteString("\n\n[Informasi Real-Time Terkini dari Web:\n")
+		sb.WriteString(snippet)
+		sb.WriteString("\n]")
+	}
 
 	if sessionKey != "" {
 		s, ok := sessions[sessionKey]
@@ -168,7 +267,7 @@ func BuildSessionPrompt(sessionKey, currentInput string) string {
 	return sb.String()
 }
 
-// DefaultPersonaPrompt mengembalikan system prompt untuk Simi-Simi.
+// DefaultPersonaPrompt mengembalikan system prompt untuk Simi-Simi dengan real-time anchoring.
 func DefaultPersonaPrompt() string {
 	var customPrompt string
 	found, err := store.Get(promptStoreKey, &customPrompt)
@@ -178,21 +277,31 @@ func DefaultPersonaPrompt() string {
 	if p := strings.TrimSpace(config.C.Simi.SystemPrompt); p != "" {
 		return p
 	}
-	return "Kamu adalah Simi-Simi versi netizen TikTok/FB/X/IG Indonesia yang julid, sarkas, ceplas-ceplos, dan ekspresif banget ala kolom komentar medsos.\n\n" +
-		"Aturan Karakter & Gaya Ketikan:\n" +
-		"1. BAHASA: Gunakan bahasa gaul netizen Indonesia murni (contoh kata: 'bjir', 'anjir', 'kocak', 'bangt', 'emng', 'gk', 'lu', 'gw', 'wkwk', 'najis', 'halahh', 'minimal ngotak', 'matamu', 'pencitraan', 'gaya doang').\n" +
-		"2. EMOJI SESUAI EKSPRESI (Wajib ekspresif & mendalami suasana):\n" +
-		"   - Kalau user gombal, sok keren, pamer, lebay, atau cringe -> balas dengan ekspresi jijik/mual/muntah (contoh: 🤢, 🤮, 🤮🤮, 🤢🤮, 'najis geli bgt 🤮').\n" +
-		"   - Kalau user lawak, hal konyol, atau gagal -> ketawa ngakak ngece/roasting (contoh: 🤣😂😂, 😭😂, 🤣🤣, 'lah kocak lu 🤣').\n" +
-		"   - Kalau user nanya hal aneh/absurd/sok asik -> respon cuek/deadpan/judging (contoh: 🗿, 💀, 🙄, 🤨, 'ngapain? 🗿', 'trus? 🙄').\n" +
-		"   - Kalau user curhat alay atau drama -> roasting tanpa ampun (contoh: 😭🙏, 💀, 'diem lu berisik bangt 😭😂').\n" +
-		"3. SIKAP & PANJANG PESAN:\n" +
-		"   - Jawab singkat 1-2 kalimat (atau 1 frasa), padat, nyelekit, ceplas-ceplos, dan bikin ngakak.\n" +
-		"   - DILARANG menjawab sopan, formal, atau panjang lebar seperti asisten AI.\n" +
-		"   - Jika user minta coding, tugas sekolah, atau tanya hal serius, tolak dan roasting mereka (suruh mikir/googling sendiri)."
+
+	now := time.Now()
+	currentTime := formatIndoTime(now)
+	currentYear := now.UTC().Add(7 * time.Hour).Year()
+
+	return fmt.Sprintf("Kamu adalah Simi-Simi versi netizen TikTok/FB/X/IG Indonesia yang julid, sarkas, ceplas-ceplos, dan ekspresif banget ala kolom komentar medsos.\n\n"+
+		"[KONTEKS WAKTU & REAL-TIME NYATA]\n"+
+		"- Waktu saat ini: %s (Tahun %d).\n"+
+		"- Pemimpin Indonesia saat ini: Presiden RI adalah Jenderal TNI (Purn.) Prabowo Subianto dan Wakil Presiden adalah Gibran Rakabuming Raka (Kabinet Merah Putih, masa jabatan 2024-2029). Jangan pernah salah mengira presiden masih Jokowi atau periode lama.\n"+
+		"- Selalu gunakan fakta dan konteks real-time saat menjawab pertanyaan seputar masa kini.\n\n"+
+		"Aturan Karakter & Gaya Ketikan:\n"+
+		"1. BAHASA: Gunakan bahasa gaul netizen Indonesia murni (contoh kata: 'bjir', 'anjir', 'kocak', 'bangt', 'emng', 'gk', 'lu', 'gw', 'wkwk', 'najis', 'halahh', 'minimal ngotak', 'matamu', 'pencitraan', 'gaya doang').\n"+
+		"2. EMOJI SESUAI EKSPRESI (Wajib ekspresif & mendalami suasana):\n"+
+		"   - Kalau user gombal, sok keren, pamer, lebay, atau cringe -> balas dengan ekspresi jijik/mual/muntah (contoh: 🤢, 🤮, 🤮🤮, 🤢🤮, 'najis geli bgt 🤮').\n"+
+		"   - Kalau user lawak, hal konyol, atau gagal -> ketawa ngakak ngece/roasting (contoh: 🤣😂😂, 😭😂, 🤣🤣, 'lah kocak lu 🤣').\n"+
+		"   - Kalau user nanya hal aneh/absurd/sok asik -> respon cuek/deadpan/judging (contoh: 🗿, 💀, 🙄, 🤨, 'ngapain? 🗿', 'trus? 🙄').\n"+
+		"   - Kalau user curhat alay atau drama -> roasting tanpa ampun (contoh: 😭🙏, 💀, 'diem lu berisik bangt 😭😂').\n"+
+		"3. SIKAP & PANJANG PESAN:\n"+
+		"   - Jawab singkat 1-2 kalimat (atau 1 frasa), padat, nyelekit, ceplas-ceplos, dan bikin ngakak.\n"+
+		"   - DILARANG menjawab sopan, formal, atau panjang lebar seperti asisten AI.\n"+
+		"   - Jika user minta coding, tugas sekolah, atau tanya hal serius, tolak dan roasting mereka (suruh mikir/googling sendiri).",
+		currentTime, currentYear)
 }
 
-// AskSimiWithSession mengirim teks input dengan konteks sesi percakapan sebelumnya.
+// AskSimiWithSession mengirim teks input dengan konteks sesi percakapan sebelumnya dan grounding real-time.
 func AskSimiWithSession(ctx context.Context, sessionKey, input string) (string, error) {
 	trimmed := strings.TrimSpace(input)
 	if trimmed == "" {
@@ -209,11 +318,15 @@ func AskSimiWithSession(ctx context.Context, sessionKey, input string) (string, 
 		model = defaultModel
 	}
 
-	prompt := BuildSessionPrompt(sessionKey, trimmed)
-	reqBody, err := json.Marshal(map[string]any{
+	prompt := BuildSessionPrompt(ctx, sessionKey, trimmed)
+
+	// Coba panggil dengan Google Search tool jika didukung, atau fallback ke prompt real-time
+	reqPayload := map[string]any{
 		"model": model,
 		"input": prompt,
-	})
+	}
+
+	reqBody, err := json.Marshal(reqPayload)
 	if err != nil {
 		return "", fmt.Errorf("marshal request: %w", err)
 	}

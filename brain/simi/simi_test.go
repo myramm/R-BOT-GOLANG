@@ -1,6 +1,7 @@
 package simi
 
 import (
+	"context"
 	"os"
 	"strings"
 	"testing"
@@ -155,7 +156,7 @@ func TestSimiSession(t *testing.T) {
 		t.Errorf("HasActiveSession harus true setelah ada pesan")
 	}
 
-	prompt := BuildSessionPrompt(key, "Hm")
+	prompt := BuildSessionPrompt(context.Background(), key, "Hm")
 	if !strings.Contains(prompt, "Riwayat Percakapan Sebelumnya:") {
 		t.Errorf("prompt harus mengandung riwayat percakapan")
 	}

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"math"
 	"net"
@@ -32,6 +33,7 @@ import (
 	"rbot/brain/settings"
 	"rbot/brain/stats"
 	"rbot/brain/store"
+	"rbot/brain/swgc"
 )
 
 //go:embed static/index.html
@@ -463,6 +465,9 @@ func Start(ctx context.Context) {
 	mux.HandleFunc("/api/reload", handleReload)
 	mux.HandleFunc("/api/broadcast", handleBroadcast)
 	mux.HandleFunc("/api/action/user", handleUserAction)
+	mux.HandleFunc("/api/swgc/groups", handleSWGCGroups)
+	mux.HandleFunc("/api/swgc/send", handleSWGCSend)
+	mux.HandleFunc("/api/group/send-message", handleGroupSendMessage)
 
 	// WebSockets
 	mux.HandleFunc("/ws/metrics", handleMetricsWS)
@@ -1119,4 +1124,318 @@ func handleJadibotDetail(w http.ResponseWriter, r *http.Request) {
 		"detail": detail,
 		"logs":   recentLogs,
 	})
+}
+
+func handleSWGCGroups(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	stateMu.RLock()
+	cli := waClient
+	stateMu.RUnlock()
+
+	if cli == nil || !cli.IsConnected() {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "WhatsApp client belum terhubung!"})
+		return
+	}
+
+	groups, err := cli.GetJoinedGroups(r.Context())
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": fmt.Sprintf("Gagal mengambil grup: %v", err)})
+		return
+	}
+
+	type groupInfo struct {
+		JID          string `json:"jid"`
+		Name         string `json:"name"`
+		Participants int    `json:"participants"`
+		IsAnnounce   bool   `json:"isAnnounce"`
+	}
+
+	list := make([]groupInfo, 0, len(groups))
+	for _, g := range groups {
+		name := g.Name
+		if name == "" {
+			name = "Grup Tanpa Nama"
+		}
+		list = append(list, groupInfo{
+			JID:          g.JID.String(),
+			Name:         name,
+			Participants: len(g.Participants),
+			IsAnnounce:   g.IsAnnounce,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "groups": list})
+}
+
+func handleSWGCSend(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	stateMu.RLock()
+	cli := waClient
+	stateMu.RUnlock()
+
+	if cli == nil || !cli.IsConnected() {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "WhatsApp client belum terhubung!"})
+		return
+	}
+
+	if err := r.ParseMultipartForm(64 * 1024 * 1024); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Format request/upload tidak valid."})
+		return
+	}
+
+	targetJIDRaw := strings.TrimSpace(r.FormValue("jid"))
+	caption := strings.TrimSpace(r.FormValue("caption"))
+
+	targetJID, err := types.ParseJID(targetJIDRaw)
+	if err != nil || targetJID.Server != types.GroupServer {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "JID grup target tidak valid!"})
+		return
+	}
+
+	var mediaBytes []byte
+	var mime string
+
+	file, header, err := r.FormFile("media")
+	if err == nil && file != nil {
+		defer file.Close()
+		mediaBytes, err = io.ReadAll(file)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": fmt.Sprintf("Gagal membaca file upload: %v", err)})
+			return
+		}
+		mime = header.Header.Get("Content-Type")
+	}
+
+	if len(mediaBytes) == 0 && caption == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Pilih file media atau isi teks status!"})
+		return
+	}
+
+	if mime == "" && len(mediaBytes) > 0 {
+		mime = "image/jpeg"
+	} else if len(mediaBytes) == 0 {
+		mime = "text"
+	}
+
+	err = swgc.SendGroupStatus(r.Context(), cli, targetJID, mime, mediaBytes, caption)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": fmt.Sprintf("Gagal mengirim SWGC: %v", err)})
+		return
+	}
+
+	RecordAudit(r, "SWGC_SEND", fmt.Sprintf("Group Status berhasil dikirim ke grup %s", targetJIDRaw))
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":      true,
+		"message": fmt.Sprintf("✅ Berhasil mengirim Status Story ke grup %s!", targetJIDRaw),
+	})
+}
+
+func handleGroupSendMessage(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	stateMu.RLock()
+	cli := waClient
+	stateMu.RUnlock()
+
+	if cli == nil || !cli.IsConnected() {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "WhatsApp client belum terhubung!"})
+		return
+	}
+
+	if err := r.ParseMultipartForm(64 * 1024 * 1024); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Format request/upload tidak valid."})
+		return
+	}
+
+	targetJIDRaw := strings.TrimSpace(r.FormValue("jid"))
+	messageText := strings.TrimSpace(r.FormValue("message"))
+
+	targetJID, err := types.ParseJID(targetJIDRaw)
+	if err != nil || targetJID.Server != types.GroupServer {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "JID grup target tidak valid!"})
+		return
+	}
+
+	var mediaBytes []byte
+	var mime string
+
+	file, header, err := r.FormFile("media")
+	if err == nil && file != nil {
+		defer file.Close()
+		mediaBytes, err = io.ReadAll(file)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": fmt.Sprintf("Gagal membaca file upload: %v", err)})
+			return
+		}
+		mime = header.Header.Get("Content-Type")
+	}
+
+	if len(mediaBytes) == 0 && messageText == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Isi pesan teks atau pilih file media!"})
+		return
+	}
+
+	var msg *waE2E.Message
+
+	if len(mediaBytes) > 0 {
+		mimeLower := strings.ToLower(mime)
+		var appInfo whatsmeow.MediaType
+		switch {
+		case strings.HasPrefix(mimeLower, "image/"):
+			appInfo = whatsmeow.MediaImage
+		case strings.HasPrefix(mimeLower, "video/"):
+			appInfo = whatsmeow.MediaVideo
+		case strings.HasPrefix(mimeLower, "audio/"):
+			appInfo = whatsmeow.MediaAudio
+		default:
+			appInfo = whatsmeow.MediaDocument
+		}
+
+		up, err := cli.Upload(r.Context(), mediaBytes, appInfo)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": fmt.Sprintf("Gagal mengunggah media: %v", err)})
+			return
+		}
+
+		switch appInfo {
+		case whatsmeow.MediaVideo:
+			v := &waE2E.VideoMessage{
+				URL:           proto.String(up.URL),
+				DirectPath:    proto.String(up.DirectPath),
+				MediaKey:      up.MediaKey,
+				Mimetype:      proto.String(orDefault(mime, "video/mp4")),
+				FileEncSHA256: up.FileEncSHA256,
+				FileSHA256:    up.FileSHA256,
+				FileLength:    proto.Uint64(up.FileLength),
+			}
+			if messageText != "" {
+				v.Caption = proto.String(messageText)
+			}
+			msg = &waE2E.Message{VideoMessage: v}
+
+		case whatsmeow.MediaAudio:
+			a := &waE2E.AudioMessage{
+				URL:           proto.String(up.URL),
+				DirectPath:    proto.String(up.DirectPath),
+				MediaKey:      up.MediaKey,
+				Mimetype:      proto.String(orDefault(mime, "audio/mp4")),
+				FileEncSHA256: up.FileEncSHA256,
+				FileSHA256:    up.FileSHA256,
+				FileLength:    proto.Uint64(up.FileLength),
+			}
+			msg = &waE2E.Message{AudioMessage: a}
+
+		case whatsmeow.MediaDocument:
+			d := &waE2E.DocumentMessage{
+				URL:           proto.String(up.URL),
+				DirectPath:    proto.String(up.DirectPath),
+				MediaKey:      up.MediaKey,
+				Mimetype:      proto.String(orDefault(mime, "application/octet-stream")),
+				FileEncSHA256: up.FileEncSHA256,
+				FileSHA256:    up.FileSHA256,
+				FileLength:    proto.Uint64(up.FileLength),
+			}
+			if header != nil && header.Filename != "" {
+				d.FileName = proto.String(header.Filename)
+			}
+			if messageText != "" {
+				d.Caption = proto.String(messageText)
+			}
+			msg = &waE2E.Message{DocumentMessage: d}
+
+		default: // MediaImage
+			im := &waE2E.ImageMessage{
+				URL:           proto.String(up.URL),
+				DirectPath:    proto.String(up.DirectPath),
+				MediaKey:      up.MediaKey,
+				Mimetype:      proto.String(orDefault(mime, "image/jpeg")),
+				FileEncSHA256: up.FileEncSHA256,
+				FileSHA256:    up.FileSHA256,
+				FileLength:    proto.Uint64(up.FileLength),
+			}
+			if messageText != "" {
+				im.Caption = proto.String(messageText)
+			}
+			msg = &waE2E.Message{ImageMessage: im}
+		}
+	} else {
+		msg = &waE2E.Message{
+			ExtendedTextMessage: &waE2E.ExtendedTextMessage{
+				Text: proto.String(messageText),
+			},
+		}
+	}
+
+	_, err = cli.SendMessage(r.Context(), targetJID, msg)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": fmt.Sprintf("Gagal mengirim pesan ke grup: %v", err)})
+		return
+	}
+
+	RecordAudit(r, "GROUP_MSG_SEND", fmt.Sprintf("Pesan obrolan berhasil dikirim ke grup %s", targetJIDRaw))
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":      true,
+		"message": fmt.Sprintf("✅ Berhasil mengirim pesan ke grup %s!", targetJIDRaw),
+	})
+}
+
+func orDefault(s, def string) string {
+	if strings.TrimSpace(s) == "" {
+		return def
+	}
+	return s
 }

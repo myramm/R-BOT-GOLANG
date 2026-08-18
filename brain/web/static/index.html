@@ -750,6 +750,11 @@
           <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M4 17l6-6-6-6m8 14h8"/></svg>
           Terminal
         </button>
+
+        <button class="nav-item" onclick="switchNav('swgc', this); closeMobileDrawer();">
+          <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+          Group Status (SWGC)
+        </button>
       </nav>
 
       <div class="sidebar-footer">
@@ -864,6 +869,11 @@
       <button class="nav-item" onclick="switchNav('terminal', this)">
         <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M4 17l6-6-6-6m8 14h8"/></svg>
         Terminal
+      </button>
+
+      <button class="nav-item" onclick="switchNav('swgc', this)">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        Group Status (SWGC)
       </button>
     </nav>
 
@@ -1291,6 +1301,73 @@
       </div>
     </section>
 
+    <!-- VIEW 9: GROUP STATUS (SWGC) MANAGER -->
+    <section id="view-swgc" class="view-container">
+      <div style="margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+        <div>
+          <h2 style="font-size: 1.35rem; font-weight: 700; color: var(--text-primary); margin: 0;">📲 Group Status (SWGC) Manager</h2>
+          <p style="color: var(--text-sub); font-size: 0.85rem; margin: 0.35rem 0 0 0;">Upload & kirim status story ke grup WhatsApp secara instan (Fitur Owner)</p>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="loadSWGCGroups()">🔄 Refresh List Grup</button>
+      </div>
+
+      <div class="card" style="max-width: 720px; margin: 0 auto; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.5rem;">
+        <div style="margin-bottom: 1.25rem;">
+          <label style="font-weight: 600; font-size: 0.85rem; color: var(--text-primary); display: block; margin-bottom: 0.5rem;">1. Pilih Grup Tujuan:</label>
+          <select id="swgcGroupSelect" class="form-input" style="width: 100%;">
+            <option value="">-- Memuat daftar grup... --</option>
+          </select>
+          <span style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-top: 0.35rem;">Daftar grup yang diikuti oleh bot utama</span>
+        </div>
+
+        <div style="margin-bottom: 1.25rem;">
+          <label style="font-weight: 600; font-size: 0.85rem; color: var(--text-primary); display: block; margin-bottom: 0.5rem;">2. Media (Gambar / Video / Audio - Opsional jika teks):</label>
+          <input type="file" id="swgcFileInput" class="form-input" accept="image/*,video/*,audio/*" style="width: 100%;">
+          <span style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-top: 0.35rem;">Mendukung file Gambar (JPEG/PNG/WebP), Video (MP4), atau Audio (MP3/OGG)</span>
+        </div>
+
+        <div style="margin-bottom: 1.5rem;">
+          <label style="font-weight: 600; font-size: 0.85rem; color: var(--text-primary); display: block; margin-bottom: 0.5rem;">3. Caption / Teks Status:</label>
+          <textarea id="swgcCaptionInput" class="form-input" rows="4" placeholder="Tulis caption media atau isi status teks grup di sini..." style="width: 100%; resize: vertical;"></textarea>
+        </div>
+
+        <div id="swgcAlert" style="display: none; padding: 0.75rem 1rem; border-radius: 8px; margin-bottom: 1.25rem; font-size: 0.85rem;"></div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+          <button id="swgcSubmitBtn" class="btn btn-primary" onclick="submitSWGCForm()">🚀 Kirim Status ke Grup</button>
+        </div>
+      </div>
+
+      <!-- CARD 2: KIRIM PESAN OBROLAN BIASA KE GRUP -->
+      <div class="card" style="max-width: 720px; margin: 1.5rem auto 0 auto; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.5rem;">
+        <h3 style="font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin: 0 0 1rem 0;">💬 Kirim Pesan Obrolan Biasa ke Grup Chat</h3>
+
+        <div style="margin-bottom: 1.25rem;">
+          <label style="font-weight: 600; font-size: 0.85rem; color: var(--text-primary); display: block; margin-bottom: 0.5rem;">1. Pilih Grup Tujuan:</label>
+          <select id="groupMsgSelect" class="form-input" style="width: 100%;">
+            <option value="">-- Memuat daftar grup... --</option>
+          </select>
+        </div>
+
+        <div style="margin-bottom: 1.25rem;">
+          <label style="font-weight: 600; font-size: 0.85rem; color: var(--text-primary); display: block; margin-bottom: 0.5rem;">2. Isi Pesan Teks:</label>
+          <textarea id="groupMsgTextInput" class="form-input" rows="4" placeholder="Tulis pesan obrolan atau pengumuman yang ingin dikirim ke grup di sini..." style="width: 100%; resize: vertical;"></textarea>
+        </div>
+
+        <div style="margin-bottom: 1.5rem;">
+          <label style="font-weight: 600; font-size: 0.85rem; color: var(--text-primary); display: block; margin-bottom: 0.5rem;">3. Lampiran Media (Opsional):</label>
+          <input type="file" id="groupMsgFileInput" class="form-input" accept="image/*,video/*,audio/*,application/*" style="width: 100%;">
+          <span style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-top: 0.35rem;">Opsional: Lampirkan gambar/video/audio/dokumen untuk dikirim ke chat grup</span>
+        </div>
+
+        <div id="groupMsgAlert" style="display: none; padding: 0.75rem 1rem; border-radius: 8px; margin-bottom: 1.25rem; font-size: 0.85rem;"></div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+          <button id="groupMsgSubmitBtn" class="btn btn-primary" onclick="submitGroupMsgForm()">💬 Kirim Pesan ke Grup</button>
+        </div>
+      </div>
+    </section>
+
   </div>
 
   <!-- MODAL: Tambah Jadibot -->
@@ -1643,6 +1720,183 @@
           }, 150);
         }
       }
+      if (viewId === 'swgc') {
+        loadSWGCGroups();
+      }
+    }
+
+    async function loadSWGCGroups() {
+      const select1 = document.getElementById('swgcGroupSelect');
+      const select2 = document.getElementById('groupMsgSelect');
+      const loadingHTML = '<option value="">⏳ Memuat daftar grup...</option>';
+      if (select1) select1.innerHTML = loadingHTML;
+      if (select2) select2.innerHTML = loadingHTML;
+
+      try {
+        const res = await fetch('/api/swgc/groups', {
+          headers: { 'Authorization': 'Bearer ' + authToken }
+        });
+        const data = await res.json();
+        if (!data.ok) {
+          const errHTML = `<option value="">❌ ${data.error || 'Gagal memuat grup'}</option>`;
+          if (select1) select1.innerHTML = errHTML;
+          if (select2) select2.innerHTML = errHTML;
+          return;
+        }
+        if (!data.groups || data.groups.length === 0) {
+          const emptyHTML = '<option value="">⚠️ Bot tidak berada di grup manapun</option>';
+          if (select1) select1.innerHTML = emptyHTML;
+          if (select2) select2.innerHTML = emptyHTML;
+          return;
+        }
+        const optionsHTML = data.groups.map(g => `<option value="${g.jid}">${g.name} (${g.participants} anggota${g.isAnnounce ? ' | Hanya Admin' : ''})</option>`).join('');
+        if (select1) select1.innerHTML = optionsHTML;
+        if (select2) select2.innerHTML = optionsHTML;
+      } catch (err) {
+        const errHTML = `<option value="">❌ Error: ${err.message}</option>`;
+        if (select1) select1.innerHTML = errHTML;
+        if (select2) select2.innerHTML = errHTML;
+      }
+    }
+
+    async function submitSWGCForm() {
+      const groupJID = document.getElementById('swgcGroupSelect').value;
+      const fileInput = document.getElementById('swgcFileInput');
+      const caption = document.getElementById('swgcCaptionInput').value.trim();
+      const alertBox = document.getElementById('swgcAlert');
+      const submitBtn = document.getElementById('swgcSubmitBtn');
+
+      if (!groupJID) {
+        showSWGCAlert('Pilih grup tujuan terlebih dahulu!', 'danger');
+        return;
+      }
+      const file = fileInput.files[0];
+      if (!file && !caption) {
+        showSWGCAlert('Pilih file media atau isi caption teks!', 'warning');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('jid', groupJID);
+      formData.append('caption', caption);
+      if (file) {
+        formData.append('media', file);
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.innerText = '⏳ Mengirim Group Status...';
+      alertBox.style.display = 'none';
+
+      try {
+        const res = await fetch('/api/swgc/send', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + authToken },
+          body: formData
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showSWGCAlert(data.message || '✅ Group Status berhasil dikirim!', 'success');
+          fileInput.value = '';
+          document.getElementById('swgcCaptionInput').value = '';
+        } else {
+          showSWGCAlert('❌ Gagal: ' + (data.error || 'Terjadi kesalahan'), 'danger');
+        }
+      } catch (err) {
+        showSWGCAlert('❌ Error koneksi: ' + err.message, 'danger');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerText = '🚀 Kirim Status ke Grup';
+      }
+    }
+
+    async function submitGroupMsgForm() {
+      const groupJID = document.getElementById('groupMsgSelect').value;
+      const fileInput = document.getElementById('groupMsgFileInput');
+      const text = document.getElementById('groupMsgTextInput').value.trim();
+      const alertBox = document.getElementById('groupMsgAlert');
+      const submitBtn = document.getElementById('groupMsgSubmitBtn');
+
+      if (!groupJID) {
+        showGroupMsgAlert('Pilih grup tujuan terlebih dahulu!', 'danger');
+        return;
+      }
+      const file = fileInput.files[0];
+      if (!file && !text) {
+        showGroupMsgAlert('Isi pesan teks atau pilih file media!', 'warning');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('jid', groupJID);
+      formData.append('message', text);
+      if (file) {
+        formData.append('media', file);
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.innerText = '⏳ Mengirim Pesan...';
+      alertBox.style.display = 'none';
+
+      try {
+        const res = await fetch('/api/group/send-message', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + authToken },
+          body: formData
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showGroupMsgAlert(data.message || '✅ Pesan berhasil dikirim ke grup!', 'success');
+          fileInput.value = '';
+          document.getElementById('groupMsgTextInput').value = '';
+        } else {
+          showGroupMsgAlert('❌ Gagal: ' + (data.error || 'Terjadi kesalahan'), 'danger');
+        }
+      } catch (err) {
+        showGroupMsgAlert('❌ Error koneksi: ' + err.message, 'danger');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerText = '💬 Kirim Pesan ke Grup';
+      }
+    }
+
+    function showSWGCAlert(msg, type) {
+      const alertBox = document.getElementById('swgcAlert');
+      if (!alertBox) return;
+      alertBox.style.display = 'block';
+      if (type === 'success') {
+        alertBox.style.background = 'rgba(16, 185, 129, 0.15)';
+        alertBox.style.border = '1px solid var(--success)';
+        alertBox.style.color = 'var(--success)';
+      } else if (type === 'warning') {
+        alertBox.style.background = 'rgba(245, 158, 11, 0.15)';
+        alertBox.style.border = '1px solid var(--warning)';
+        alertBox.style.color = 'var(--warning)';
+      } else {
+        alertBox.style.background = 'rgba(239, 68, 68, 0.15)';
+        alertBox.style.border = '1px solid var(--danger)';
+        alertBox.style.color = 'var(--danger)';
+      }
+      alertBox.innerText = msg;
+    }
+
+    function showGroupMsgAlert(msg, type) {
+      const alertBox = document.getElementById('groupMsgAlert');
+      if (!alertBox) return;
+      alertBox.style.display = 'block';
+      if (type === 'success') {
+        alertBox.style.background = 'rgba(16, 185, 129, 0.15)';
+        alertBox.style.border = '1px solid var(--success)';
+        alertBox.style.color = 'var(--success)';
+      } else if (type === 'warning') {
+        alertBox.style.background = 'rgba(245, 158, 11, 0.15)';
+        alertBox.style.border = '1px solid var(--warning)';
+        alertBox.style.color = 'var(--warning)';
+      } else {
+        alertBox.style.background = 'rgba(239, 68, 68, 0.15)';
+        alertBox.style.border = '1px solid var(--danger)';
+        alertBox.style.color = 'var(--danger)';
+      }
+      alertBox.innerText = msg;
     }
 
     async function fetchStatus() {

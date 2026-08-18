@@ -23,6 +23,7 @@ require (
 	github.com/petermattis/goid v0.0.0-20260713124913-97594f28f5ca // indirect
 	github.com/phpdave11/gofpdi v1.0.14-0.20211212211723-1f10f9844311 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
+	github.com/robertkrimen/otto v0.5.1 // indirect
 	github.com/rs/zerolog v1.35.1 // indirect
 	github.com/signintech/gopdf v0.38.0 // indirect
 	github.com/vektah/gqlparser/v2 v2.5.27 // indirect
@@ -35,4 +36,5 @@ require (
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
+	gopkg.in/sourcemap.v1 v1.0.5 // indirect
 )

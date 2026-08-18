@@ -11,13 +11,13 @@ import (
 	"rbot/brain/config"
 )
 
-// exec.go: command "#" — jalankan perintah shell di server buat debug (owner).
-// Port exec.js. Timeout 20 detik, output tiap stream dibatasi (meniru maxBuffer),
+// exec.go: command "#" / "$" / "exec" — jalankan perintah shell di server buat debug (owner).
+// Timeout 20 detik, output tiap stream dibatasi (meniru maxBuffer),
 // hasilnya dipangkas 4000 karakter lalu dibungkus code fence.
 
 const (
 	execTimeout   = 20 * time.Second
-	execMaxBuffer = 1 << 20 // 1 MB per stream, sama seperti maxBuffer di exec.js
+	execMaxBuffer = 1 << 20 // 1 MB per stream
 	execMaxOutput = 4000
 )
 
@@ -25,7 +25,8 @@ func init() {
 	command.Register(&command.Command{
 		Name:        "#",
 		Category:    "Owner",
-		Description: "Jalankan perintah shell di server, buat debug (owner). Contoh: .# ls -la",
+		Alias:       []string{"$", "exec"},
+		Description: "Jalankan perintah shell di server buat debug (owner). Contoh: .# ls -la | .$ uptime | .exec whoami",
 		OwnerOnly:   true,
 		Handler:     execHandler,
 	})
@@ -73,9 +74,7 @@ func execHandler(ctx context.Context, c *command.Ctx) error {
 	return err
 }
 
-// capWriter menampung maksimal cap byte lalu membuang sisanya (meniru maxBuffer
-// child_process). Write selalu mengaku menulis penuh agar proses tak diblok/error
-// saat output melebihi batas.
+// capWriter menampung maksimal cap byte lalu membuang sisanya.
 type capWriter struct {
 	buf bytes.Buffer
 	cap int

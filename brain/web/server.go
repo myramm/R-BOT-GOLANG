@@ -549,25 +549,6 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ip := r.RemoteAddr
-	if host, _, err := net.SplitHostPort(ip); err == nil {
-		ip = host
-	}
-
-	loginMu.Lock()
-	tracker, exists := loginAttempts[ip]
-	if exists && time.Now().Before(tracker.BlockedTo) {
-		loginMu.Unlock()
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusTooManyRequests)
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"ok":    false,
-			"error": "Terlalu banyak percobaan login gagal. Diblokir sementara!",
-		})
-		return
-	}
-	loginMu.Unlock()
-
 	var req struct {
 		Password string `json:"password"`
 	}
@@ -580,16 +561,12 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	targetPwd := getPassword()
 
 	if inputPwd == targetPwd {
-		loginMu.Lock()
-		delete(loginAttempts, ip)
-		loginMu.Unlock()
-
 		token := createSession()
 		http.SetCookie(w, &http.Cookie{
 			Name:     "rbot_session",
 			Value:    token,
 			Path:     "/",
-			Expires:  time.Now().Add(24 * time.Hour),
+			Expires:  time.Now().Add(30 * 24 * time.Hour),
 			HttpOnly: true,
 			SameSite: http.SameSiteLaxMode,
 		})
@@ -603,18 +580,6 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-
-	loginMu.Lock()
-	if !exists {
-		tracker = &loginTracker{}
-		loginAttempts[ip] = tracker
-	}
-	tracker.Attempts++
-	if tracker.Attempts >= 5 {
-		tracker.BlockedTo = time.Now().Add(5 * time.Minute)
-		log.Printf("[rbot] IP %s diblokir sementara karena 5x salah password.", ip)
-	}
-	loginMu.Unlock()
 
 	RecordAudit(r, "LOGIN_FAILED", "Percobaan login gagal (Password salah)")
 

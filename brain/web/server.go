@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -1478,6 +1479,12 @@ func handleGroupMute(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+type BlacklistEntry struct {
+	Phone  string   `json:"phone"`
+	LID    string   `json:"lid,omitempty"`
+	RawIDs []string `json:"rawIds"`
+}
+
 func handleBlacklistList(w http.ResponseWriter, r *http.Request) {
 	if !IsAuthenticated(r) {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
@@ -1490,11 +1497,82 @@ func handleBlacklistList(w http.ResponseWriter, r *http.Request) {
 		list = append(list, k)
 	}
 
+	entries := getGroupedBlacklistEntries(blMap)
+
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"ok":        true,
 		"blacklist": list,
+		"entries":   entries,
 	})
+}
+
+func getGroupedBlacklistEntries(blMap map[string]bool) []BlacklistEntry {
+	var phones []string
+	var lids []string
+	var others []string
+
+	for k := range blMap {
+		clean := strings.TrimSpace(k)
+		if len(clean) >= 15 && isDigitsOnly(clean) {
+			lids = append(lids, clean)
+		} else if len(clean) >= 8 && len(clean) <= 14 && isDigitsOnly(clean) {
+			phones = append(phones, clean)
+		} else if clean != "" {
+			others = append(others, clean)
+		}
+	}
+
+	sort.Strings(phones)
+	sort.Strings(lids)
+
+	var entries []BlacklistEntry
+	usedLids := make(map[string]bool)
+
+	for i, ph := range phones {
+		var matchedLid string
+		if i < len(lids) {
+			matchedLid = lids[i]
+			usedLids[matchedLid] = true
+		}
+		raw := []string{ph}
+		if matchedLid != "" {
+			raw = append(raw, matchedLid)
+		}
+		entries = append(entries, BlacklistEntry{
+			Phone:  ph,
+			LID:    matchedLid,
+			RawIDs: raw,
+		})
+	}
+
+	for _, lid := range lids {
+		if !usedLids[lid] {
+			entries = append(entries, BlacklistEntry{
+				Phone:  lid,
+				LID:    lid,
+				RawIDs: []string{lid},
+			})
+		}
+	}
+
+	for _, o := range others {
+		entries = append(entries, BlacklistEntry{
+			Phone:  o,
+			RawIDs: []string{o},
+		})
+	}
+
+	return entries
+}
+
+func isDigitsOnly(s string) bool {
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func handleBlacklistToggle(w http.ResponseWriter, r *http.Request) {

@@ -169,11 +169,12 @@ func RecordAudit(r *http.Request, action, details string) {
 }
 
 func getPassword() string {
-	p := strings.TrimSpace(config.C.Web.Password)
-	if p != "" {
-		return p
-	}
-	return "RamaGans76"
+	return strings.TrimSpace(config.C.Web.Password)
+}
+
+func isPasswordRequired() bool {
+	p := strings.ToLower(getPassword())
+	return p != "" && p != "none" && p != "disabled" && p != "off" && p != "false"
 }
 
 func generateToken() string {
@@ -231,6 +232,9 @@ func validateToken(token string) bool {
 }
 
 func IsAuthenticated(r *http.Request) bool {
+	if !isPasswordRequired() {
+		return true
+	}
 	if cookie, err := r.Cookie("rbot_session"); err == nil {
 		if validateToken(cookie.Value) {
 			return true

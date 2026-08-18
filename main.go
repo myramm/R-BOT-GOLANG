@@ -26,6 +26,7 @@ import (
 	"rbot/brain/jadibot"
 	"rbot/brain/lifecycle"
 	"rbot/brain/settings"
+	"rbot/brain/simi"
 	"rbot/brain/stats"
 	"rbot/brain/store"
 	"rbot/brain/web"
@@ -128,6 +129,16 @@ func run(ctx context.Context) error {
 					evt.Info.Chat, evt.Info.Sender); err != nil {
 					log.Printf("[rbot] autoread gagal: %v", err)
 				}
+			}
+			// Simi: panen sticker grup ke LMDB secara pasif di background
+			if evt.Info.IsGroup && evt.Message != nil && evt.Message.GetStickerMessage() != nil {
+				go func() {
+					downloadCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+					defer cancel()
+					if d, err := client.DownloadAny(downloadCtx, evt.Message); err == nil && len(d) > 0 {
+						_ = simi.SaveGroupSticker(d)
+					}
+				}()
 			}
 			go command.Dispatch(ctx, client, evt, false)
 		case *events.Connected:

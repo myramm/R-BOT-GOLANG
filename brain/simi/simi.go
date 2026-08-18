@@ -170,6 +170,13 @@ func HandleQuotedMessage(ctx context.Context, client *whatsmeow.Client, evt *eve
 
 	// 1. Tangani bila user membalas dengan Sticker
 	if rawMsg.GetStickerMessage() != nil {
+		// Unduh sticker user yang baru masuk dan simpan ke koleksi LMDB
+		downloadCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+		if downloaded, err := client.DownloadAny(downloadCtx, rawMsg); err == nil && len(downloaded) > 0 {
+			_ = SaveGroupSticker(downloaded)
+		}
+		cancel()
+
 		stickerData, ok := GetRandomSticker()
 		if ok {
 			up, err := client.Upload(ctx, stickerData, whatsmeow.MediaImage)
@@ -195,11 +202,30 @@ func HandleQuotedMessage(ctx context.Context, client *whatsmeow.Client, evt *eve
 						},
 					},
 				}
-				_, _ = client.SendMessage(ctx, evt.Info.Chat, stickerMsg)
-				log.Printf("[rbot] [simi] balas sticker ke %s", senderID)
-				return true
+				if _, sendErr := client.SendMessage(ctx, evt.Info.Chat, stickerMsg); sendErr == nil {
+					log.Printf("[rbot] [simi] balas sticker ke %s", senderID)
+					return true
+				}
 			}
 		}
+
+		// Fallback balas teks jika upload sticker belum tersedia
+		reply, err := AskSimi(ctx, "User barusan reply kamu pake stiker lucu/kocak, balas singkat dan sarkas ala netizen")
+		if err == nil && reply != "" {
+			msg := &waE2E.Message{
+				ExtendedTextMessage: &waE2E.ExtendedTextMessage{
+					Text: proto.String(reply),
+					ContextInfo: &waE2E.ContextInfo{
+						StanzaID:      proto.String(evt.Info.ID),
+						Participant:   proto.String(evt.Info.Sender.String()),
+						QuotedMessage: evt.Message,
+					},
+				},
+			}
+			_, _ = client.SendMessage(ctx, evt.Info.Chat, msg)
+			return true
+		}
+		return true
 	}
 
 	// 2. Tangani bila user membalas dengan Pesan Teks

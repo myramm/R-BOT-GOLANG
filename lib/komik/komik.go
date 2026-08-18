@@ -106,7 +106,42 @@ func extractChapterNum(title string) string {
 	return ""
 }
 
-// SearchComics mencari komik dan mengelompokkannya per SERI (bukan per chapter)
+func isMatchSeries(s1, s2 string) bool {
+	s1 = strings.ToLower(strings.TrimSpace(s1))
+	s2 = strings.ToLower(strings.TrimSpace(s2))
+	return s1 == s2 || strings.HasPrefix(s1, s2) || strings.HasPrefix(s2, s1)
+}
+
+func fetchPosts(ctx context.Context, apiURL string) ([]postItem, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", defaultUA)
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var posts []postItem
+	if err := json.Unmarshal(body, &posts); err != nil {
+		return nil, err
+	}
+	return posts, nil
+}
+
+// SearchComics mencari komik dan mengelompokkannya per SERI
 func SearchComics(ctx context.Context, query string) ([]Comic, error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
@@ -151,230 +186,138 @@ func SearchComics(ctx context.Context, query string) ([]Comic, error) {
 
 	// 2. Cari Post di KomikTap & Kelompokkan per Seri
 	ktPostURL := fmt.Sprintf("https://komiktap.info/wp-json/wp/v2/posts?search=%s&per_page=50", url.QueryEscape(query))
-	req2, err := http.NewRequestWithContext(ctx, http.MethodGet, ktPostURL, nil)
-	if err == nil {
-		req2.Header.Set("User-Agent", defaultUA)
-		resp, err := httpClient.Do(req2)
-		if err == nil && resp.StatusCode == http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
+	if posts, err := fetchPosts(ctx, ktPostURL); err == nil {
+		for _, p := range posts {
+			postTitle := cleanTitle(p.Title.Rendered)
+			seriesTitle := ExtractSeriesTitle(postTitle)
+			seriesSlug := strings.ToLower(regexp.MustCompile(`[^\w]+`).ReplaceAllString(seriesTitle, "-"))
+			seriesSlug = strings.Trim(seriesSlug, "-")
 
-			var posts []postItem
-			if json.Unmarshal(body, &posts) == nil {
-				for _, p := range posts {
-					postTitle := cleanTitle(p.Title.Rendered)
-					seriesTitle := ExtractSeriesTitle(postTitle)
-					seriesSlug := strings.ToLower(regexp.MustCompile(`[^\w]+`).ReplaceAllString(seriesTitle, "-"))
-					seriesSlug = strings.Trim(seriesSlug, "-")
-
-					key := "kt:" + seriesSlug
-					chNum := extractChapterNum(postTitle)
-					if chNum == "" {
-						chNum = "1"
-					}
-
-					ch := Chapter{
-						ID:     strconv.Itoa(p.ID),
-						Num:    chNum,
-						Title:  postTitle,
-						URL:    p.Link,
-						Slug:   p.Slug,
-						Images: extractImages(p.Content.Rendered),
-						Source: "komiktap",
-					}
-
-					if existing, exists := seriesMap[key]; exists {
-						existing.Chapters = append(existing.Chapters, ch)
-						existing.Count = len(existing.Chapters)
-					} else {
-						catID := 0
-						if len(p.Categories) > 0 {
-							catID = p.Categories[0]
-						}
-						comic := Comic{
-							ID:       strconv.Itoa(p.ID),
-							Title:    seriesTitle,
-							Slug:     seriesSlug,
-							Source:   "komiktap",
-							Link:     p.Link,
-							CatID:    catID,
-							Chapters: []Chapter{ch},
-							Count:    1,
-						}
-						seriesMap[key] = &comic
-						results = append(results, comic)
-					}
+			key := "kt:" + seriesSlug
+			if _, exists := seriesMap[key]; !exists {
+				catID := 0
+				if len(p.Categories) > 0 {
+					catID = p.Categories[0]
 				}
+				comic := Comic{
+					ID:     strconv.Itoa(p.ID),
+					Title:  seriesTitle,
+					Slug:   seriesSlug,
+					Source: "komiktap",
+					Link:   p.Link,
+					CatID:  catID,
+				}
+				seriesMap[key] = &comic
+				results = append(results, comic)
 			}
 		}
 	}
 
 	// 3. Cari Post di Komiku & Kelompokkan per Seri
 	kmURL := fmt.Sprintf("https://komiku.org/wp-json/wp/v2/posts?search=%s&per_page=50", url.QueryEscape(query))
-	req3, err := http.NewRequestWithContext(ctx, http.MethodGet, kmURL, nil)
-	if err == nil {
-		req3.Header.Set("User-Agent", defaultUA)
-		resp, err := httpClient.Do(req3)
-		if err == nil && resp.StatusCode == http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
+	if posts, err := fetchPosts(ctx, kmURL); err == nil {
+		for _, p := range posts {
+			postTitle := cleanTitle(p.Title.Rendered)
+			seriesTitle := ExtractSeriesTitle(postTitle)
+			seriesSlug := strings.ToLower(regexp.MustCompile(`[^\w]+`).ReplaceAllString(seriesTitle, "-"))
+			seriesSlug = strings.Trim(seriesSlug, "-")
 
-			var posts []postItem
-			if json.Unmarshal(body, &posts) == nil {
-				for _, p := range posts {
-					postTitle := cleanTitle(p.Title.Rendered)
-					seriesTitle := ExtractSeriesTitle(postTitle)
-					seriesSlug := strings.ToLower(regexp.MustCompile(`[^\w]+`).ReplaceAllString(seriesTitle, "-"))
-					seriesSlug = strings.Trim(seriesSlug, "-")
-
-					key := "km:" + seriesSlug
-					chNum := extractChapterNum(postTitle)
-					if chNum == "" {
-						chNum = "1"
-					}
-
-					ch := Chapter{
-						ID:     strconv.Itoa(p.ID),
-						Num:    chNum,
-						Title:  postTitle,
-						URL:    p.Link,
-						Slug:   p.Slug,
-						Images: extractImages(p.Content.Rendered),
-						Source: "komiku",
-					}
-
-					if existing, exists := seriesMap[key]; exists {
-						existing.Chapters = append(existing.Chapters, ch)
-						existing.Count = len(existing.Chapters)
-					} else {
-						comic := Comic{
-							ID:       strconv.Itoa(p.ID),
-							Title:    seriesTitle,
-							Slug:     seriesSlug,
-							Source:   "komiku",
-							Link:     p.Link,
-							Chapters: []Chapter{ch},
-							Count:    1,
-						}
-						seriesMap[key] = &comic
-						results = append(results, comic)
-					}
+			key := "km:" + seriesSlug
+			if _, exists := seriesMap[key]; !exists {
+				comic := Comic{
+					ID:     strconv.Itoa(p.ID),
+					Title:  seriesTitle,
+					Slug:   seriesSlug,
+					Source: "komiku",
+					Link:   p.Link,
 				}
+				seriesMap[key] = &comic
+				results = append(results, comic)
 			}
-		}
-	}
-
-	// Update pointer slice results dengan isi seriesMap
-	for i := range results {
-		key := "kt:" + results[i].Slug
-		if results[i].Source == "komiku" {
-			key = "km:" + results[i].Slug
-		}
-		if s, ok := seriesMap[key]; ok {
-			results[i] = *s
 		}
 	}
 
 	return results, nil
 }
 
-// GetChapters mengambil daftar chapter dari sebuah seri komik
+// GetChapters mengambil SELURUH daftar chapter dari sebuah seri komik (paging)
 func GetChapters(ctx context.Context, c Comic) ([]Chapter, error) {
-	// Jika sudah ada chapter yang terkumpul saat pencarian
-	if len(c.Chapters) > 0 {
-		sortChapters(c.Chapters)
-		return c.Chapters, nil
-	}
-
 	var chapters []Chapter
+	seen := make(map[string]bool)
 
 	if c.Source == "komiktap" && c.CatID > 0 {
-		apiURL := fmt.Sprintf("https://komiktap.info/wp-json/wp/v2/posts?categories=%d&per_page=100", c.CatID)
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
-		if err != nil {
-			return nil, err
-		}
-		req.Header.Set("User-Agent", defaultUA)
-
-		resp, err := httpClient.Do(req)
-		if err != nil {
-			return nil, fmt.Errorf("gagal mengambil chapter KomikTap: %w", err)
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("HTTP status %d dari KomikTap", resp.StatusCode)
-		}
-
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, err
-		}
-
-		var posts []postItem
-		if err := json.Unmarshal(body, &posts); err != nil {
-			return nil, fmt.Errorf("gagal parse JSON chapter: %w", err)
-		}
-
-		for _, p := range posts {
-			t := cleanTitle(p.Title.Rendered)
-			num := extractChapterNum(t)
-			if num == "" {
-				num = t
+		for page := 1; page <= 5; page++ {
+			apiURL := fmt.Sprintf("https://komiktap.info/wp-json/wp/v2/posts?categories=%d&per_page=100&page=%d", c.CatID, page)
+			posts, err := fetchPosts(ctx, apiURL)
+			if err != nil || len(posts) == 0 {
+				break
 			}
-			imgs := extractImages(p.Content.Rendered)
 
-			chapters = append(chapters, Chapter{
-				ID:     strconv.Itoa(p.ID),
-				Num:    num,
-				Title:  t,
-				URL:    p.Link,
-				Slug:   p.Slug,
-				Images: imgs,
-				Source: "komiktap",
-			})
+			for _, p := range posts {
+				t := cleanTitle(p.Title.Rendered)
+				num := extractChapterNum(t)
+				if num == "" {
+					num = t
+				}
+				key := p.Slug
+				if !seen[key] {
+					seen[key] = true
+					chapters = append(chapters, Chapter{
+						ID:     strconv.Itoa(p.ID),
+						Num:    num,
+						Title:  t,
+						URL:    p.Link,
+						Slug:   p.Slug,
+						Images: extractImages(p.Content.Rendered),
+						Source: "komiktap",
+					})
+				}
+			}
+
+			if len(posts) < 100 {
+				break
+			}
 		}
 	} else {
-		// Cari posts berdasarkan judul seri komik
-		searchURL := ""
+		baseURL := "https://komiku.org/wp-json/wp/v2/posts"
 		if c.Source == "komiktap" {
-			searchURL = fmt.Sprintf("https://komiktap.info/wp-json/wp/v2/posts?search=%s&per_page=100", url.QueryEscape(c.Title))
-		} else {
-			searchURL = fmt.Sprintf("https://komiku.org/wp-json/wp/v2/posts?search=%s&per_page=100", url.QueryEscape(c.Title))
+			baseURL = "https://komiktap.info/wp-json/wp/v2/posts"
 		}
 
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, searchURL, nil)
-		if err == nil {
-			req.Header.Set("User-Agent", defaultUA)
-			resp, err := httpClient.Do(req)
-			if err == nil && resp.StatusCode == http.StatusOK {
-				body, _ := io.ReadAll(resp.Body)
-				resp.Body.Close()
+		searchTerm := c.Title
+		for page := 1; page <= 5; page++ {
+			apiURL := fmt.Sprintf("%s?search=%s&per_page=100&page=%d", baseURL, url.QueryEscape(searchTerm), page)
+			posts, err := fetchPosts(ctx, apiURL)
+			if err != nil || len(posts) == 0 {
+				break
+			}
 
-				var posts []postItem
-				if json.Unmarshal(body, &posts) == nil {
-					for _, p := range posts {
-						t := cleanTitle(p.Title.Rendered)
-						seriesTitle := ExtractSeriesTitle(t)
-						if strings.EqualFold(seriesTitle, c.Title) || strings.Contains(strings.ToLower(seriesTitle), strings.ToLower(c.Title)) {
-							num := extractChapterNum(t)
-							if num == "" {
-								num = "1"
-							}
-							imgs := extractImages(p.Content.Rendered)
-
-							chapters = append(chapters, Chapter{
-								ID:     strconv.Itoa(p.ID),
-								Num:    num,
-								Title:  t,
-								URL:    p.Link,
-								Slug:   p.Slug,
-								Images: imgs,
-								Source: c.Source,
-							})
-						}
+			for _, p := range posts {
+				t := cleanTitle(p.Title.Rendered)
+				seriesTitle := ExtractSeriesTitle(t)
+				if isMatchSeries(seriesTitle, c.Title) {
+					num := extractChapterNum(t)
+					if num == "" {
+						num = "1"
+					}
+					key := p.Slug
+					if !seen[key] {
+						seen[key] = true
+						chapters = append(chapters, Chapter{
+							ID:     strconv.Itoa(p.ID),
+							Num:    num,
+							Title:  t,
+							URL:    p.Link,
+							Slug:   p.Slug,
+							Images: extractImages(p.Content.Rendered),
+							Source: c.Source,
+						})
 					}
 				}
+			}
+
+			if len(posts) < 100 {
+				break
 			}
 		}
 	}
@@ -407,30 +350,9 @@ func GetChapterImages(ctx context.Context, ch Chapter) ([]string, error) {
 		apiURL = fmt.Sprintf("https://komiktap.info/wp-json/wp/v2/posts?slug=%s", url.QueryEscape(ch.Slug))
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", defaultUA)
-
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("gagal mengambil gambar chapter: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP status %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	var posts []postItem
-	if err := json.Unmarshal(body, &posts); err != nil || len(posts) == 0 {
-		return nil, fmt.Errorf("post chapter tidak ditemukan")
+	posts, err := fetchPosts(ctx, apiURL)
+	if err != nil || len(posts) == 0 {
+		return nil, fmt.Errorf("post chapter tidak ditemukan atau HTTP error")
 	}
 
 	imgs := extractImages(posts[0].Content.Rendered)

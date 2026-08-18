@@ -180,11 +180,7 @@ func komikHandler(ctx context.Context, c *command.Ctx) error {
 		if r.Source == "komiku" {
 			srcInfo = "Komiku"
 		}
-		cnt := ""
-		if r.Count > 0 {
-			cnt = fmt.Sprintf(" (%d chapter)", r.Count)
-		}
-		fmt.Fprintf(&b, "%d. *%s*%s [%s]\n", i+1, r.Title, cnt, srcInfo)
+		fmt.Fprintf(&b, "%d. *%s* [%s]\n", i+1, r.Title, srcInfo)
 	}
 	fmt.Fprintf(&b, "\n👉 *Balas dengan nomor komik (1 - %d) yang ingin kamu baca.*\n_Ketik \"batal\" untuk membatalkan._", maxShow)
 

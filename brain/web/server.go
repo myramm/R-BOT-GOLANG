@@ -37,6 +37,7 @@ import (
 	"rbot/brain/stats"
 	"rbot/brain/store"
 	"rbot/brain/swgc"
+	"rbot/brain/updater"
 	"rbot/cmd"
 )
 
@@ -476,6 +477,8 @@ func Start(ctx context.Context) {
 	mux.HandleFunc("/api/blacklist", handleBlacklistList)
 	mux.HandleFunc("/api/blacklist/toggle", handleBlacklistToggle)
 	mux.HandleFunc("/api/bot/setpp", handleSetPPBotWeb)
+	mux.HandleFunc("/api/update/check", handleUpdateCheck)
+	mux.HandleFunc("/api/update/apply", handleUpdateApply)
 
 	// File Manager API Endpoints
 	mux.HandleFunc("/api/files/list", handleFileList)
@@ -2447,5 +2450,84 @@ func handleSetPPBotWeb(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"ok":      true,
 		"message": "Foto profil bot berhasil diperbarui!",
+	})
+}
+
+func handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+	defer cancel()
+
+	info := updater.CheckUpdate(ctx)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(info)
+}
+
+func handleUpdateApply(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Force bool `json:"force"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+
+	ctx, cancel := context.WithTimeout(r.Context(), 300*time.Second)
+	defer cancel()
+
+	var applyRes updater.ApplyResult
+	if req.Force {
+		applyRes = updater.ForceUpdate(ctx)
+	} else {
+		applyRes = updater.ApplyUpdate(ctx)
+	}
+
+	if !applyRes.OK {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":    false,
+			"error": applyRes.Err,
+		})
+		return
+	}
+
+	// Rebuild biner baru
+	if err := updater.Rebuild(ctx); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":    false,
+			"error": "Git pull sukses, tetapi gagal build biner baru: " + err.Error(),
+		})
+		return
+	}
+
+	RecordAudit(r, "SYSTEM_UPDATE", fmt.Sprintf("Update GitHub sukses (branch: %s, forced: %v)", applyRes.Branch, applyRes.Forced))
+
+	// Trigger restart otomatis
+	go func() {
+		time.Sleep(1 * time.Second)
+		lifecycle.Request("")
+	}()
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":      true,
+		"message": fmt.Sprintf("Sukses update dari GitHub (branch: %s)! Engine berhasil di-build ulang dan akan restart otomatis dalam 1 detik.", applyRes.Branch),
 	})
 }

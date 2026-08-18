@@ -1840,6 +1840,26 @@
           </div>
         </div>
       </div>
+
+      <!-- Panel Update System GitHub -->
+      <div class="panel" style="margin-top: 1.25rem;">
+        <div class="panel-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+          <span>🚀 Update System (GitHub Auto-Pull & Rebuild Engine)</span>
+          <button class="btn btn-secondary btn-sm" onclick="checkWebUpdate()">🔍 Cek Update Terkini</button>
+        </div>
+        <p style="font-size: 0.825rem; color: var(--text-sub); margin-bottom: 1rem;">
+          Tarik update terbaru langsung dari repository GitHub, re-compile biner Go, dan restart engine secara otomatis tanpa perlu cmd di terminal/bot.
+        </p>
+
+        <div id="updateStatusBox" style="display: none; background: #06090e; padding: 0.85rem; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 1rem; font-size: 0.85rem;">
+          <!-- Rendered dynamically -->
+        </div>
+
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end;">
+          <button id="applyUpdateBtn" class="btn btn-primary" onclick="applyWebUpdate(false)" style="display: none;">📥 Pull & Build Update</button>
+          <button id="forceUpdateBtn" class="btn btn-danger" onclick="applyWebUpdate(true)" style="display: none;">⚡ Force Update (Overwrite Local)</button>
+        </div>
+      </div>
     </section>
 
     <!-- VIEW 7: TERMINAL -->
@@ -4680,6 +4700,93 @@
         .then(handlePPResponse)
         .catch(handlePPError);
       }
+    function checkWebUpdate() {
+      const box = document.getElementById('updateStatusBox');
+      const applyBtn = document.getElementById('applyUpdateBtn');
+      const forceBtn = document.getElementById('forceUpdateBtn');
+
+      if (box) {
+        box.style.display = 'block';
+        box.innerHTML = '<span style="color: var(--warning);">⏳ Memeriksa update dari GitHub...</span>';
+      }
+      if (applyBtn) applyBtn.style.display = 'none';
+      if (forceBtn) forceBtn.style.display = 'none';
+
+      fetch('/api/update/check', {
+        headers: { 'Authorization': `Bearer ${authToken}` }
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (!data.OK && data.Err) {
+          box.innerHTML = `<span style="color: var(--danger);">❌ Gagal cek update: ${data.Err}</span>`;
+          return;
+        }
+        if (data.UpToDate) {
+          box.innerHTML = `<span style="color: var(--success); font-weight: 600;">✅ Bot sudah versi terbaru! (Branch: ${data.Branch})</span>`;
+        } else {
+          let html = `<div style="margin-bottom: 0.5rem;"><strong style="color: var(--warning);">⚠️ Tersedia update baru! (${data.Behind} commit tertinggal di branch ${data.Branch})</strong></div>`;
+          if (data.Commits && data.Commits.length > 0) {
+            html += '<div style="font-family: var(--font-mono); font-size: 0.775rem; color: #a5b4fc; margin-bottom: 0.5rem; max-height: 120px; overflow-y: auto;">';
+            data.Commits.forEach(c => {
+              html += `<div>• <strong>${c.Hash}</strong>: ${c.Subject}</div>`;
+            });
+            html += '</div>';
+          }
+          box.innerHTML = html;
+          if (applyBtn) applyBtn.style.display = 'inline-flex';
+          if (forceBtn) forceBtn.style.display = 'inline-flex';
+        }
+      })
+      .catch(err => {
+        if (box) box.innerHTML = `<span style="color: var(--danger);">❌ Error koneksi: ${err.message}</span>`;
+      });
+    }
+
+    function applyWebUpdate(force) {
+      const applyBtn = document.getElementById('applyUpdateBtn');
+      const forceBtn = document.getElementById('forceUpdateBtn');
+      const box = document.getElementById('updateStatusBox');
+
+      if (!confirm(force ? 'Apakah Anda yakin ingin FORCE UPDATE? (Perubahan lokal di repo akan dibuang)' : 'Mulai proses Git Pull & Rebuild Engine?')) {
+        return;
+      }
+
+      if (applyBtn) applyBtn.disabled = true;
+      if (forceBtn) forceBtn.disabled = true;
+      if (box) {
+        box.innerHTML = '<span style="color: var(--warning); font-weight: 600;">⏳ Menarik update dari GitHub, me-recompile biner Go, dan mere-start engine... Mohon tunggu (sekitar 5-15 detik)...</span>';
+      }
+
+      fetch('/api/update/apply', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({ force: force })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.ok) {
+          showToast(data.message, 'success');
+          if (box) {
+            box.innerHTML = `<span style="color: var(--success); font-weight: 600;">✅ ${data.message}</span>`;
+          }
+          setTimeout(() => location.reload(), 4000);
+        } else {
+          if (applyBtn) applyBtn.disabled = false;
+          if (forceBtn) forceBtn.disabled = false;
+          showToast('Update gagal: ' + data.error, 'danger');
+          if (box) {
+            box.innerHTML = `<span style="color: var(--danger);">❌ Gagal update: ${data.error}</span>`;
+          }
+        }
+      })
+      .catch(err => {
+        if (applyBtn) applyBtn.disabled = false;
+        if (forceBtn) forceBtn.disabled = false;
+        showToast('Error koneksi update: ' + err.message, 'danger');
+      });
     }
   </script>
 </body>

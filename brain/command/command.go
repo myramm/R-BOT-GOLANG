@@ -7,6 +7,8 @@ import (
 	"context"
 	"fmt"
 	"image"
+	"image/color"
+	stdDraw "image/draw"
 	_ "image/gif"
 	"image/jpeg"
 	_ "image/png"
@@ -233,6 +235,33 @@ func GetThumbnailBytes(url string) []byte {
 	return nil
 }
 
+var (
+	defaultThumbOnce  sync.Once
+	defaultThumbBytes []byte
+)
+
+func getDefaultThumbnail() []byte {
+	defaultThumbOnce.Do(func() {
+		width, height := 300, 300
+		img := image.NewRGBA(image.Rect(0, 0, width, height))
+		for y := 0; y < height; y++ {
+			for x := 0; x < width; x++ {
+				r := uint8(20 + (x * 40 / width))
+				g := uint8(30 + (y * 50 / height))
+				b := uint8(90 + ((x + y) * 80 / (width + height)))
+				img.Set(x, y, color.RGBA{R: r, G: g, B: b, A: 255})
+			}
+		}
+		inner := image.Rect(60, 60, 240, 240)
+		stdDraw.Draw(img, inner, &image.Uniform{color.RGBA{99, 102, 241, 255}}, image.Point{}, stdDraw.Src)
+
+		var buf bytes.Buffer
+		_ = jpeg.Encode(&buf, img, &jpeg.Options{Quality: 80})
+		defaultThumbBytes = buf.Bytes()
+	})
+	return defaultThumbBytes
+}
+
 // ApplyCustomContextInfo menyematkan konfigurasi ExternalAdReply dan Newsletter
 // ke ContextInfo pesan keluar bila fitur custom context info diaktifkan.
 func ApplyCustomContextInfo(ci *waE2E.ContextInfo) {
@@ -270,35 +299,48 @@ func ApplyCustomContextInfo(ci *waE2E.ContextInfo) {
 		}
 	}
 
-	// ExternalAdReply: sematkan bila minimal ada Title atau Body atau Thumbnail/Source URL
-	if strings.TrimSpace(cfg.Title) != "" || strings.TrimSpace(cfg.Body) != "" || strings.TrimSpace(cfg.SourceURL) != "" || strings.TrimSpace(cfg.ThumbnailURL) != "" {
-		mediaType := waE2E.ContextInfo_ExternalAdReplyInfo_IMAGE
-		if cfg.MediaType == 2 {
-			mediaType = waE2E.ContextInfo_ExternalAdReplyInfo_VIDEO
-		}
-		adReply := &waE2E.ContextInfo_ExternalAdReplyInfo{
-			MediaType:             &mediaType,
-			RenderLargerThumbnail: proto.Bool(cfg.RenderLargerThumbnail),
-			ShowAdAttribution:     proto.Bool(cfg.ShowAdAttribution),
-		}
-		if t := strings.TrimSpace(cfg.Title); t != "" {
-			adReply.Title = proto.String(t)
-		}
-		if b := strings.TrimSpace(cfg.Body); b != "" {
-			adReply.Body = proto.String(b)
-		}
-		if s := strings.TrimSpace(cfg.SourceURL); s != "" {
-			adReply.SourceURL = proto.String(s)
-			adReply.MediaURL = proto.String(s)
-		}
-		if u := strings.TrimSpace(cfg.ThumbnailURL); u != "" {
-			adReply.ThumbnailURL = proto.String(u)
-			if thumbBytes := GetThumbnailBytes(u); len(thumbBytes) > 0 {
-				adReply.Thumbnail = thumbBytes
-			}
-		}
-		ci.ExternalAdReply = adReply
+	// ExternalAdReply Banner Card
+	mediaType := waE2E.ContextInfo_ExternalAdReplyInfo_IMAGE
+	if cfg.MediaType == 2 {
+		mediaType = waE2E.ContextInfo_ExternalAdReplyInfo_VIDEO
 	}
+
+	title := strings.TrimSpace(cfg.Title)
+	if title == "" {
+		title = config.C.BotName + " Assistant"
+	}
+	body := strings.TrimSpace(cfg.Body)
+	if body == "" {
+		body = "Multi-Device WhatsApp Bot"
+	}
+	sourceURL := strings.TrimSpace(cfg.SourceURL)
+	if sourceURL == "" {
+		sourceURL = "https://github.com/myramm/R-BOT-GOLANG"
+	}
+	thumbURL := strings.TrimSpace(cfg.ThumbnailURL)
+
+	var thumbBytes []byte
+	if thumbURL != "" {
+		thumbBytes = GetThumbnailBytes(thumbURL)
+	}
+	if len(thumbBytes) == 0 {
+		thumbBytes = getDefaultThumbnail()
+	}
+
+	adReply := &waE2E.ContextInfo_ExternalAdReplyInfo{
+		Title:                 proto.String(title),
+		Body:                  proto.String(body),
+		MediaType:             &mediaType,
+		RenderLargerThumbnail: proto.Bool(cfg.RenderLargerThumbnail),
+		ShowAdAttribution:     proto.Bool(cfg.ShowAdAttribution),
+		SourceURL:             proto.String(sourceURL),
+		MediaURL:              proto.String(sourceURL),
+		Thumbnail:             thumbBytes,
+	}
+	if thumbURL != "" {
+		adReply.ThumbnailURL = proto.String(thumbURL)
+	}
+	ci.ExternalAdReply = adReply
 }
 
 // BuildContextInfo membuat ContextInfo dengan quote (bila diminta) dan menyematkan
@@ -324,6 +366,20 @@ func (c *Ctx) Reply(ctx context.Context, text string) (whatsmeow.SendResponse, e
 			Text:        proto.String(text),
 			ContextInfo: ci,
 		},
+	}
+	if ci != nil && ci.ExternalAdReply != nil {
+		if len(ci.ExternalAdReply.Thumbnail) > 0 {
+			msg.ExtendedTextMessage.JPEGThumbnail = ci.ExternalAdReply.Thumbnail
+		}
+		if ci.ExternalAdReply.Title != nil {
+			msg.ExtendedTextMessage.Title = ci.ExternalAdReply.Title
+		}
+		if ci.ExternalAdReply.Body != nil {
+			msg.ExtendedTextMessage.Description = ci.ExternalAdReply.Body
+		}
+		if ci.ExternalAdReply.SourceURL != nil {
+			msg.ExtendedTextMessage.MatchedText = ci.ExternalAdReply.SourceURL
+		}
 	}
 	resp, err := c.Client.SendMessage(ctx, c.Evt.Info.Chat, msg)
 	if err != nil {
@@ -364,6 +420,20 @@ func (c *Ctx) ReplyMentions(ctx context.Context, text string, mentions []types.J
 			Text:        proto.String(text),
 			ContextInfo: ci,
 		},
+	}
+	if ci != nil && ci.ExternalAdReply != nil {
+		if len(ci.ExternalAdReply.Thumbnail) > 0 {
+			msg.ExtendedTextMessage.JPEGThumbnail = ci.ExternalAdReply.Thumbnail
+		}
+		if ci.ExternalAdReply.Title != nil {
+			msg.ExtendedTextMessage.Title = ci.ExternalAdReply.Title
+		}
+		if ci.ExternalAdReply.Body != nil {
+			msg.ExtendedTextMessage.Description = ci.ExternalAdReply.Body
+		}
+		if ci.ExternalAdReply.SourceURL != nil {
+			msg.ExtendedTextMessage.MatchedText = ci.ExternalAdReply.SourceURL
+		}
 	}
 	resp, err := c.Client.SendMessage(ctx, c.Evt.Info.Chat, msg)
 	if err != nil {

@@ -1469,6 +1469,10 @@
           <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
           Simi-Simi AI
         </button>
+        <button class="nav-item" onclick="switchNav('idch', this); closeMobileDrawer();">
+          <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"/></svg>
+          Get IDCH / Saluran
+        </button>
 
         <!-- 4. PENGATURAN -->
         <div class="nav-section-title">⚙️ Konfigurasi</div>
@@ -1634,6 +1638,10 @@
       <button class="nav-item" onclick="switchNav('simi', this)">
         <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
         Simi-Simi AI
+      </button>
+      <button class="nav-item" onclick="switchNav('idch', this)">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"/></svg>
+        Get IDCH / Saluran
       </button>
 
       <!-- 4. PENGATURAN -->
@@ -2789,7 +2797,120 @@
       </div>
     </section>
 
-    <!-- VIEW 13: PUSAT LOG ERROR & AI FIXER -->
+    <!-- VIEW 13: GET IDCH & NEWSLETTER HUB -->
+    <section id="view-idch" class="view-container">
+      <div class="greeting-header" style="margin-bottom: 1rem;">
+        <h2 style="margin: 0; font-size: 1.35rem;">📢 Get IDCH & Newsletter Channel Hub</h2>
+        <p style="margin: 0.25rem 0 0 0; color: var(--text-sub); font-size: 0.85rem;">Cari ID Saluran WhatsApp (JID Newsletter), inspeksi detail & metadata saluran, atau pasang langsung ke konfigurasi ContextInfo bot.</p>
+      </div>
+
+      <!-- 4 KPI Metric Cards -->
+      <div class="metrics-grid" style="grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); margin-bottom: 1.25rem;">
+        <div class="metric-card">
+          <div class="metric-title">Saluran Diikuti</div>
+          <div class="metric-value" id="metricIdchSubscribed">0</div>
+          <div class="metric-change">Subscribed Channels</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-title">IDCH Terakhir</div>
+          <div class="metric-value" id="metricIdchLast" style="font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">-</div>
+          <div class="metric-change">Terakhir Dicari</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-title">Status Engine</div>
+          <div class="metric-value" id="metricIdchEngine" style="color: var(--success);">ONLINE</div>
+          <div class="metric-change">WhatsApp Multi-Device</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-title">ContextInfo Badge</div>
+          <div class="metric-value" id="metricIdchCiStatus" style="font-size: 0.95rem;">Aktif</div>
+          <div class="metric-change">Banner Saluran</div>
+        </div>
+      </div>
+
+      <!-- Search & Lookup Box -->
+      <div class="panel" style="margin-bottom: 1.25rem;">
+        <div class="panel-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+          <span>🔍 Lookup ID Saluran / Newsletter WhatsApp (IDCH)</span>
+          <button class="btn btn-secondary btn-sm" onclick="loadIdchSubscribedList()">🔄 Refresh Saluran</button>
+        </div>
+        <p style="color: var(--text-sub); font-size: 0.825rem; margin: 0 0 0.85rem 0;">
+          Masukkan tautan Saluran WhatsApp (contoh: <code>https://whatsapp.com/channel/0029Va...</code>), kode invite, atau JID newsletter untuk mengambil ID Saluran secara instan.
+        </p>
+
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.5rem;">
+          <input type="text" id="idchSearchInput" class="input-field" placeholder="Paste link saluran WhatsApp (https://whatsapp.com/channel/...) atau invite code..." style="flex: 1; min-width: 260px; padding: 0.55rem 0.85rem; font-size: 0.85rem;" onkeydown="if(event.key==='Enter') lookupIdchFullPage()">
+          <button class="btn btn-primary" onclick="lookupIdchFullPage()" style="display: flex; align-items: center; gap: 0.4rem; padding: 0.55rem 1rem;">
+            <span>🔍 Ambil IDCH</span>
+          </button>
+          <button class="btn btn-secondary" onclick="document.getElementById('idchSearchInput').value=''; document.getElementById('idchSearchInput').focus();">
+            ✕ Reset
+          </button>
+        </div>
+
+        <!-- Live Lookup Inspector Card -->
+        <div id="idchInspectorCard" style="display: none; background: #06090e; border: 1px solid var(--border-color); border-radius: 10px; padding: 1.15rem; margin-top: 1rem;">
+          <!-- Rendered dynamically -->
+        </div>
+      </div>
+
+      <!-- 2 Columns: Subscribed Channels List & ContextInfo Integration -->
+      <div class="two-column-layout">
+        <!-- Subscribed Channels List -->
+        <div class="panel">
+          <div class="panel-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+            <span>📋 Saluran yang Diikuti Bot</span>
+            <input type="text" id="idchSubscribedFilter" class="input-field" placeholder="🔍 Filter saluran..." oninput="filterIdchSubscribedList()" style="width: 150px; font-size: 0.75rem; padding: 0.25rem 0.5rem;">
+          </div>
+          <div class="table-responsive" style="max-height: 380px; overflow-y: auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Saluran & JID</th>
+                  <th>Pengikut</th>
+                  <th>Status</th>
+                  <th style="text-align: right;">Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="idchSubscribedTableBody">
+                <tr>
+                  <td colspan="4" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Memuat daftar saluran yang diikuti bot...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Quick Help & Information Guide -->
+        <div class="panel">
+          <div class="panel-title">💡 Panduan & Informasi IDCH</div>
+          <div style="font-size: 0.8rem; color: var(--text-sub); line-height: 1.6; display: flex; flex-direction: column; gap: 0.75rem;">
+            <div style="background: rgba(99,102,241,0.06); padding: 0.75rem; border-radius: 8px; border: 1px solid rgba(99,102,241,0.2);">
+              <strong style="color: var(--accent);">Apa itu IDCH / Newsletter JID?</strong>
+              <p style="margin: 0.35rem 0 0 0; font-size: 0.75rem;">
+                IDCH adalah unique identifier resmi WhatsApp untuk Saluran (Channel), yang berakhiran dengan <code>@newsletter</code> (contoh: <code>120363043891829012@newsletter</code>).
+              </p>
+            </div>
+            <div>
+              <strong style="color: var(--text-main);">Kegunaan IDCH:</strong>
+              <ul style="margin: 0.35rem 0 0 1.25rem; padding: 0; font-size: 0.75rem;">
+                <li>Menyematkan badge resmi Saluran pada setiap balasan pesan bot (ContextInfo).</li>
+                <li>Forwarded message otomatis dari saluran resmi.</li>
+                <li>Memverifikasi keaslian dan status saluran WhatsApp.</li>
+              </ul>
+            </div>
+            <div>
+              <strong style="color: var(--text-main);">Perintah WhatsApp:</strong>
+              <p style="margin: 0.25rem 0 0 0; font-size: 0.75rem;">
+                Anda juga bisa mengetik <code>.idch &lt;link_saluran&gt;</code> di WhatsApp chat untuk melihat detail info saluran secara instan.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW 14: PUSAT LOG ERROR & AI FIXER -->
     <section id="view-errors" class="view-container">
       <div class="greeting-header" style="margin-bottom: 1rem;">
         <h2 style="margin: 0; font-size: 1.35rem;">🚨 Error Center & AI Diagnostics (Fix with AI)</h2>
@@ -3625,6 +3746,9 @@
       }
       if (viewId === 'errors') {
         loadErrorsWeb();
+      }
+      if (viewId === 'idch') {
+        loadIdchPage();
       }
     }
 
@@ -6844,6 +6968,194 @@
       if (jidInput) jidInput.value = jid || '';
       updateCiPreview();
       showToast(`Saluran "${name || jid}" berhasil diterapkan ke ContextInfo!`, 'success');
+    }
+
+    // -------------------------------------------------------------
+    // GET IDCH & NEWSLETTER HUB JAVASCRIPT CONTROLLER
+    // -------------------------------------------------------------
+    let allSubscribedNewslettersRaw = [];
+
+    async function loadIdchPage() {
+      loadIdchSubscribedList();
+      updateIdchMetrics();
+    }
+
+    function updateIdchMetrics() {
+      const ciConfig = settingsCache?.contextInfo;
+      const ciBadge = document.getElementById('metricIdchCiStatus');
+      if (ciBadge) {
+        if (ciConfig && ciConfig.newsletterJid) {
+          ciBadge.textContent = ciConfig.newsletterName || 'Aktif';
+          ciBadge.style.color = 'var(--success)';
+        } else {
+          ciBadge.textContent = 'Belum Diset';
+          ciBadge.style.color = 'var(--text-muted)';
+        }
+      }
+    }
+
+    async function lookupIdchFullPage() {
+      const inputEl = document.getElementById('idchSearchInput');
+      const cardEl = document.getElementById('idchInspectorCard');
+      const query = (inputEl?.value || '').trim();
+
+      if (!query) {
+        showToast('Silakan masukkan link saluran atau invite code WhatsApp!', 'warning');
+        inputEl?.focus();
+        return;
+      }
+
+      cardEl.style.display = 'block';
+      cardEl.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 1.5rem;">⏳ Mengambil data & metadata saluran WhatsApp dari server...</div>';
+
+      try {
+        const res = await fetch(`/api/newsletter/info?query=${encodeURIComponent(query)}`, {
+          headers: { 'Authorization': 'Bearer ' + authToken }
+        });
+        const data = await res.json();
+        if (!data.ok || !data.data) {
+          cardEl.innerHTML = `
+            <div style="color: var(--danger); text-align: center; padding: 1.5rem;">
+              <div style="font-size: 1.25rem; margin-bottom: 0.35rem;">❌ Gagal Mengambil Info Saluran</div>
+              <div style="font-size: 0.825rem; color: var(--text-sub);">${escapeHtml(data.error || 'Saluran tidak ditemukan atau bot belum terhubung')}</div>
+            </div>
+          `;
+          return;
+        }
+
+        const ch = data.data;
+        const lastEl = document.getElementById('metricIdchLast');
+        if (lastEl) lastEl.textContent = ch.name || ch.jid;
+
+        const verifiedBadge = ch.verificationState === 'VERIFIED'
+          ? '<span class="badge badge-success" style="font-size: 0.75rem;">Verified ✅</span>'
+          : '<span class="badge" style="background: rgba(255,255,255,0.06); color: var(--text-muted); font-size: 0.75rem;">Standar</span>';
+
+        const subsStr = (ch.subscribers || 0).toLocaleString() + ' Pengikut (Subscribers)';
+
+        cardEl.innerHTML = `
+          <div style="display: flex; gap: 1.25rem; align-items: flex-start; flex-wrap: wrap;">
+            ${ch.pictureUrl || ch.previewUrl ? `
+              <img src="${escapeHtml(ch.pictureUrl || ch.previewUrl)}" alt="Avatar" style="width: 72px; height: 72px; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent); flex-shrink: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
+            ` : `
+              <div style="width: 72px; height: 72px; border-radius: 50%; background: #1f293d; display: flex; align-items: center; justify-content: center; font-size: 2rem; flex-shrink: 0; border: 2px solid var(--border-color);">📢</div>
+            `}
+
+            <div style="flex: 1; min-width: 260px;">
+              <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.25rem;">
+                <h3 style="margin: 0; font-size: 1.15rem; color: var(--text-main); font-weight: 800;">${escapeHtml(ch.name || 'Saluran WhatsApp')}</h3>
+                ${verifiedBadge}
+              </div>
+              <div style="font-size: 0.8rem; color: var(--text-sub); margin-bottom: 0.75rem;">
+                👥 <strong style="color: var(--accent);">${subsStr}</strong> ${ch.creationTime ? `· Dibuat pada: ${escapeHtml(ch.creationTime)}` : ''}
+              </div>
+
+              <!-- JID Box with Prominent Copy Button -->
+              <div style="background: #0b111e; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.65rem 0.85rem; margin-bottom: 0.85rem; display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+                <div>
+                  <div style="font-size: 0.675rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">ID Saluran (JID Newsletter):</div>
+                  <div style="font-family: var(--font-mono); font-size: 0.9rem; font-weight: 700; color: #38bdf8; word-break: break-all;">${escapeHtml(ch.jid)}</div>
+                </div>
+                <div style="display: flex; gap: 0.35rem;">
+                  <button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText('${escapeHtml(ch.jid)}'); showToast('JID Saluran berhasil disalin ke clipboard!', 'success');">
+                    📋 Salin JID
+                  </button>
+                  <button class="btn btn-primary btn-sm" onclick="applyNewsletterToCi('${escapeHtml(ch.jid)}', '${escapeHtml(ch.name)}'); switchNav('settings');">
+                    ⚡ Terapkan ke ContextInfo
+                  </button>
+                </div>
+              </div>
+
+              ${ch.description ? `
+                <div style="background: rgba(255,255,255,0.02); border-left: 3px solid var(--accent); padding: 0.5rem 0.75rem; border-radius: 4px; font-size: 0.775rem; color: var(--text-sub); line-height: 1.5; margin-bottom: 0.85rem;">
+                  ${escapeHtml(ch.description)}
+                </div>
+              ` : ''}
+
+              <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                ${ch.inviteUrl ? `
+                  <a href="${escapeHtml(ch.inviteUrl)}" target="_blank" class="btn btn-secondary btn-sm" style="text-decoration: none; display: inline-flex; align-items: center; gap: 0.35rem;">
+                    🔗 Buka Saluran WhatsApp
+                  </a>
+                ` : ''}
+                <button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText('${escapeHtml(ch.inviteUrl || ch.jid)}'); showToast('Tautan saluran disalin!', 'success');">
+                  📋 Salin Link Undangan
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+        showToast(`Berhasil menemukan data saluran: ${ch.name}`, 'success');
+      } catch (err) {
+        cardEl.innerHTML = `<div style="color: var(--danger); padding: 1rem; text-align: center;">❌ Terjadi kesalahan jaringan: ${err.message}</div>`;
+      }
+    }
+
+    async function loadIdchSubscribedList() {
+      const tbody = document.getElementById('idchSubscribedTableBody');
+      const countEl = document.getElementById('metricIdchSubscribed');
+      if (!tbody) return;
+
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">⏳ Mengambil daftar saluran yang diikuti bot...</td></tr>';
+
+      try {
+        const res = await fetch('/api/newsletter/list', {
+          headers: { 'Authorization': 'Bearer ' + authToken }
+        });
+        const data = await res.json();
+        if (!data.ok) {
+          tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--danger); padding: 1.5rem;">❌ ${escapeHtml(data.error || 'Gagal memuat saluran')}</td></tr>`;
+          return;
+        }
+
+        allSubscribedNewslettersRaw = data.newsletters || [];
+        if (countEl) countEl.textContent = allSubscribedNewslettersRaw.length;
+
+        renderIdchSubscribedTable(allSubscribedNewslettersRaw);
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--danger); padding: 1.5rem;">❌ Error: ${err.message}</td></tr>`;
+      }
+    }
+
+    function filterIdchSubscribedList() {
+      const q = (document.getElementById('idchSubscribedFilter')?.value || '').toLowerCase().trim();
+      const filtered = allSubscribedNewslettersRaw.filter(ch => {
+        return (ch.name || '').toLowerCase().includes(q) || (ch.jid || '').toLowerCase().includes(q) || (ch.description || '').toLowerCase().includes(q);
+      });
+      renderIdchSubscribedTable(filtered);
+    }
+
+    function renderIdchSubscribedTable(list) {
+      const tbody = document.getElementById('idchSubscribedTableBody');
+      if (!tbody) return;
+
+      if (!list || list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Bot belum mengikuti saluran manapun atau tidak ada yang cocok dengan pencarian.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = list.map(ch => {
+        const verifiedBadge = ch.verificationState === 'VERIFIED'
+          ? '<span class="badge badge-success" style="font-size: 0.65rem;">Verified ✅</span>'
+          : '<span class="badge" style="background: rgba(255,255,255,0.06); color: var(--text-muted); font-size: 0.65rem;">Standar</span>';
+
+        return `
+          <tr>
+            <td>
+              <div style="font-weight: 700; color: var(--text-main); font-size: 0.85rem;">${escapeHtml(ch.name || 'Saluran')}</div>
+              <div style="font-family: var(--font-mono); font-size: 0.7rem; color: #38bdf8;">${escapeHtml(ch.jid)}</div>
+            </td>
+            <td>${(ch.subscribers || 0).toLocaleString()}</td>
+            <td>${verifiedBadge}</td>
+            <td style="text-align: right;">
+              <div style="display: flex; gap: 0.3rem; justify-content: flex-end;">
+                <button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText('${escapeHtml(ch.jid)}'); showToast('JID disalin!', 'success');" title="Salin JID">📋</button>
+                <button class="btn btn-primary btn-sm" onclick="applyNewsletterToCi('${escapeHtml(ch.jid)}', '${escapeHtml(ch.name)}');" title="Pasang ke ContextInfo">⚡ Pakai</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
     }
 
     function closeJadibotDetailModal() {

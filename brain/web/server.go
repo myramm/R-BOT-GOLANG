@@ -502,6 +502,7 @@ func Start(ctx context.Context) {
 	mux.HandleFunc("/api/action/user", handleUserAction)
 	mux.HandleFunc("/api/swgc/groups", handleSWGCGroups)
 	mux.HandleFunc("/api/swgc/send", handleSWGCSend)
+	mux.HandleFunc("/api/jadibot/groups", handleJadibotGroups)
 	mux.HandleFunc("/api/group/send-message", handleGroupSendMessage)
 	mux.HandleFunc("/api/group/mute", handleGroupMute)
 	mux.HandleFunc("/api/blacklist", handleBlacklistList)
@@ -1220,52 +1221,88 @@ func handleSWGCGroups(w http.ResponseWriter, r *http.Request) {
 	cli := waClient
 	stateMu.RUnlock()
 
-	if cli == nil || !cli.IsConnected() || !cli.IsLoggedIn() {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"ok":     true,
-			"groups": []any{},
-			"info":   "WhatsApp bot belum login atau belum terhubung.",
-		})
-		return
-	}
-
-	groups, err := cli.GetJoinedGroups(r.Context())
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"ok":     true,
-			"groups": []any{},
-			"error":  fmt.Sprintf("Gagal mengambil grup: %v", err),
-		})
-		return
-	}
-
 	type groupInfo struct {
 		JID          string `json:"jid"`
 		Name         string `json:"name"`
 		Participants int    `json:"participants"`
 		IsAnnounce   bool   `json:"isAnnounce"`
 		IsMuted      bool   `json:"isMuted"`
+		BotType      string `json:"botType"`
+		BotPhone     string `json:"botPhone"`
+		BotLabel     string `json:"botLabel"`
 	}
 
-	list := make([]groupInfo, 0, len(groups))
-	for _, g := range groups {
-		name := g.Name
-		if name == "" {
-			name = "Grup Tanpa Nama"
+	var list []groupInfo
+
+	// 1. Ambil grup dari Bot Utama (jika terhubung & login)
+	if cli != nil && cli.IsConnected() && cli.IsLoggedIn() {
+		groups, err := cli.GetJoinedGroups(r.Context())
+		if err == nil {
+			for _, g := range groups {
+				name := g.Name
+				if name == "" {
+					name = "Grup Tanpa Nama"
+				}
+				jidStr := g.JID.String()
+				list = append(list, groupInfo{
+					JID:          jidStr,
+					Name:         name,
+					Participants: len(g.Participants),
+					IsAnnounce:   g.IsAnnounce,
+					IsMuted:      settings.IsGroupMuted(jidStr),
+					BotType:      "main",
+					BotPhone:     "main",
+					BotLabel:     "🤖 Bot Utama",
+				})
+			}
 		}
+	}
+
+	// 2. Ambil grup dari seluruh Jadibot Sub-Bot yang aktif
+	subBotGroups := jadibot.GetAllSubBotGroups(r.Context())
+	for _, sbg := range subBotGroups {
 		list = append(list, groupInfo{
-			JID:          g.JID.String(),
-			Name:         name,
-			Participants: len(g.Participants),
-			IsAnnounce:   g.IsAnnounce,
-			IsMuted:      settings.IsGroupMuted(g.JID.String()),
+			JID:          sbg.JID,
+			Name:         sbg.Name,
+			Participants: sbg.Participants,
+			IsAnnounce:   sbg.IsAnnounce,
+			IsMuted:      sbg.IsMuted,
+			BotType:      sbg.BotType,
+			BotPhone:     sbg.BotPhone,
+			BotLabel:     sbg.BotLabel,
 		})
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "groups": list})
+}
+
+func handleJadibotGroups(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	phone := r.URL.Query().Get("phone")
+	if phone == "" {
+		http.Error(w, "Parameter phone diperlukan", http.StatusBadRequest)
+		return
+	}
+
+	groups, err := jadibot.GetSubBotGroupsByPhone(r.Context(), phone)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":    false,
+			"error": err.Error(),
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":     true,
+		"groups": groups,
+	})
 }
 
 func handleSWGCSend(w http.ResponseWriter, r *http.Request) {

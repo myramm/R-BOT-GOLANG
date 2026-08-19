@@ -1911,23 +1911,32 @@
         <!-- GROUP MUTE / ADMIN-ONLY CONTROL PANEL -->
         <div class="panel">
           <div class="panel-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
-            <span>🔇 Group Mute / Admin-Only Control (Owner Web)</span>
-            <button class="btn btn-secondary btn-sm" onclick="loadSWGCGroups()">🔄 Refresh</button>
+            <span>🔇 Group Mute / Admin-Only Control (Bot Utama & Seluruh Jadibot)</span>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+              <input type="text" id="groupMuteSearchInput" class="input-field" placeholder="🔍 Cari grup / JID..." oninput="filterGroupMuteTable()" style="min-width: 160px; padding: 0.35rem 0.65rem; font-size: 0.8rem;">
+              <select id="groupMuteBotSelect" class="select-field" onchange="filterGroupMuteTable()" style="background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.35rem 0.65rem; font-size: 0.8rem;">
+                <option value="ALL">Semua Bot & Jadibot</option>
+                <option value="main">🤖 Bot Utama Saja</option>
+                <option value="jadibot">🧬 Seluruh Jadibot Saja</option>
+              </select>
+              <button class="btn btn-secondary btn-sm" onclick="loadSWGCGroups()">🔄 Refresh</button>
+            </div>
           </div>
-          <p style="color: var(--text-sub); font-size: 0.8rem; margin: 0 0 0.85rem 0;">Mute atau unmute grup secara instan dari Web Dashboard agar bot hanya bisa merespon Admin Grup & Owner di grup tersebut.</p>
+          <p style="color: var(--text-sub); font-size: 0.8rem; margin: 0 0 0.85rem 0;">Mute atau unmute grup secara instan untuk Bot Utama maupun Sub-Bot Jadibot agar bot hanya merespon Admin Grup & Owner di grup tersebut.</p>
 
           <div class="table-responsive">
             <table>
               <thead>
                 <tr>
-                  <th>Nama Grup</th>
+                  <th style="width: 35%;">Nama Grup & JID</th>
+                  <th>Bot / Instance</th>
                   <th>Anggota</th>
                   <th>Status Mute</th>
                   <th style="text-align: right;">Aksi Mute</th>
                 </tr>
               </thead>
               <tbody id="groupMuteTableBody">
-                <tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 1rem;">Memuat daftar grup...</td></tr>
+                <tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 1rem;">Memuat daftar grup...</td></tr>
               </tbody>
             </table>
           </div>
@@ -4729,6 +4738,8 @@
       }
     }
 
+    let allSWGCGroupsRaw = [];
+
     async function loadSWGCGroups() {
       const select1 = document.getElementById('swgcGroupSelect');
       const select2 = document.getElementById('groupMsgSelect');
@@ -4736,7 +4747,7 @@
       const loadingHTML = '<option value="">⏳ Memuat daftar grup...</option>';
       if (select1) select1.innerHTML = loadingHTML;
       if (select2) select2.innerHTML = loadingHTML;
-      if (muteTbody) muteTbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 1rem;">Memuat daftar grup...</td></tr>';
+      if (muteTbody) muteTbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 1rem;">Memuat daftar grup...</td></tr>';
 
       try {
         const res = await fetch('/api/swgc/groups', {
@@ -4747,46 +4758,112 @@
           const errHTML = `<option value="">❌ ${data.error || 'Gagal memuat grup'}</option>`;
           if (select1) select1.innerHTML = errHTML;
           if (select2) select2.innerHTML = errHTML;
-          if (muteTbody) muteTbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--danger); padding: 1rem;">❌ ${data.error || 'Gagal memuat grup'}</td></tr>`;
+          if (muteTbody) muteTbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--danger); padding: 1rem;">❌ ${data.error || 'Gagal memuat grup'}</td></tr>`;
           return;
         }
-        if (!data.groups || data.groups.length === 0) {
-          const emptyHTML = '<option value="">⚠️ Bot tidak berada di grup manapun</option>';
+
+        allSWGCGroupsRaw = data.groups || [];
+
+        // Update Bot selector dropdown options
+        updateGroupMuteBotSelectOptions();
+
+        if (allSWGCGroupsRaw.length === 0) {
+          const emptyHTML = '<option value="">⚠️ Tidak ada grup aktif yang ditemukan</option>';
           if (select1) select1.innerHTML = emptyHTML;
           if (select2) select2.innerHTML = emptyHTML;
-          if (muteTbody) muteTbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 1rem;">Bot tidak berada di grup manapun.</td></tr>';
+          if (muteTbody) muteTbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 1rem;">Tidak ada grup yang terhubung dengan bot utama maupun jadibot.</td></tr>';
           return;
         }
-        const optionsHTML = data.groups.map(g => `<option value="${g.jid}">${g.name} (${g.participants} anggota${g.isAnnounce ? ' | Hanya Admin' : ''})</option>`).join('');
+
+        const optionsHTML = allSWGCGroupsRaw.map(g => `<option value="${g.jid}">[${g.botLabel || 'Bot'}] ${g.name} (${g.participants} anggota${g.isAnnounce ? ' | Hanya Admin' : ''})</option>`).join('');
         if (select1) select1.innerHTML = optionsHTML;
         if (select2) select2.innerHTML = optionsHTML;
 
-        renderGroupMuteTable(data.groups);
+        filterGroupMuteTable();
       } catch (err) {
         const errHTML = `<option value="">❌ Error: ${err.message}</option>`;
         if (select1) select1.innerHTML = errHTML;
         if (select2) select2.innerHTML = errHTML;
-        if (muteTbody) muteTbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--danger); padding: 1rem;">❌ Error: ${err.message}</td></tr>`;
+        if (muteTbody) muteTbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--danger); padding: 1rem;">❌ Error: ${err.message}</td></tr>`;
       }
+    }
+
+    function updateGroupMuteBotSelectOptions() {
+      const botSelect = document.getElementById('groupMuteBotSelect');
+      if (!botSelect) return;
+      const currentVal = botSelect.value || 'ALL';
+
+      const botOptionsMap = new Map();
+      allSWGCGroupsRaw.forEach(g => {
+        if (g.botPhone && g.botPhone !== 'main' && !botOptionsMap.has(g.botPhone)) {
+          botOptionsMap.set(g.botPhone, g.botLabel || `🧬 Jadibot (${g.botPhone})`);
+        }
+      });
+
+      let html = `
+        <option value="ALL">Semua Bot & Jadibot</option>
+        <option value="main">🤖 Bot Utama Saja</option>
+        <option value="jadibot">🧬 Seluruh Jadibot Saja</option>
+      `;
+
+      botOptionsMap.forEach((label, phone) => {
+        html += `<option value="${escapeHtml(phone)}">${escapeHtml(label)}</option>`;
+      });
+
+      botSelect.innerHTML = html;
+      botSelect.value = currentVal;
+    }
+
+    function filterGroupMuteTable() {
+      const search = (document.getElementById('groupMuteSearchInput')?.value || '').toLowerCase().trim();
+      const botFilter = document.getElementById('groupMuteBotSelect')?.value || 'ALL';
+
+      let filtered = allSWGCGroupsRaw.filter(g => {
+        const matchSearch = (g.name || '').toLowerCase().includes(search) || (g.jid || '').toLowerCase().includes(search);
+        let matchBot = true;
+        if (botFilter === 'main') {
+          matchBot = (g.botType === 'main');
+        } else if (botFilter === 'jadibot') {
+          matchBot = (g.botType === 'jadibot');
+        } else if (botFilter !== 'ALL') {
+          matchBot = (g.botPhone === botFilter);
+        }
+        return matchSearch && matchBot;
+      });
+
+      renderGroupMuteTable(filtered);
     }
 
     function renderGroupMuteTable(groups) {
       const tbody = document.getElementById('groupMuteTableBody');
       if (!tbody) return;
 
+      if (!groups || groups.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Tidak ada grup yang cocok dengan filter pencarian.</td></tr>`;
+        return;
+      }
+
       tbody.innerHTML = groups.map(g => {
         const statusBadge = g.isMuted 
-          ? `<span style="color: var(--danger); font-weight: 600;">🔇 Muted (Admin Only)</span>`
-          : `<span style="color: var(--success); font-weight: 600;">🔊 Normal (Semua Member)</span>`;
+          ? `<span class="badge badge-danger" style="font-size: 0.725rem;">🔇 Muted (Admin Only)</span>`
+          : `<span class="badge badge-success" style="font-size: 0.725rem;">🔊 Normal</span>`;
+
+        const botBadge = g.botType === 'jadibot'
+          ? `<span class="badge" style="background: rgba(139,92,246,0.15); color: #a78bfa; border: 1px solid #8b5cf640; font-size: 0.725rem;">${escapeHtml(g.botLabel || 'Jadibot')}</span>`
+          : `<span class="badge" style="background: rgba(16,185,129,0.15); color: #10b981; border: 1px solid #10b98140; font-size: 0.725rem;">🤖 Bot Utama</span>`;
 
         const btn = g.isMuted
-          ? `<button class="btn btn-secondary btn-sm" onclick="toggleGroupMute('${g.jid}', false)">🔊 Unmute</button>`
-          : `<button class="btn btn-danger btn-sm" onclick="toggleGroupMute('${g.jid}', true)">🔇 Mute GC</button>`;
+          ? `<button class="btn btn-secondary btn-sm" onclick="toggleGroupMute('${escapeHtml(g.jid)}', false)">🔊 Unmute</button>`
+          : `<button class="btn btn-danger btn-sm" onclick="toggleGroupMute('${escapeHtml(g.jid)}', true)">🔇 Mute GC</button>`;
 
         return `
           <tr>
-            <td style="font-weight: 600;">${g.name}</td>
-            <td>${g.participants} member</td>
+            <td>
+              <div style="font-weight: 600; color: var(--text-main); font-size: 0.85rem;">${escapeHtml(g.name || 'Grup')}</div>
+              <div style="font-size: 0.7rem; color: var(--text-muted); font-family: var(--font-mono);">${escapeHtml(g.jid)}</div>
+            </td>
+            <td>${botBadge}</td>
+            <td>${g.participants || 0} member</td>
             <td>${statusBadge}</td>
             <td style="text-align: right;">${btn}</td>
           </tr>
@@ -4807,7 +4884,13 @@
         const data = await res.json();
         if (data.ok) {
           showToast(mute ? 'Grup berhasil di-mute (Admin-Only Mode)' : 'Grup berhasil di-unmute', 'success');
-          loadSWGCGroups();
+          allSWGCGroupsRaw.forEach(g => {
+            if (g.jid === jid) g.isMuted = mute;
+          });
+          filterGroupMuteTable();
+          if (currentDetailPhone) {
+            openJadibotDetail(currentDetailPhone);
+          }
         } else {
           showToast('Gagal mengubah status mute: ' + (data.error || 'Unknown error'), 'danger');
         }
@@ -6221,6 +6304,7 @@
       const topUsers = bot.topUsers || [];
       const topGroups = bot.topGroups || [];
       const recentCmds = bot.recentCmds || [];
+      const joinedGroups = bot.joinedGroups || [];
 
       let maxCmdHit = 1;
       topCmds.forEach(c => { if (c.count > maxCmdHit) maxCmdHit = c.count; });
@@ -6349,6 +6433,53 @@
             </div>
           `;
         }
+      } else if (currentDetailTab === 'groups') {
+        if (joinedGroups.length === 0) {
+          tabContentHtml = `<div style="text-align: center; padding: 2rem; color: var(--text-muted);">Jadibot ini belum bergabung di grup WhatsApp manapun atau statusnya sedang offline.</div>`;
+        } else {
+          tabContentHtml = `
+            <div>
+              <div style="font-size: 0.8rem; color: var(--text-sub); margin-bottom: 0.75rem;">
+                Menampilkan daftar seluruh grup WhatsApp tempat sub-bot (+${escapeHtml(bot.phone)}) bergabung. Anda dapat me-mute / unmute bot di grup secara instan dari sini:
+              </div>
+              <div class="table-responsive" style="max-height: 280px; overflow-y: auto;">
+                <table>
+                  <thead>
+                    <tr>
+                      <th style="width: 45%;">Nama Grup & JID</th>
+                      <th>Anggota</th>
+                      <th>Status Mute</th>
+                      <th style="text-align: right;">Aksi Mute</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${joinedGroups.map(g => {
+                      const statusBadge = g.isMuted 
+                        ? `<span class="badge badge-danger" style="font-size: 0.7rem;">🔇 Muted (Admin Only)</span>`
+                        : `<span class="badge badge-success" style="font-size: 0.7rem;">🔊 Normal</span>`;
+
+                      const btn = g.isMuted
+                        ? `<button class="btn btn-secondary btn-sm" onclick="toggleGroupMute('${escapeHtml(g.jid)}', false)">🔊 Unmute</button>`
+                        : `<button class="btn btn-danger btn-sm" onclick="toggleGroupMute('${escapeHtml(g.jid)}', true)">🔇 Mute GC</button>`;
+
+                      return `
+                        <tr>
+                          <td>
+                            <div style="font-weight: 600; color: var(--text-main); font-size: 0.85rem;">${escapeHtml(g.name || 'Grup')}</div>
+                            <div style="font-size: 0.7rem; color: var(--text-muted); font-family: var(--font-mono);">${escapeHtml(g.jid)}</div>
+                          </td>
+                          <td>${g.participants || 0} member</td>
+                          <td>${statusBadge}</td>
+                          <td style="text-align: right;">${btn}</td>
+                        </tr>
+                      `;
+                    }).join('')}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          `;
+        }
       } else if (currentDetailTab === 'logs') {
         const logsText = logs.join('\n');
         tabContentHtml = `
@@ -6410,7 +6541,8 @@
         <!-- Navigation Tabs -->
         <div style="display: flex; gap: 0.4rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap;">
           <button class="btn btn-sm ${currentDetailTab === 'commands' ? 'btn-primary' : 'btn-secondary'}" onclick="switchSubBotDetailTab('commands')">⚡ Command Breakdown (${topCmds.length})</button>
-          <button class="btn btn-sm ${currentDetailTab === 'users' ? 'btn-primary' : 'btn-secondary'}" onclick="switchSubBotDetailTab('users')">👥 Top Users & Grup</button>
+          <button class="btn btn-sm ${currentDetailTab === 'groups' ? 'btn-primary' : 'btn-secondary'}" onclick="switchSubBotDetailTab('groups')">👥 Grup WhatsApp (${joinedGroups.length})</button>
+          <button class="btn btn-sm ${currentDetailTab === 'users' ? 'btn-primary' : 'btn-secondary'}" onclick="switchSubBotDetailTab('users')">👤 Top Users</button>
           <button class="btn btn-sm ${currentDetailTab === 'activity' ? 'btn-primary' : 'btn-secondary'}" onclick="switchSubBotDetailTab('activity')">🕒 Live Activity (${recentCmds.length})</button>
           <button class="btn btn-sm ${currentDetailTab === 'logs' ? 'btn-primary' : 'btn-secondary'}" onclick="switchSubBotDetailTab('logs')">📜 Console Logs</button>
         </div>

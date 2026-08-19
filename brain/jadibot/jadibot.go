@@ -24,6 +24,7 @@ import (
 	"rbot/brain/command"
 	"rbot/brain/config"
 	"rbot/brain/goodbye"
+	"rbot/brain/settings"
 	"rbot/brain/stats"
 	"rbot/brain/store"
 	"rbot/brain/welcome"
@@ -492,6 +493,103 @@ func (m *Manager) RecordCmdFromClient(client *whatsmeow.Client, cmdName string, 
 	}
 }
 
+// SubBotGroupInfo menyimpan informasi grup WhatsApp tempat sub-bot bergabung.
+type SubBotGroupInfo struct {
+	JID          string `json:"jid"`
+	Name         string `json:"name"`
+	Participants int    `json:"participants"`
+	IsAnnounce   bool   `json:"isAnnounce"`
+	IsMuted      bool   `json:"isMuted"`
+	BotPhone     string `json:"botPhone"`
+	BotType      string `json:"botType"`
+	BotLabel     string `json:"botLabel"`
+}
+
+// GetAllSubBotGroups mengembalikan daftar seluruh grup yang diikuti oleh semua sub-bot aktif.
+func GetAllSubBotGroups(ctx context.Context) []SubBotGroupInfo {
+	return defaultManager.GetAllSubBotGroups(ctx)
+}
+
+func (m *Manager) GetAllSubBotGroups(ctx context.Context) []SubBotGroupInfo {
+	m.mu.RLock()
+	botsCopy := make(map[string]*SubBot, len(m.bots))
+	for k, v := range m.bots {
+		botsCopy[k] = v
+	}
+	m.mu.RUnlock()
+
+	var result []SubBotGroupInfo
+	for phone, sb := range botsCopy {
+		if sb.Client == nil || !sb.Client.IsConnected() || !sb.Client.IsLoggedIn() {
+			continue
+		}
+		groups, err := sb.Client.GetJoinedGroups(ctx)
+		if err != nil {
+			continue
+		}
+		for _, g := range groups {
+			name := g.Name
+			if name == "" {
+				name = "Grup Tanpa Nama"
+			}
+			result = append(result, SubBotGroupInfo{
+				JID:          g.JID.String(),
+				Name:         name,
+				Participants: len(g.Participants),
+				IsAnnounce:   g.IsAnnounce,
+				IsMuted:      settings.IsGroupMuted(g.JID.String()),
+				BotPhone:     phone,
+				BotType:      "jadibot",
+				BotLabel:     "🧬 Jadibot (" + phone + ")",
+			})
+		}
+	}
+	return result
+}
+
+// GetSubBotGroupsByPhone mengembalikan daftar grup yang diikuti oleh sub-bot tertentu.
+func GetSubBotGroupsByPhone(ctx context.Context, phone string) ([]SubBotGroupInfo, error) {
+	return defaultManager.GetSubBotGroupsByPhone(ctx, phone)
+}
+
+func (m *Manager) GetSubBotGroupsByPhone(ctx context.Context, phone string) ([]SubBotGroupInfo, error) {
+	phoneDigits := NormalizePhone(phone)
+	m.mu.RLock()
+	sb, ok := m.bots[phoneDigits]
+	m.mu.RUnlock()
+
+	if !ok || sb == nil {
+		return nil, errors.New("sub-bot tidak ditemukan")
+	}
+	if sb.Client == nil || !sb.Client.IsConnected() || !sb.Client.IsLoggedIn() {
+		return nil, errors.New("sub-bot belum terhubung atau belum login")
+	}
+
+	groups, err := sb.Client.GetJoinedGroups(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]SubBotGroupInfo, 0, len(groups))
+	for _, g := range groups {
+		name := g.Name
+		if name == "" {
+			name = "Grup Tanpa Nama"
+		}
+		result = append(result, SubBotGroupInfo{
+			JID:          g.JID.String(),
+			Name:         name,
+			Participants: len(g.Participants),
+			IsAnnounce:   g.IsAnnounce,
+			IsMuted:      settings.IsGroupMuted(g.JID.String()),
+			BotPhone:     phoneDigits,
+			BotType:      "jadibot",
+			BotLabel:     "🧬 Jadibot (" + phoneDigits + ")",
+		})
+	}
+	return result, nil
+}
+
 // GetSubBotDetail mengambil detail lengkap dan log dari sub-bot tertentu.
 func GetSubBotDetail(phone string) (map[string]any, []string, error) {
 	return defaultManager.GetSubBotDetail(phone)
@@ -508,6 +606,34 @@ func (m *Manager) GetSubBotDetail(phone string) (map[string]any, []string, error
 
 	detail := bot.GetDetailMap(1)
 	logs := bot.GetLogs()
+
+	// Tambahkan daftar grup yang diikuti sub-bot ini
+	var groupList []SubBotGroupInfo
+	if bot.Client != nil && bot.Client.IsConnected() && bot.Client.IsLoggedIn() {
+		ctx, cancel := context.WithTimeout(context.Background(), 7*time.Second)
+		groups, err := bot.Client.GetJoinedGroups(ctx)
+		cancel()
+		if err == nil {
+			for _, g := range groups {
+				name := g.Name
+				if name == "" {
+					name = "Grup Tanpa Nama"
+				}
+				groupList = append(groupList, SubBotGroupInfo{
+					JID:          g.JID.String(),
+					Name:         name,
+					Participants: len(g.Participants),
+					IsAnnounce:   g.IsAnnounce,
+					IsMuted:      settings.IsGroupMuted(g.JID.String()),
+					BotPhone:     phoneDigits,
+					BotType:      "jadibot",
+					BotLabel:     "🧬 Jadibot (" + phoneDigits + ")",
+				})
+			}
+		}
+	}
+	detail["joinedGroups"] = groupList
+
 	return detail, logs, nil
 }
 

@@ -3,14 +3,20 @@
 package command
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"image"
+	_ "image/gif"
+	"image/jpeg"
+	_ "image/png"
 	"log"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	xDraw "golang.org/x/image/draw"
 	"google.golang.org/protobuf/proto"
 
 	"go.mau.fi/whatsmeow"
@@ -136,7 +142,69 @@ var (
 	cachedThumbBytes []byte
 )
 
-// GetThumbnailBytes mengambil byte thumbnail dari URL (dengan caching in-memory).
+// isValidNewsletterJID memeriksa apakah JID newsletter valid dan bukan placeholder/dummy.
+func isValidNewsletterJID(jid string) bool {
+	jid = strings.TrimSpace(jid)
+	if !strings.HasSuffix(jid, "@newsletter") {
+		return false
+	}
+	if strings.Contains(jid, "00000000") || len(jid) < 18 {
+		return false
+	}
+	return true
+}
+
+// compressThumbnailBytes mengubah ukuran dan mengompresi byte gambar menjadi JPEG mini (max ~30KB)
+// yang aman untuk protobuf WhatsApp ContextInfo.
+func compressThumbnailBytes(data []byte, maxDim int, quality int) []byte {
+	if len(data) == 0 {
+		return nil
+	}
+	img, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil
+	}
+
+	bounds := img.Bounds()
+	w, h := bounds.Dx(), bounds.Dy()
+	if w <= 0 || h <= 0 {
+		return nil
+	}
+
+	newW, newH := w, h
+	if w > maxDim || h > maxDim {
+		if w > h {
+			newW = maxDim
+			newH = (h * maxDim) / w
+		} else {
+			newH = maxDim
+			newW = (w * maxDim) / h
+		}
+	}
+	if newW <= 0 {
+		newW = 1
+	}
+	if newH <= 0 {
+		newH = 1
+	}
+
+	dst := image.NewRGBA(image.Rect(0, 0, newW, newH))
+	xDraw.ApproxBiLinear.Scale(dst, dst.Bounds(), img, bounds, xDraw.Over, nil)
+
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, dst, &jpeg.Options{Quality: quality}); err != nil {
+		return nil
+	}
+	res := buf.Bytes()
+	if len(res) > 35*1024 && quality > 40 {
+		buf.Reset()
+		_ = jpeg.Encode(&buf, dst, &jpeg.Options{Quality: 40})
+		res = buf.Bytes()
+	}
+	return res
+}
+
+// GetThumbnailBytes mengambil byte thumbnail dari URL (dengan caching in-memory dan kompresi JPEG).
 func GetThumbnailBytes(url string) []byte {
 	if url == "" {
 		return nil
@@ -149,15 +217,18 @@ func GetThumbnailBytes(url string) []byte {
 	}
 	thumbMu.RUnlock()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	b, err := httpx.GetBytes(ctx, url, 5*time.Second, 2*1024*1024)
-	if err == nil && len(b) > 0 {
-		thumbMu.Lock()
-		cachedThumbURL = url
-		cachedThumbBytes = b
-		thumbMu.Unlock()
-		return b
+	raw, err := httpx.GetBytes(ctx, url, 3*time.Second, 2*1024*1024)
+	if err == nil && len(raw) > 0 {
+		compressed := compressThumbnailBytes(raw, 300, 75)
+		if len(compressed) > 0 {
+			thumbMu.Lock()
+			cachedThumbURL = url
+			cachedThumbBytes = compressed
+			thumbMu.Unlock()
+			return compressed
+		}
 	}
 	return nil
 }
@@ -180,15 +251,10 @@ func ApplyCustomContextInfo(ci *waE2E.ContextInfo) {
 		ci.ForwardingScore = proto.Uint32(cfg.ForwardingScore)
 	}
 
-	if cfg.NewsletterName != "" || cfg.NewsletterJID != "" {
-		jid := cfg.NewsletterJID
-		if jid == "" {
-			jid = "120363000000000000@newsletter"
-		}
-		name := cfg.NewsletterName
-		if name == "" {
-			name = config.C.BotName + " Official"
-		}
+	// Saluran WhatsApp / Newsletter: HANYA sematkan jika JID valid dan bukan dummy
+	if isValidNewsletterJID(cfg.NewsletterJID) && strings.TrimSpace(cfg.NewsletterName) != "" {
+		jid := strings.TrimSpace(cfg.NewsletterJID)
+		name := strings.TrimSpace(cfg.NewsletterName)
 		msgID := cfg.ServerMessageID
 		if msgID <= 0 {
 			msgID = 1
@@ -198,9 +264,14 @@ func ApplyCustomContextInfo(ci *waE2E.ContextInfo) {
 			NewsletterName:  proto.String(name),
 			ServerMessageID: proto.Int32(msgID),
 		}
+		ci.IsForwarded = proto.Bool(true)
+		if ci.ForwardingScore == nil || *ci.ForwardingScore == 0 {
+			ci.ForwardingScore = proto.Uint32(1)
+		}
 	}
 
-	if cfg.Title != "" || cfg.Body != "" || cfg.SourceURL != "" || cfg.ThumbnailURL != "" {
+	// ExternalAdReply: sematkan bila minimal ada Title atau Body atau Thumbnail/Source URL
+	if strings.TrimSpace(cfg.Title) != "" || strings.TrimSpace(cfg.Body) != "" || strings.TrimSpace(cfg.SourceURL) != "" || strings.TrimSpace(cfg.ThumbnailURL) != "" {
 		mediaType := waE2E.ContextInfo_ExternalAdReplyInfo_IMAGE
 		if cfg.MediaType == 2 {
 			mediaType = waE2E.ContextInfo_ExternalAdReplyInfo_VIDEO
@@ -210,19 +281,19 @@ func ApplyCustomContextInfo(ci *waE2E.ContextInfo) {
 			RenderLargerThumbnail: proto.Bool(cfg.RenderLargerThumbnail),
 			ShowAdAttribution:     proto.Bool(cfg.ShowAdAttribution),
 		}
-		if cfg.Title != "" {
-			adReply.Title = proto.String(cfg.Title)
+		if t := strings.TrimSpace(cfg.Title); t != "" {
+			adReply.Title = proto.String(t)
 		}
-		if cfg.Body != "" {
-			adReply.Body = proto.String(cfg.Body)
+		if b := strings.TrimSpace(cfg.Body); b != "" {
+			adReply.Body = proto.String(b)
 		}
-		if cfg.SourceURL != "" {
-			adReply.SourceURL = proto.String(cfg.SourceURL)
-			adReply.MediaURL = proto.String(cfg.SourceURL)
+		if s := strings.TrimSpace(cfg.SourceURL); s != "" {
+			adReply.SourceURL = proto.String(s)
+			adReply.MediaURL = proto.String(s)
 		}
-		if cfg.ThumbnailURL != "" {
-			adReply.ThumbnailURL = proto.String(cfg.ThumbnailURL)
-			if thumbBytes := GetThumbnailBytes(cfg.ThumbnailURL); len(thumbBytes) > 0 {
+		if u := strings.TrimSpace(cfg.ThumbnailURL); u != "" {
+			adReply.ThumbnailURL = proto.String(u)
+			if thumbBytes := GetThumbnailBytes(u); len(thumbBytes) > 0 {
 				adReply.Thumbnail = thumbBytes
 			}
 		}
@@ -244,6 +315,8 @@ func (c *Ctx) BuildContextInfo(quoted bool) *waE2E.ContextInfo {
 }
 
 // Reply mengirim balasan teks yang mengutip (quote) pesan pemicu dengan ContextInfo custom.
+// Jika terjadi error saat pengiriman pesan ber-ContextInfo, bot otomatis melakukan fallback
+// pengiriman pesan quote standar / plain text sehingga bot tetap merespon tanpa silent failure.
 func (c *Ctx) Reply(ctx context.Context, text string) (whatsmeow.SendResponse, error) {
 	ci := c.BuildContextInfo(true)
 	msg := &waE2E.Message{
@@ -252,7 +325,25 @@ func (c *Ctx) Reply(ctx context.Context, text string) (whatsmeow.SendResponse, e
 			ContextInfo: ci,
 		},
 	}
-	return c.Client.SendMessage(ctx, c.Evt.Info.Chat, msg)
+	resp, err := c.Client.SendMessage(ctx, c.Evt.Info.Chat, msg)
+	if err != nil {
+		log.Printf("[rbot] [Reply] Gagal mengirim balasan dengan ContextInfo (%v). Mencoba fallback pengiriman quote standar...", err)
+		fallbackMsg := &waE2E.Message{
+			ExtendedTextMessage: &waE2E.ExtendedTextMessage{
+				Text: proto.String(text),
+				ContextInfo: &waE2E.ContextInfo{
+					StanzaID:      proto.String(c.Evt.Info.ID),
+					Participant:   proto.String(c.Evt.Info.Sender.String()),
+					QuotedMessage: c.Evt.Message,
+				},
+			},
+		}
+		resp, err = c.Client.SendMessage(ctx, c.Evt.Info.Chat, fallbackMsg)
+		if err != nil {
+			return c.Client.SendMessage(ctx, c.Evt.Info.Chat, &waE2E.Message{Conversation: proto.String(text)})
+		}
+	}
+	return resp, nil
 }
 
 // SendText mengirim teks biasa tanpa quote.
@@ -274,7 +365,26 @@ func (c *Ctx) ReplyMentions(ctx context.Context, text string, mentions []types.J
 			ContextInfo: ci,
 		},
 	}
-	return c.Client.SendMessage(ctx, c.Evt.Info.Chat, msg)
+	resp, err := c.Client.SendMessage(ctx, c.Evt.Info.Chat, msg)
+	if err != nil {
+		log.Printf("[rbot] [ReplyMentions] Gagal mengirim pesan mentions dengan ContextInfo (%v). Mencoba fallback...", err)
+		fallbackMsg := &waE2E.Message{
+			ExtendedTextMessage: &waE2E.ExtendedTextMessage{
+				Text: proto.String(text),
+				ContextInfo: &waE2E.ContextInfo{
+					StanzaID:      proto.String(c.Evt.Info.ID),
+					Participant:   proto.String(c.Evt.Info.Sender.String()),
+					QuotedMessage: c.Evt.Message,
+					MentionedJID:  jids,
+				},
+			},
+		}
+		resp, err = c.Client.SendMessage(ctx, c.Evt.Info.Chat, fallbackMsg)
+		if err != nil {
+			return c.Client.SendMessage(ctx, c.Evt.Info.Chat, &waE2E.Message{Conversation: proto.String(text)})
+		}
+	}
+	return resp, nil
 }
 
 // React memasang reaksi emoji ke pesan pemicu (best-effort, error diabaikan).

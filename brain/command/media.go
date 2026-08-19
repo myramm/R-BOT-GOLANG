@@ -305,17 +305,21 @@ func attachQuote(msg *waE2E.Message, evt *events.Message) {
 		Participant:   proto.String(evt.Info.Sender.String()),
 		QuotedMessage: evt.Message,
 	}
-	ApplyCustomContextInfo(ci)
 	switch {
 	case msg.ImageMessage != nil:
+		ApplyCustomContextInfo(ci)
 		msg.ImageMessage.ContextInfo = ci
 	case msg.VideoMessage != nil:
+		ApplyCustomContextInfo(ci)
 		msg.VideoMessage.ContextInfo = ci
-	case msg.AudioMessage != nil:
-		msg.AudioMessage.ContextInfo = ci
 	case msg.DocumentMessage != nil:
+		ApplyCustomContextInfo(ci)
 		msg.DocumentMessage.ContextInfo = ci
+	case msg.AudioMessage != nil:
+		// WhatsApp tidak mendukung externalAdReply/newsletter pada audio/PTT
+		msg.AudioMessage.ContextInfo = ci
 	case msg.StickerMessage != nil:
+		// WhatsApp tidak mendukung externalAdReply/newsletter pada sticker
 		msg.StickerMessage.ContextInfo = ci
 	}
 }

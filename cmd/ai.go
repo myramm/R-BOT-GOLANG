@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -119,13 +120,13 @@ func aiChat(ctx context.Context, c *command.Ctx, senderID string, now time.Time,
 	answer, err := ai.AskAI(ctx, s.SelectedModel, messages)
 	if err != nil {
 		c.React(ctx, "❌")
-		_, e := c.Reply(ctx, "Gagal menghubungi AI: "+err.Error()+". Coba ulangi beberapa saat lagi.")
-		return e
+		_, _ = c.Reply(ctx, "Gagal menghubungi AI: "+err.Error()+". Coba ulangi beberapa saat lagi.")
+		return fmt.Errorf("ai error (%s): %w", s.SelectedModel, err)
 	}
 	if answer.Content == "" {
 		c.React(ctx, "❌")
-		_, e := c.Reply(ctx, "AI tidak memberikan respon. Coba ulangi pertanyaannya.")
-		return e
+		_, _ = c.Reply(ctx, "AI tidak memberikan respon. Coba ulangi pertanyaannya.")
+		return fmt.Errorf("ai empty response (%s)", s.SelectedModel)
 	}
 
 	// Simpan riwayat bila bukan obrolan sementara (potong ke MAX_TURNS terakhir).

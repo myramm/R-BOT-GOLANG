@@ -121,18 +121,18 @@ func downloadHandler(ctx context.Context, c *command.Ctx) error {
 	data, err := kamino.Resolve(ctx, url, platform, arg)
 	if err != nil {
 		c.React(ctx, "❌")
-		_, e := c.Reply(ctx, fmt.Sprintf("Gagal memproses: %s. Coba lagi sebentar lagi.", err.Error()))
-		return e
+		_, _ = c.Reply(ctx, fmt.Sprintf("Gagal memproses: %s. Coba lagi sebentar lagi.", err.Error()))
+		return fmt.Errorf("gagal memproses %s: %w", platform, err)
 	}
 	if data.Playlist {
 		c.React(ctx, "❌")
-		_, e := c.Reply(ctx, "Ini link playlist/album. Kirim link satu video/lagu saja ya, bukan playlist.")
-		return e
+		_, _ = c.Reply(ctx, "Ini link playlist/album. Kirim link satu video/lagu saja ya, bukan playlist.")
+		return nil
 	}
 	if len(data.Medias) == 0 {
 		c.React(ctx, "❌")
-		_, e := c.Reply(ctx, "Tidak bisa ambil media. Mungkin private, dihapus, atau link salah.")
-		return e
+		_, _ = c.Reply(ctx, "Tidak bisa ambil media. Mungkin private, dihapus, atau link salah.")
+		return fmt.Errorf("media kosong dari %s (%s)", platform, url)
 	}
 
 	caption := "*" + data.Title + "*"
@@ -155,6 +155,7 @@ func downloadHandler(ctx context.Context, c *command.Ctx) error {
 		c.React(ctx, "✅")
 	} else {
 		c.React(ctx, "❌")
+		return fmt.Errorf("gagal mengirim seluruh media %s ke WhatsApp", platform)
 	}
 	return nil
 }

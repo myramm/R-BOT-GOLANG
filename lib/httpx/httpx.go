@@ -60,6 +60,9 @@ func GetJSON(ctx context.Context, url string, timeout time.Duration, headers map
 		return err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("HTTP error %d %s", resp.StatusCode, http.StatusText(resp.StatusCode))
+	}
 	return json.NewDecoder(resp.Body).Decode(out)
 }
 

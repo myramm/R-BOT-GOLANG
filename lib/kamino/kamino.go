@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/url"
 	"regexp"
 	"strings"
@@ -138,18 +139,31 @@ func solvePow(nonce string, sc *scheme) string {
 
 // parseScheme men-decode segmen base64 pertama dari challenge lalu ambil .scheme.
 func parseScheme(c string) *scheme {
+	if c == "" {
+		return nil
+	}
 	seg := strings.SplitN(c, ".", 2)[0]
-	raw, err := base64.StdEncoding.DecodeString(seg)
-	if err != nil {
+	var raw []byte
+	var err error
+	for _, enc := range []*base64.Encoding{base64.RawURLEncoding, base64.URLEncoding, base64.RawStdEncoding, base64.StdEncoding} {
+		if raw, err = enc.DecodeString(seg); err == nil {
+			break
+		}
+	}
+	if err != nil || len(raw) == 0 {
 		return nil
 	}
 	var wrap struct {
 		Scheme *scheme `json:"scheme"`
 	}
-	if err := json.Unmarshal(raw, &wrap); err != nil {
-		return nil
+	if err := json.Unmarshal(raw, &wrap); err == nil && wrap.Scheme != nil {
+		return wrap.Scheme
 	}
-	return wrap.Scheme
+	var direct scheme
+	if err := json.Unmarshal(raw, &direct); err == nil && direct.D > 0 {
+		return &direct
+	}
+	return nil
 }
 
 // --- Sesi/token ------------------------------------------------------------
@@ -176,10 +190,14 @@ type sessionResp struct {
 func refreshToken(ctx context.Context) (string, error) {
 	var ch challengeResp
 	if err := httpx.GetJSON(ctx, baseURL()+"/api/challenge", requestTimeout, nil, &ch); err != nil {
-		return "", err
+		return "", fmt.Errorf("gagal menghubungi server downloader (%s): %w", baseURL(), err)
 	}
 	if !ch.OK {
-		return "", errors.New("challenge gagal")
+		errMsg := "challenge downloader gagal"
+		if ch.Er != nil && *ch.Er != "" {
+			errMsg += ": " + *ch.Er
+		}
+		return "", errors.New(errMsg)
 	}
 
 	sc := parseScheme(ch.C)
@@ -187,7 +205,7 @@ func refreshToken(ctx context.Context) (string, error) {
 		sc = &scheme{D: *ch.D, Parts: []string{"n", "i"}, Sep: "", Rounds: 1}
 	}
 	if sc == nil {
-		return "", errors.New("scheme PoW tidak dikenali")
+		sc = &scheme{D: 4, Parts: []string{"n", "i"}, Sep: "", Rounds: 1}
 	}
 	solution := solvePow(ch.N, sc)
 
@@ -203,7 +221,7 @@ func refreshToken(ctx context.Context) (string, error) {
 		return "", err
 	}
 	if !sess.OK || sess.Token == "" {
-		return "", errors.New("session gagal")
+		return "", errors.New("session downloader gagal")
 	}
 
 	tokenMu.Lock()

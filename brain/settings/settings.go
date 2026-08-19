@@ -49,6 +49,9 @@ func Load() error {
 	if d.GroupBans == nil {
 		d.GroupBans = make(map[string]map[string]bool)
 	}
+	if d.ContextInfo != nil {
+		config.C.ContextInfo = *d.ContextInfo
+	}
 	cache = d
 	loaded = true
 	return nil
@@ -268,10 +271,11 @@ func GetContextInfo() config.ContextInfoConfig {
 	return config.C.ContextInfo
 }
 
-// SetContextInfo menyimpan kustomisasi ContextInfo ke store runtime.
+// SetContextInfo menyimpan kustomisasi ContextInfo ke store runtime dan config runtime.
 func SetContextInfo(ci config.ContextInfoConfig) error {
 	mu.Lock()
 	cache.ContextInfo = &ci
+	config.C.ContextInfo = ci
 	snapshot := cache
 	mu.Unlock()
 	return store.Set(storeKey, snapshot)

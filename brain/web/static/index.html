@@ -6834,36 +6834,51 @@
     /* ContextInfo Customization Logic */
     function renderContextInfoSettings(ci) {
       if (!ci) return;
-      if (document.activeElement && (document.activeElement.id.startsWith('ci') || document.activeElement.closest('#view-settings'))) {
-        return;
-      }
 
       const enabledEl = document.getElementById('ciEnabledToggle');
-      if (enabledEl) enabledEl.checked = !!ci.enabled;
+      if (enabledEl && document.activeElement !== enabledEl) {
+        enabledEl.checked = !!ci.enabled;
+      }
 
       const titleEl = document.getElementById('ciTitleInput');
-      if (titleEl && !titleEl.value) titleEl.value = ci.title || '';
+      if (titleEl && document.activeElement !== titleEl) {
+        titleEl.value = ci.title || '';
+      }
 
       const bodyEl = document.getElementById('ciBodyInput');
-      if (bodyEl && !bodyEl.value) bodyEl.value = ci.body || '';
+      if (bodyEl && document.activeElement !== bodyEl) {
+        bodyEl.value = ci.body || '';
+      }
 
       const thumbEl = document.getElementById('ciThumbnailUrlInput');
-      if (thumbEl && !thumbEl.value) thumbEl.value = ci.thumbnailUrl || '';
+      if (thumbEl && document.activeElement !== thumbEl) {
+        thumbEl.value = ci.thumbnailUrl || '';
+      }
 
       const sourceEl = document.getElementById('ciSourceUrlInput');
-      if (sourceEl && !sourceEl.value) sourceEl.value = ci.sourceUrl || '';
+      if (sourceEl && document.activeElement !== sourceEl) {
+        sourceEl.value = ci.sourceUrl || '';
+      }
 
       const renderLargeEl = document.getElementById('ciRenderLargerToggle');
-      if (renderLargeEl) renderLargeEl.checked = ci.renderLargerThumbnail !== false;
+      if (renderLargeEl && document.activeElement !== renderLargeEl) {
+        renderLargeEl.checked = ci.renderLargerThumbnail !== false;
+      }
 
       const showAdEl = document.getElementById('ciShowAdToggle');
-      if (showAdEl) showAdEl.checked = !!ci.showAdAttribution;
+      if (showAdEl && document.activeElement !== showAdEl) {
+        showAdEl.checked = !!ci.showAdAttribution;
+      }
 
       const nNameEl = document.getElementById('ciNewsletterNameInput');
-      if (nNameEl && !nNameEl.value) nNameEl.value = ci.newsletterName || '';
+      if (nNameEl && document.activeElement !== nNameEl) {
+        nNameEl.value = ci.newsletterName || '';
+      }
 
       const nJidEl = document.getElementById('ciNewsletterJidInput');
-      if (nJidEl && !nJidEl.value) nJidEl.value = ci.newsletterJid || '';
+      if (nJidEl && document.activeElement !== nJidEl) {
+        nJidEl.value = ci.newsletterJid || '';
+      }
 
       updateCiPreview();
     }
@@ -6968,6 +6983,9 @@
         const data = await res.json();
         if (data.ok) {
           showToast(data.message || 'Konfigurasi ContextInfo berhasil disimpan!', 'success');
+          if (data.contextInfo) {
+            renderContextInfoSettings(data.contextInfo);
+          }
           fetchStatus();
         } else {
           showToast('Gagal menyimpan: ' + (data.error || 'Terjadi kesalahan'), 'error');

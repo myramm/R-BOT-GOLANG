@@ -1757,15 +1757,17 @@
               <tr>
                 <th>Nomor Sub-Bot</th>
                 <th>Pembuat (Owner)</th>
-                <th>Uptime</th>
+                <th>Hit Cmd</th>
+                <th>Total Users</th>
                 <th>Pesan Diproses</th>
+                <th>Uptime</th>
                 <th>Status</th>
                 <th style="text-align: right;">Aksi</th>
               </tr>
             </thead>
             <tbody id="jadibotTableBody">
               <tr>
-                <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 1rem;">Belum ada sub-bot yang aktif saat ini.</td>
+                <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 1rem;">Belum ada sub-bot yang aktif saat ini.</td>
               </tr>
             </tbody>
           </table>
@@ -2026,6 +2028,114 @@
         <pre id="configView" style="font-family: var(--font-mono); font-size: 0.8rem; color: #a5b4fc; background: #06090e; padding: 0.85rem; border-radius: 8px; overflow-x: auto; max-height: 350px;"></pre>
       </div>
 
+      <!-- Panel Custom ContextInfo WhatsApp (ExternalAdReply Banner & Newsletter Channel) -->
+      <div class="panel" style="margin-top: 1.25rem;">
+        <div class="panel-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+          <span>✨ Kustomisasi WhatsApp ContextInfo (ExternalAdReply & Channel Banner)</span>
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <label style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.8rem; font-weight: 600; cursor: pointer;">
+              <input type="checkbox" id="ciEnabledToggle" onchange="updateCiPreview()" style="transform: scale(1.15);">
+              <span id="ciEnabledLabel">Aktif</span>
+            </label>
+          </div>
+        </div>
+        <p style="font-size: 0.825rem; color: var(--text-sub); margin-bottom: 1.25rem;">
+          Kustomisasi banner ExternalAdReply (kartu preview tautan besar/kecil dengan thumbnail), attribution iklan, dan header badge channel WhatsApp di setiap balasan pesan bot secara real-time.
+        </p>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
+          <!-- Form Inputs Column -->
+          <div style="display: flex; flex-direction: column; gap: 0.85rem;">
+            <div>
+              <label style="font-size: 0.775rem; font-weight: 600; color: var(--text-sub); display: block; margin-bottom: 0.3rem;">Judul Banner (Title / Bot Name):</label>
+              <input type="text" id="ciTitleInput" class="input-field" placeholder="R-BOT WhatsApp Assistant" oninput="updateCiPreview()">
+            </div>
+
+            <div>
+              <label style="font-size: 0.775rem; font-weight: 600; color: var(--text-sub); display: block; margin-bottom: 0.3rem;">Deskripsi / Body Banner:</label>
+              <input type="text" id="ciBodyInput" class="input-field" placeholder="Multi-Device High Performance Bot" oninput="updateCiPreview()">
+            </div>
+
+            <div>
+              <label style="font-size: 0.775rem; font-weight: 600; color: var(--text-sub); display: block; margin-bottom: 0.3rem;">URL Thumbnail Banner (Image URL / JPEG / PNG):</label>
+              <input type="text" id="ciThumbnailUrlInput" class="input-field" placeholder="https://example.com/banner.jpg" oninput="updateCiPreview()">
+            </div>
+
+            <div>
+              <label style="font-size: 0.775rem; font-weight: 600; color: var(--text-sub); display: block; margin-bottom: 0.3rem;">Source URL (Tautan saat Banner Diklik):</label>
+              <input type="text" id="ciSourceUrlInput" class="input-field" placeholder="https://github.com/myramm/R-BOT-GOLANG" oninput="updateCiPreview()">
+            </div>
+
+            <div style="display: flex; gap: 1rem; flex-wrap: wrap; background: #06090e; padding: 0.75rem; border-radius: 6px; border: 1px solid var(--border-color);">
+              <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.775rem; color: var(--text-main); cursor: pointer;">
+                <input type="checkbox" id="ciRenderLargerToggle" onchange="updateCiPreview()" style="transform: scale(1.1);">
+                <span>Render Large Thumbnail (Banner Besar)</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.775rem; color: var(--text-main); cursor: pointer;">
+                <input type="checkbox" id="ciShowAdToggle" onchange="updateCiPreview()" style="transform: scale(1.1);">
+                <span>Show Ad Attribution (Label Iklan)</span>
+              </label>
+            </div>
+
+            <div style="border-top: 1px solid var(--border-color); padding-top: 0.85rem; margin-top: 0.25rem;">
+              <div style="font-size: 0.8rem; font-weight: 700; color: var(--text-main); margin-bottom: 0.65rem;">📢 WhatsApp Channel / Newsletter Badge (Opsional)</div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem;">
+                <div>
+                  <label style="font-size: 0.725rem; font-weight: 600; color: var(--text-sub); display: block; margin-bottom: 0.25rem;">Nama Channel:</label>
+                  <input type="text" id="ciNewsletterNameInput" class="input-field" placeholder="R-BOT Official Updates" oninput="updateCiPreview()">
+                </div>
+                <div>
+                  <label style="font-size: 0.725rem; font-weight: 600; color: var(--text-sub); display: block; margin-bottom: 0.25rem;">Newsletter JID:</label>
+                  <input type="text" id="ciNewsletterJidInput" class="input-field" placeholder="120363xxx@newsletter" oninput="updateCiPreview()">
+                </div>
+              </div>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.5rem;">
+              <button class="btn btn-secondary btn-sm" onclick="resetContextInfoDefault()">↺ Reset Default</button>
+              <button class="btn btn-primary" onclick="saveContextInfoWeb()">💾 Simpan Perubahan ContextInfo</button>
+            </div>
+          </div>
+
+          <!-- Live WhatsApp Preview Column -->
+          <div>
+            <div style="font-size: 0.775rem; font-weight: 700; color: var(--text-sub); margin-bottom: 0.5rem;">📱 LIVE PREVIEW BALASAN PESAN WHATSAPP:</div>
+            <div id="ciLivePreviewContainer" style="background: #0b141a; border-radius: 12px; padding: 1rem; border: 1px solid #1f2c34; display: flex; flex-direction: column; gap: 0.5rem; width: 100%; max-width: 380px;">
+              <!-- Simulated WhatsApp Message Bubble -->
+              <div id="ciPreviewBubble" style="background: #005c4b; border-radius: 8px 8px 2px 8px; padding: 0.5rem 0.65rem; color: #e9edef; font-size: 0.85rem; box-shadow: 0 1px 2px rgba(0,0,0,0.3); align-self: flex-end; width: 100%;">
+                <!-- Channel Header Badge -->
+                <div id="ciPrevNewsletterBadge" style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.7rem; color: #8696a0; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.35rem; margin-bottom: 0.4rem;">
+                  <span style="font-size: 0.8rem;">📢</span>
+                  <span id="ciPrevNewsletterName" style="font-weight: 600; color: #53bdeb;">R-BOT Channel</span>
+                  <span style="font-size: 0.65rem; color: #8696a0;">• Diteruskan</span>
+                </div>
+
+                <!-- ExternalAdReply Banner Card Preview -->
+                <div id="ciPrevBannerCard" style="background: rgba(0,0,0,0.25); border-radius: 6px; overflow: hidden; margin-bottom: 0.5rem; border: 1px solid rgba(255,255,255,0.08);">
+                  <div id="ciPrevImgContainer" style="width: 100%; height: 140px; background: #111b21; overflow: hidden; position: relative;">
+                    <img id="ciPrevImage" src="" alt="Thumbnail" style="width: 100%; height: 100%; object-fit: cover;">
+                    <div id="ciPrevAdBadge" style="position: absolute; top: 6px; right: 6px; background: rgba(0,0,0,0.7); color: #fff; font-size: 0.625rem; padding: 2px 6px; border-radius: 4px;">IKLAN</div>
+                  </div>
+                  <div style="padding: 0.45rem 0.6rem;">
+                    <div id="ciPrevTitle" style="font-weight: 700; font-size: 0.85rem; color: #e9edef; line-height: 1.2;">R-BOT WhatsApp Assistant</div>
+                    <div id="ciPrevBody" style="font-size: 0.75rem; color: #8696a0; margin-top: 0.2rem; line-height: 1.2;">Multi-Device High Performance Bot</div>
+                    <div id="ciPrevSource" style="font-size: 0.675rem; color: #53bdeb; margin-top: 0.3rem; display: flex; align-items: center; gap: 0.25rem;">
+                      <span>🔗</span> <span id="ciPrevSourceText">github.com</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Message Body -->
+                <div style="font-size: 0.85rem; color: #e9edef; line-height: 1.35;">
+                  Halo! Ini adalah contoh balasan pesan dari bot dengan kartu ContextInfo yang telah Anda kustomisasi. ✨
+                </div>
+                <div style="text-align: right; font-size: 0.65rem; color: #8696a0; margin-top: 0.25rem;">12:00 ✓✓</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Panel Ganti Foto Profil Bot -->
       <div class="panel" style="margin-top: 1.25rem;">
         <div class="panel-title">
@@ -2265,12 +2375,12 @@
           <div id="jbStatOffline" class="metric-value" style="color: var(--danger);">0</div>
         </div>
         <div class="metric-card" style="padding: 0.85rem;">
-          <span class="metric-title">Total RAM</span>
-          <div id="jbStatRAM" class="metric-value" style="font-size: 1.1rem;">0 MB</div>
+          <span class="metric-title">Total Hit Cmds</span>
+          <div id="jbStatTotalCmds" class="metric-value" style="color: var(--accent); font-size: 1.15rem;">0</div>
         </div>
         <div class="metric-card" style="padding: 0.85rem;">
-          <span class="metric-title">Total CPU</span>
-          <div id="jbStatCPU" class="metric-value" style="font-size: 1.1rem;">0.0%</div>
+          <span class="metric-title">Total Users</span>
+          <div id="jbStatTotalUsers" class="metric-value" style="font-size: 1.15rem;">0</div>
         </div>
         <div class="metric-card" style="padding: 0.85rem;">
           <span class="metric-title">Storage Used</span>
@@ -2289,10 +2399,12 @@
             <option value="Starting">Starting</option>
           </select>
           <select id="jbSortSelect" class="form-select" style="padding: 0.45rem 0.75rem;" onchange="filterAndRenderJadibotCards()">
+            <option value="cmds">Urutkan: Hit Cmd Terbanyak</option>
+            <option value="users">Urutkan: User Terbanyak</option>
+            <option value="messages">Urutkan: Jumlah Pesan</option>
             <option value="name">Urutkan: Nama / Nomor</option>
-            <option value="uptime">Uptime</option>
-            <option value="storage">Storage</option>
-            <option value="messages">Jumlah Pesan</option>
+            <option value="uptime">Urutkan: Uptime</option>
+            <option value="storage">Urutkan: Storage</option>
           </select>
         </div>
       </div>
@@ -2623,9 +2735,9 @@
 
   <!-- MODAL: Detail Drawer Jadibot -->
   <div id="modalJadibotDetail" class="modal-backdrop">
-    <div class="modal-box" style="max-width: 620px; max-height: 90vh; overflow-y: auto;">
+    <div class="modal-box" style="max-width: 820px; max-height: 90vh; overflow-y: auto;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-        <h3 style="margin: 0; font-size: 1.1rem;">📋 Detail Instance: +<span id="detailJadibotPhone"></span></h3>
+        <h3 style="margin: 0; font-size: 1.15rem;">📋 Detail Instance: +<span id="detailJadibotPhone"></span></h3>
         <button class="btn btn-secondary btn-sm" onclick="closeJadibotDetailModal()">✕</button>
       </div>
       <div id="detailJadibotBody">
@@ -2992,6 +3104,7 @@
       renderActivityFeedFull();
       renderJadibotTable(d.jadibot);
       renderJadibotManagerView(d.jadibot, d.system);
+      renderContextInfoSettings(d.contextInfo);
       renderUsersTable();
       renderGroupsTable();
       renderCommandsTables(d.topCommands || [], d.topCommandErrors || []);
@@ -4050,7 +4163,7 @@
 
       const list = jadibotData.list || [];
       if (list.length === 0) {
-        if (tbody) tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 1rem;">Belum ada sub-bot yang aktif saat ini.</td></tr>`;
+        if (tbody) tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 1rem;">Belum ada sub-bot yang aktif saat ini.</td></tr>`;
         if (mobileContainer) mobileContainer.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 1rem; font-size: 0.8rem;">Belum ada sub-bot yang aktif saat ini.</div>`;
         return;
       }
@@ -4060,6 +4173,8 @@
           const phone = bot.phone ? `+${bot.phone}` : '-';
           const owner = bot.ownerJid ? bot.ownerJid.split('@')[0] : '-';
           const uptime = formatSeconds(bot.uptime || 0);
+          const cmds = (bot.totalCmds || 0).toLocaleString();
+          const users = (bot.totalUsers || 0).toLocaleString();
           const msgs = (bot.messageCount || 0).toLocaleString();
           const status = bot.connected ? `<span style="color: var(--success); font-weight: 600;">🟢 Online</span>` : `<span style="color: var(--danger); font-weight: 600;">🔴 Terputus</span>`;
 
@@ -4067,11 +4182,14 @@
             <tr>
               <td style="font-weight: 600;">${phone}</td>
               <td>${owner}</td>
-              <td>${uptime}</td>
+              <td><span class="badge" style="background: rgba(99,102,241,0.15); color: var(--accent); font-weight: 700;">⚡ ${cmds}</span></td>
+              <td><strong style="color: var(--text-main);">${users}</strong></td>
               <td>${msgs} pesan</td>
+              <td>${uptime}</td>
               <td>${status}</td>
               <td style="text-align: right;">
-                <button class="btn btn-danger btn-sm" onclick="stopJadibotWeb('${bot.phone}')">Hentikan</button>
+                <button class="btn btn-secondary btn-sm" style="margin-right: 0.35rem;" onclick="openJadibotDetail('${bot.phone}')">Detail</button>
+                <button class="btn btn-danger btn-sm" onclick="confirmJadibotAction('stop', '${bot.phone}')">Hentikan</button>
               </td>
             </tr>
           `;
@@ -4083,6 +4201,8 @@
           const phone = bot.phone ? `+${bot.phone}` : '-';
           const owner = bot.ownerJid ? bot.ownerJid.split('@')[0] : '-';
           const uptime = formatSeconds(bot.uptime || 0);
+          const cmds = (bot.totalCmds || 0).toLocaleString();
+          const users = (bot.totalUsers || 0).toLocaleString();
           const msgs = (bot.messageCount || 0).toLocaleString();
 
           return `
@@ -4095,12 +4215,14 @@
               </div>
               <div class="jadibot-mobile-body">
                 <div><span style="color: var(--text-muted);">Owner:</span> ${owner}</div>
+                <div><span style="color: var(--text-muted);">Hit Cmd:</span> <strong style="color: var(--accent);">⚡ ${cmds}</strong></div>
+                <div><span style="color: var(--text-muted);">Users:</span> <strong style="color: var(--text-main);">${users}</strong></div>
                 <div><span style="color: var(--text-muted);">Uptime:</span> ${uptime}</div>
                 <div><span style="color: var(--text-muted);">Messages:</span> ${msgs}</div>
               </div>
               <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.35rem;">
-                <button class="btn btn-secondary btn-sm" onclick="openJadibotDetailModal('${bot.phone}')">Detail</button>
-                <button class="btn btn-danger btn-sm" onclick="stopJadibotWeb('${bot.phone}')">Hentikan</button>
+                <button class="btn btn-secondary btn-sm" onclick="openJadibotDetail('${bot.phone}')">Detail</button>
+                <button class="btn btn-danger btn-sm" onclick="confirmJadibotAction('stop', '${bot.phone}')">Hentikan</button>
               </div>
             </div>
           `;
@@ -4792,6 +4914,9 @@
     }
 
     let jadibotListRaw = [];
+    let currentDetailPhone = '';
+    let currentDetailTab = 'commands';
+    let cachedSubBotDetailData = null;
 
     function renderJadibotManagerView(jadibotData, systemData) {
       if (!jadibotData) return;
@@ -4800,30 +4925,42 @@
 
       const summary = jadibotData.summary || {};
       const totalEl = document.getElementById('jbStatTotal');
-      if (totalEl) totalEl.textContent = summary.total || list.length || 0;
+      if (totalEl) totalEl.textContent = summary.total !== undefined ? summary.total : list.length;
       
       const onlineEl = document.getElementById('jbStatOnline');
-      if (onlineEl) onlineEl.textContent = summary.online || list.filter(b => b.status === 'Online' || b.connected).length || 0;
+      if (onlineEl) onlineEl.textContent = summary.online !== undefined ? summary.online : list.filter(b => b.status === 'Online' || b.connected).length;
 
       const offlineEl = document.getElementById('jbStatOffline');
-      if (offlineEl) offlineEl.textContent = summary.offline || list.filter(b => b.status !== 'Online' && !b.connected).length || 0;
+      if (offlineEl) offlineEl.textContent = summary.offline !== undefined ? summary.offline : list.filter(b => b.status !== 'Online' && !b.connected).length;
 
-      let totalRam = 0;
-      let totalCpu = 0;
+      const totalCmdsEl = document.getElementById('jbStatTotalCmds');
+      if (totalCmdsEl) {
+        let totalCmds = summary.totalCommands || 0;
+        if (!totalCmds) {
+          list.forEach(b => totalCmds += (b.totalCmds || 0));
+        }
+        totalCmdsEl.textContent = totalCmds.toLocaleString();
+      }
+
+      const totalUsersEl = document.getElementById('jbStatTotalUsers');
+      if (totalUsersEl) {
+        let totalUsers = summary.totalUsers || 0;
+        if (!totalUsers) {
+          const userSet = new Set();
+          list.forEach(b => {
+            if (b.topUsers) b.topUsers.forEach(u => userSet.add(u.jid || u.phone));
+          });
+          totalUsers = userSet.size;
+        }
+        totalUsersEl.textContent = totalUsers.toLocaleString();
+      }
+
       let totalStorage = summary.totalStorage || 0;
-
-      list.forEach(b => {
-        totalRam += (parseFloat(b.ramMb) || 16.5);
-        totalCpu += (parseFloat(b.cpuPct) || 1.5);
-        if (!summary.totalStorage && b.storageBytes) totalStorage += b.storageBytes;
-      });
-
-      const ramEl = document.getElementById('jbStatRAM');
-      if (ramEl) ramEl.textContent = `${totalRam.toFixed(1)} MB`;
-
-      const cpuEl = document.getElementById('jbStatCPU');
-      if (cpuEl) cpuEl.textContent = `${totalCpu.toFixed(1)}%`;
-
+      if (!totalStorage) {
+        list.forEach(b => {
+          if (b.storageBytes) totalStorage += b.storageBytes;
+        });
+      }
       const storageEl = document.getElementById('jbStatStorage');
       if (storageEl) storageEl.textContent = formatBytes(totalStorage);
 
@@ -4848,15 +4985,21 @@
 
       const search = searchInput ? (searchInput.value || '').toLowerCase().trim() : '';
       const statusFilter = statusFilterEl ? statusFilterEl.value : 'all';
-      const sortKey = sortSelectEl ? sortSelectEl.value : 'name';
+      const sortKey = sortSelectEl ? sortSelectEl.value : 'cmds';
 
       let filtered = jadibotListRaw.filter(bot => {
-        const matchSearch = (bot.phone || '').toLowerCase().includes(search) || (bot.name || '').toLowerCase().includes(search) || (bot.ownerJid || '').toLowerCase().includes(search);
-        const matchStatus = (statusFilter === 'all') || (bot.status === statusFilter) || (statusFilter === 'Online' && bot.connected);
+        const matchSearch = (bot.phone || '').toLowerCase().includes(search) || 
+                            (bot.name || '').toLowerCase().includes(search) || 
+                            (bot.ownerJid || '').toLowerCase().includes(search);
+        const matchStatus = (statusFilter === 'all') || 
+                            (bot.status === statusFilter) || 
+                            (statusFilter === 'Online' && (bot.connected && bot.loggedIn));
         return matchSearch && matchStatus;
       });
 
       filtered.sort((a, b) => {
+        if (sortKey === 'cmds') return (b.totalCmds || 0) - (a.totalCmds || 0);
+        if (sortKey === 'users') return (b.totalUsers || 0) - (a.totalUsers || 0);
         if (sortKey === 'uptime') return (b.uptime || 0) - (a.uptime || 0);
         if (sortKey === 'storage') return (b.storageBytes || 0) - (a.storageBytes || 0);
         if (sortKey === 'messages') return (b.messageCount || 0) - (a.messageCount || 0);
@@ -4864,7 +5007,7 @@
       });
 
       if (filtered.length === 0) {
-        container.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 2rem;" class="panel">Tidak ada instance jadibot yang tersedia.</div>`;
+        container.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 2rem;" class="panel">Tidak ada instance jadibot yang cocok dengan pencarian/filter.</div>`;
         return;
       }
 
@@ -4874,32 +5017,46 @@
           ? `<span class="badge badge-success">● Online</span>` 
           : (bot.status === 'Starting' ? `<span class="badge badge-warning">⚡ Starting</span>` : `<span class="badge badge-danger">○ Offline</span>`);
 
+        const topCmds = bot.topCommands || [];
+        const topCmdsHtml = topCmds.length > 0
+          ? topCmds.slice(0, 3).map(c => `<span style="background: rgba(99,102,241,0.12); color: var(--accent); border: 1px solid rgba(99,102,241,0.25); border-radius: 4px; padding: 0.15rem 0.4rem; font-size: 0.7rem; font-family: var(--font-mono); font-weight: 600;">⚡ .${escapeHtml(c.name)} (${c.count})</span>`).join(' ')
+          : `<span style="color: var(--text-muted); font-size: 0.725rem; font-style: italic;">Belum ada command</span>`;
+
         return `
-          <div class="panel" style="padding: 1rem; display: flex; flex-direction: column; justify-content: space-between;">
+          <div class="panel" style="padding: 1rem; display: flex; flex-direction: column; justify-content: space-between; border: 1px solid var(--border-color); border-radius: 10px; background: #0c111c;">
             <div>
               <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem;">
                 <div>
-                  <div style="font-weight: 700; font-size: 0.95rem; color: var(--text-main);">${bot.name || 'Jadibot'}</div>
+                  <div style="font-weight: 700; font-size: 0.95rem; color: var(--text-main);">${escapeHtml(bot.name || 'Jadibot')}</div>
                   <div style="font-size: 0.8rem; font-family: var(--font-mono); color: var(--text-sub);">+${bot.phone}</div>
                 </div>
                 ${statusBadge}
               </div>
 
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; font-size: 0.775rem; margin-bottom: 1rem; background: #06090e; padding: 0.65rem; border-radius: 6px; border: 1px solid var(--border-color);">
-                <div><span style="color: var(--text-muted);">Uptime:</span> <strong style="color: var(--text-main);">${formatSeconds(bot.uptime || 0)}</strong></div>
-                <div><span style="color: var(--text-muted);">RAM:</span> <strong style="color: var(--text-main);">${bot.ramMb || '18.4'} MB</strong></div>
-                <div><span style="color: var(--text-muted);">CPU:</span> <strong style="color: var(--text-main);">${bot.cpuPct || '2.1'}%</strong></div>
-                <div><span style="color: var(--text-muted);">Storage:</span> <strong style="color: var(--text-main);">${bot.storageMb || '1.2 MB'}</strong></div>
-                <div><span style="color: var(--text-muted);">Goroutines:</span> <strong style="color: var(--text-main);">${bot.goroutines || 14}</strong></div>
-                <div><span style="color: var(--text-muted);">Pesan:</span> <strong style="color: var(--text-main);">${(bot.messageCount || 0).toLocaleString()}</strong></div>
+              <!-- 6-Grid Stats Box -->
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.45rem; font-size: 0.775rem; margin-bottom: 0.75rem; background: #06090e; padding: 0.65rem; border-radius: 8px; border: 1px solid var(--border-color);">
+                <div><span style="color: var(--text-muted);">⚡ Hit Cmd:</span> <strong style="color: var(--accent); font-size: 0.85rem;">${(bot.totalCmds || 0).toLocaleString()}</strong></div>
+                <div><span style="color: var(--text-muted);">👥 Users:</span> <strong style="color: var(--text-main); font-size: 0.85rem;">${(bot.totalUsers || 0).toLocaleString()}</strong></div>
+                <div><span style="color: var(--text-muted);">💬 Pesan:</span> <strong style="color: var(--text-main);">${(bot.messageCount || 0).toLocaleString()}</strong></div>
+                <div><span style="color: var(--text-muted);">⏳ Uptime:</span> <strong style="color: var(--text-main);">${formatSeconds(bot.uptime || 0)}</strong></div>
+                <div><span style="color: var(--text-muted);">💾 Storage:</span> <strong style="color: var(--text-main);">${bot.storageMb || '0 MB'}</strong></div>
+                <div><span style="color: var(--text-muted);">🛑 Error:</span> <strong style="color: ${(bot.errorCount || 0) > 0 ? 'var(--danger)' : 'var(--text-main)'};">${(bot.errorCount || 0).toLocaleString()}</strong></div>
+              </div>
+
+              <!-- Top 3 Command Badges -->
+              <div style="margin-bottom: 0.85rem;">
+                <div style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 0.25rem; font-weight: 600;">TOP COMMANDS:</div>
+                <div style="display: flex; gap: 0.35rem; flex-wrap: wrap; align-items: center;">
+                  ${topCmdsHtml}
+                </div>
               </div>
             </div>
 
-            <div style="display: flex; gap: 0.35rem; flex-wrap: wrap;">
-              <button class="btn btn-secondary btn-sm" style="flex: 1; min-width: 60px;" onclick="openJadibotDetail('${bot.phone}')">🔍 Detail</button>
+            <div style="display: flex; gap: 0.35rem; flex-wrap: wrap; margin-top: 0.25rem;">
+              <button class="btn btn-secondary btn-sm" style="flex: 1; min-width: 70px;" onclick="openJadibotDetail('${bot.phone}')">🔍 Detail Rinci</button>
               <button class="btn btn-warning btn-sm" style="flex: 1; min-width: 60px;" onclick="confirmJadibotAction('restart', '${bot.phone}')">♻️ Restart</button>
-              <button class="btn btn-danger btn-sm" style="flex: 1; min-width: 60px;" onclick="confirmJadibotAction('stop', '${bot.phone}')">⏹️ Stop</button>
-              <button class="btn btn-secondary btn-sm" style="color: var(--danger); flex: 1; min-width: 60px;" onclick="confirmJadibotAction('delete', '${bot.phone}')">🗑️ Delete</button>
+              <button class="btn btn-danger btn-sm" style="flex: 1; min-width: 55px;" onclick="confirmJadibotAction('stop', '${bot.phone}')">⏹️ Stop</button>
+              <button class="btn btn-secondary btn-sm" style="color: var(--danger); flex: 1; min-width: 55px;" onclick="confirmJadibotAction('delete', '${bot.phone}')">🗑️ Delete</button>
             </div>
           </div>
         `;
@@ -5025,9 +5182,10 @@
     }
 
     async function openJadibotDetail(phone) {
+      currentDetailPhone = phone;
       document.getElementById('detailJadibotPhone').textContent = phone;
       const body = document.getElementById('detailJadibotBody');
-      body.innerHTML = `<div style="text-align: center; padding: 2rem; color: var(--text-muted);">Memuat detail instance +${phone}...</div>`;
+      body.innerHTML = `<div style="text-align: center; padding: 3rem; color: var(--text-muted);">⏳ Memuat detail instance & telemetry sub-bot +${phone}...</div>`;
       document.getElementById('modalJadibotDetail').classList.add('active');
 
       try {
@@ -5036,70 +5194,391 @@
         });
         const data = await res.json();
         if (!data.ok || !data.detail) {
-          body.innerHTML = `<div style="color: var(--danger); text-align: center; padding: 2rem;">${data.error || 'Gagal memuat detail'}</div>`;
+          body.innerHTML = `<div style="color: var(--danger); text-align: center; padding: 2rem;">❌ ${data.error || 'Gagal memuat detail Jadibot'}</div>`;
           return;
         }
 
-        const bot = data.detail;
-        const logs = data.logs || [];
-        const logsHtml = logs.length > 0 
-          ? logs.map(l => `<div style="padding: 0.15rem 0;">${escapeHtml(l)}</div>`).join('') 
-          : `<div style="color: var(--text-muted);">Belum ada log tercatat.</div>`;
+        cachedSubBotDetailData = data;
+        renderSubBotDetailModalView();
+      } catch (err) {
+        body.innerHTML = `<div style="color: var(--danger); text-align: center; padding: 2rem;">❌ Gagal terhubung ke server: ${err.message}</div>`;
+      }
+    }
 
-        body.innerHTML = `
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem; font-size: 0.85rem;">
-            <div class="panel" style="padding: 0.75rem;">
-              <div style="color: var(--text-muted); font-size: 0.75rem;">Status</div>
-              <div style="font-weight: 700; color: ${bot.connected ? 'var(--success)' : 'var(--danger)'};">${bot.status || 'Offline'}</div>
-            </div>
-            <div class="panel" style="padding: 0.75rem;">
-              <div style="color: var(--text-muted); font-size: 0.75rem;">Uptime</div>
-              <div style="font-weight: 700;">${formatSeconds(bot.uptime || 0)}</div>
-            </div>
-            <div class="panel" style="padding: 0.75rem;">
-              <div style="color: var(--text-muted); font-size: 0.75rem;">Memory / RAM</div>
-              <div style="font-weight: 700;">${bot.ramMb || '18.4'} MB</div>
-            </div>
-            <div class="panel" style="padding: 0.75rem;">
-              <div style="color: var(--text-muted); font-size: 0.75rem;">Storage Database</div>
-              <div style="font-weight: 700;">${bot.storageMb || '1.2 MB'}</div>
-            </div>
-            <div class="panel" style="padding: 0.75rem;">
-              <div style="color: var(--text-muted); font-size: 0.75rem;">CPU Usage</div>
-              <div style="font-weight: 700;">${bot.cpuPct || '1.5'}%</div>
-            </div>
-            <div class="panel" style="padding: 0.75rem;">
-              <div style="color: var(--text-muted); font-size: 0.75rem;">Goroutines</div>
-              <div style="font-weight: 700;">${bot.goroutines || 14}</div>
-            </div>
-            <div class="panel" style="padding: 0.75rem;">
-              <div style="color: var(--text-muted); font-size: 0.75rem;">Start Time</div>
-              <div style="font-weight: 600; font-size: 0.8rem;">${bot.startTime || '-'}</div>
-            </div>
-            <div class="panel" style="padding: 0.75rem;">
-              <div style="color: var(--text-muted); font-size: 0.75rem;">Last Activity</div>
-              <div style="font-weight: 600; font-size: 0.8rem;">${bot.lastActivity || '-'}</div>
-            </div>
-          </div>
+    function switchSubBotDetailTab(tabName) {
+      currentDetailTab = tabName;
+      renderSubBotDetailModalView();
+    }
 
-          <div class="panel" style="padding: 0.75rem; margin-bottom: 1rem;">
-            <div style="font-weight: 600; font-size: 0.85rem; margin-bottom: 0.5rem; color: var(--text-sub);">📊 Resource & Message Activity</div>
-            <div style="display: flex; gap: 0.5rem; height: 35px; align-items: flex-end; background: #06090e; padding: 0.35rem; border-radius: 6px;">
-              <div style="flex: 1; height: 60%; background: var(--accent); border-radius: 3px;" title="CPU Activity"></div>
-              <div style="flex: 1; height: 80%; background: var(--success); border-radius: 3px;" title="RAM Activity"></div>
-              <div style="flex: 1; height: 40%; background: var(--warning); border-radius: 3px;" title="Message Traffic"></div>
-            </div>
-          </div>
+    function renderSubBotDetailModalView() {
+      if (!cachedSubBotDetailData) return;
+      const body = document.getElementById('detailJadibotBody');
+      const bot = cachedSubBotDetailData.detail || {};
+      const logs = cachedSubBotDetailData.logs || [];
 
-          <div class="panel" style="padding: 0.75rem;">
-            <div style="font-weight: 600; font-size: 0.85rem; margin-bottom: 0.5rem; color: var(--text-sub);">📜 Recent Console Logs</div>
-            <div style="font-family: var(--font-mono); font-size: 0.75rem; color: #a5b4fc; background: #06090e; padding: 0.65rem; border-radius: 6px; max-height: 180px; overflow-y: auto; line-height: 1.4;">
-              ${logsHtml}
+      const totalCmds = bot.totalCmds || 0;
+      const totalUsers = bot.totalUsers || 0;
+      const totalGroups = bot.totalGroups || 0;
+      const errorCount = bot.errorCount || 0;
+      const msgCount = bot.messageCount || 0;
+      const topCmds = bot.topCommands || [];
+      const topUsers = bot.topUsers || [];
+      const topGroups = bot.topGroups || [];
+      const recentCmds = bot.recentCmds || [];
+
+      let maxCmdHit = 1;
+      topCmds.forEach(c => { if (c.count > maxCmdHit) maxCmdHit = c.count; });
+
+      let tabContentHtml = '';
+      if (currentDetailTab === 'commands') {
+        if (topCmds.length === 0) {
+          tabContentHtml = `<div style="text-align: center; padding: 2rem; color: var(--text-muted);">Belum ada riwayat command yang dieksekusi pada sub-bot ini.</div>`;
+        } else {
+          tabContentHtml = `
+            <div class="table-responsive" style="max-height: 280px; overflow-y: auto;">
+              <table>
+                <thead>
+                  <tr>
+                    <th style="width: 50px;">#</th>
+                    <th>Nama Command</th>
+                    <th>Jumlah Hit</th>
+                    <th style="width: 40%;">Distribusi Visual</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${topCmds.map((c, idx) => {
+                    const pct = Math.round((c.count / maxCmdHit) * 100);
+                    return `
+                      <tr>
+                        <td style="color: var(--text-muted); font-family: var(--font-mono);">${idx + 1}</td>
+                        <td><strong style="color: var(--accent); font-family: var(--font-mono);">.${escapeHtml(c.name)}</strong></td>
+                        <td><strong>${c.count.toLocaleString()}x</strong></td>
+                        <td>
+                          <div style="background: rgba(255,255,255,0.06); border-radius: 4px; height: 8px; overflow: hidden;">
+                            <div style="background: var(--accent); height: 100%; width: ${pct}%; border-radius: 4px;"></div>
+                          </div>
+                        </td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          `;
+        }
+      } else if (currentDetailTab === 'users') {
+        tabContentHtml = `
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem;">
+            <div class="panel" style="padding: 0.75rem; background: #06090e;">
+              <div style="font-weight: 700; font-size: 0.85rem; color: var(--text-main); margin-bottom: 0.5rem;">👥 Top User Aktif (${topUsers.length})</div>
+              ${topUsers.length === 0 ? `<div style="color: var(--text-muted); font-size: 0.75rem; padding: 1rem; text-align: center;">Belum ada user tercatat.</div>` : `
+                <div class="table-responsive" style="max-height: 240px; overflow-y: auto;">
+                  <table style="font-size: 0.75rem;">
+                    <thead>
+                      <tr>
+                        <th>User / Nama</th>
+                        <th>Hit Cmd</th>
+                        <th>Pesan</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${topUsers.map(u => `
+                        <tr>
+                          <td>
+                            <div style="font-weight: 600; color: var(--text-main);">${escapeHtml(u.name || 'User')}</div>
+                            <div style="font-family: var(--font-mono); color: var(--text-sub); font-size: 0.7rem;">+${u.phone || u.jid.split('@')[0]}</div>
+                          </td>
+                          <td><strong style="color: var(--accent);">⚡ ${u.cmds || 0}</strong></td>
+                          <td>${u.chats || 0}</td>
+                        </tr>
+                      `).join('')}
+                    </tbody>
+                  </table>
+                </div>
+              `}
+            </div>
+
+            <div class="panel" style="padding: 0.75rem; background: #06090e;">
+              <div style="font-weight: 700; font-size: 0.85rem; color: var(--text-main); margin-bottom: 0.5rem;">🏢 Top Grup WhatsApp (${topGroups.length})</div>
+              ${topGroups.length === 0 ? `<div style="color: var(--text-muted); font-size: 0.75rem; padding: 1rem; text-align: center;">Belum ada interaksi grup.</div>` : `
+                <div class="table-responsive" style="max-height: 240px; overflow-y: auto;">
+                  <table style="font-size: 0.75rem;">
+                    <thead>
+                      <tr>
+                        <th>Grup / JID</th>
+                        <th>Hit Cmd</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${topGroups.map(g => `
+                        <tr>
+                          <td>
+                            <div style="font-weight: 600; color: var(--text-main);">${escapeHtml(g.name || g.jid)}</div>
+                            <div style="font-family: var(--font-mono); color: var(--text-sub); font-size: 0.65rem;">${g.jid}</div>
+                          </td>
+                          <td><strong style="color: var(--accent);">⚡ ${g.cmds || 0}</strong></td>
+                        </tr>
+                      `).join('')}
+                    </tbody>
+                  </table>
+                </div>
+              `}
             </div>
           </div>
         `;
+      } else if (currentDetailTab === 'activity') {
+        if (recentCmds.length === 0) {
+          tabContentHtml = `<div style="text-align: center; padding: 2rem; color: var(--text-muted);">Belum ada log aktivitas command terbaru.</div>`;
+        } else {
+          tabContentHtml = `
+            <div style="display: flex; flex-direction: column; gap: 0.4rem; max-height: 280px; overflow-y: auto;">
+              ${recentCmds.map(entry => {
+                const isErr = entry.status === 'error';
+                return `
+                  <div style="display: flex; justify-content: space-between; align-items: center; background: #06090e; padding: 0.5rem 0.75rem; border-radius: 6px; border: 1px solid var(--border-color); font-size: 0.775rem;">
+                    <div style="display: flex; align-items: center; gap: 0.65rem;">
+                      <span style="font-family: var(--font-mono); color: var(--text-muted); font-size: 0.7rem;">${entry.timestamp || '--:--:--'}</span>
+                      <span class="badge" style="background: rgba(99,102,241,0.15); color: var(--accent); font-weight: 700; font-family: var(--font-mono);">.${escapeHtml(entry.command)}</span>
+                      <div>
+                        <span style="font-weight: 600; color: var(--text-main);">${escapeHtml(entry.senderName || 'User')}</span>
+                        <span style="color: var(--text-muted); font-size: 0.7rem;">(${entry.isGroup ? 'Grup' : 'Private'})</span>
+                      </div>
+                    </div>
+                    <div>
+                      <span class="badge ${isErr ? 'badge-danger' : 'badge-success'}" style="font-size: 0.65rem;">${isErr ? '❌ Error' : '✓ OK'}</span>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          `;
+        }
+      } else if (currentDetailTab === 'logs') {
+        const logsText = logs.join('\n');
+        tabContentHtml = `
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+              <span style="font-size: 0.75rem; color: var(--text-muted);">Menampilkan 200 baris log terakhir khusus instance ini:</span>
+              <button class="btn btn-secondary btn-sm" onclick="copySubBotLogs()">📋 Copy Logs</button>
+            </div>
+            <pre id="subBotLogBox" style="font-family: var(--font-mono); font-size: 0.75rem; color: #a5b4fc; background: #06090e; padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border-color); max-height: 260px; overflow-y: auto; white-space: pre-wrap; line-height: 1.4;">${logs.length > 0 ? escapeHtml(logsText) : 'Belum ada log tercatat.'}</pre>
+          </div>
+        `;
+      }
+
+      body.innerHTML = `
+        <!-- Hero Header -->
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; background: #0c111c; padding: 0.85rem 1rem; border-radius: 10px; border: 1px solid var(--border-color); margin-bottom: 1rem;">
+          <div>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <h4 style="margin: 0; font-size: 1.1rem; color: var(--text-main);">${escapeHtml(bot.name || 'Jadibot')}</h4>
+              <span class="badge ${bot.connected ? 'badge-success' : 'badge-danger'}">${bot.status || 'Offline'}</span>
+            </div>
+            <div style="font-size: 0.8rem; font-family: var(--font-mono); color: var(--text-sub); margin-top: 0.2rem;">JID: ${bot.jid || '-'} | Owner: ${bot.ownerJid || '-'}</div>
+          </div>
+          <div style="display: flex; gap: 0.4rem;">
+            <button class="btn btn-secondary btn-sm" onclick="openJadibotDetail('${bot.phone}')">🔄 Refresh</button>
+            <button class="btn btn-warning btn-sm" onclick="confirmJadibotAction('restart', '${bot.phone}')">♻️ Restart</button>
+            <button class="btn btn-danger btn-sm" onclick="confirmJadibotAction('stop', '${bot.phone}')">⏹️ Stop</button>
+          </div>
+        </div>
+
+        <!-- 6 KPI Stat Cards -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 0.6rem; margin-bottom: 1.25rem;">
+          <div class="panel" style="padding: 0.65rem; text-align: center; background: #06090e;">
+            <div style="color: var(--text-muted); font-size: 0.7rem; font-weight: 600;">⚡ HIT CMDS</div>
+            <div style="font-size: 1.15rem; font-weight: 800; color: var(--accent);">${totalCmds.toLocaleString()}</div>
+          </div>
+          <div class="panel" style="padding: 0.65rem; text-align: center; background: #06090e;">
+            <div style="color: var(--text-muted); font-size: 0.7rem; font-weight: 600;">👥 USERS</div>
+            <div style="font-size: 1.15rem; font-weight: 800; color: var(--text-main);">${totalUsers.toLocaleString()}</div>
+          </div>
+          <div class="panel" style="padding: 0.65rem; text-align: center; background: #06090e;">
+            <div style="color: var(--text-muted); font-size: 0.7rem; font-weight: 600;">🏢 GRUP</div>
+            <div style="font-size: 1.15rem; font-weight: 800; color: var(--text-main);">${totalGroups.toLocaleString()}</div>
+          </div>
+          <div class="panel" style="padding: 0.65rem; text-align: center; background: #06090e;">
+            <div style="color: var(--text-muted); font-size: 0.7rem; font-weight: 600;">💬 PESAN</div>
+            <div style="font-size: 1.15rem; font-weight: 800; color: var(--text-main);">${msgCount.toLocaleString()}</div>
+          </div>
+          <div class="panel" style="padding: 0.65rem; text-align: center; background: #06090e;">
+            <div style="color: var(--text-muted); font-size: 0.7rem; font-weight: 600;">🛑 ERRORS</div>
+            <div style="font-size: 1.15rem; font-weight: 800; color: ${errorCount > 0 ? 'var(--danger)' : 'var(--text-main)'};">${errorCount.toLocaleString()}</div>
+          </div>
+          <div class="panel" style="padding: 0.65rem; text-align: center; background: #06090e;">
+            <div style="color: var(--text-muted); font-size: 0.7rem; font-weight: 600;">💾 STORAGE</div>
+            <div style="font-size: 1.15rem; font-weight: 800; color: var(--text-main);">${bot.storageMb || '0 MB'}</div>
+          </div>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <div style="display: flex; gap: 0.4rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap;">
+          <button class="btn btn-sm ${currentDetailTab === 'commands' ? 'btn-primary' : 'btn-secondary'}" onclick="switchSubBotDetailTab('commands')">⚡ Command Breakdown (${topCmds.length})</button>
+          <button class="btn btn-sm ${currentDetailTab === 'users' ? 'btn-primary' : 'btn-secondary'}" onclick="switchSubBotDetailTab('users')">👥 Top Users & Grup</button>
+          <button class="btn btn-sm ${currentDetailTab === 'activity' ? 'btn-primary' : 'btn-secondary'}" onclick="switchSubBotDetailTab('activity')">🕒 Live Activity (${recentCmds.length})</button>
+          <button class="btn btn-sm ${currentDetailTab === 'logs' ? 'btn-primary' : 'btn-secondary'}" onclick="switchSubBotDetailTab('logs')">📜 Console Logs</button>
+        </div>
+
+        <!-- Dynamic Tab Panel -->
+        <div class="panel" style="padding: 0.85rem;">
+          ${tabContentHtml}
+        </div>
+      `;
+    }
+
+    function copySubBotLogs() {
+      const el = document.getElementById('subBotLogBox');
+      if (!el) return;
+      navigator.clipboard.writeText(el.innerText).then(() => {
+        showToast('Logs Jadibot berhasil disalin ke clipboard!', 'success');
+      }).catch(() => {
+        showToast('Gagal menyalin log', 'error');
+      });
+    }
+
+    /* ContextInfo Customization Logic */
+    function renderContextInfoSettings(ci) {
+      if (!ci) return;
+      if (document.activeElement && (document.activeElement.id.startsWith('ci') || document.activeElement.closest('#view-settings'))) {
+        return;
+      }
+
+      const enabledEl = document.getElementById('ciEnabledToggle');
+      if (enabledEl) enabledEl.checked = !!ci.enabled;
+
+      const titleEl = document.getElementById('ciTitleInput');
+      if (titleEl && !titleEl.value) titleEl.value = ci.title || '';
+
+      const bodyEl = document.getElementById('ciBodyInput');
+      if (bodyEl && !bodyEl.value) bodyEl.value = ci.body || '';
+
+      const thumbEl = document.getElementById('ciThumbnailUrlInput');
+      if (thumbEl && !thumbEl.value) thumbEl.value = ci.thumbnailUrl || '';
+
+      const sourceEl = document.getElementById('ciSourceUrlInput');
+      if (sourceEl && !sourceEl.value) sourceEl.value = ci.sourceUrl || '';
+
+      const renderLargeEl = document.getElementById('ciRenderLargerToggle');
+      if (renderLargeEl) renderLargeEl.checked = ci.renderLargerThumbnail !== false;
+
+      const showAdEl = document.getElementById('ciShowAdToggle');
+      if (showAdEl) showAdEl.checked = !!ci.showAdAttribution;
+
+      const nNameEl = document.getElementById('ciNewsletterNameInput');
+      if (nNameEl && !nNameEl.value) nNameEl.value = ci.newsletterName || '';
+
+      const nJidEl = document.getElementById('ciNewsletterJidInput');
+      if (nJidEl && !nJidEl.value) nJidEl.value = ci.newsletterJid || '';
+
+      updateCiPreview();
+    }
+
+    function updateCiPreview() {
+      const enabled = document.getElementById('ciEnabledToggle')?.checked;
+      const title = document.getElementById('ciTitleInput')?.value || 'R-BOT WhatsApp Assistant';
+      const body = document.getElementById('ciBodyInput')?.value || 'Multi-Device High Performance Bot';
+      const thumbUrl = document.getElementById('ciThumbnailUrlInput')?.value || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80';
+      const sourceUrl = document.getElementById('ciSourceUrlInput')?.value || 'https://github.com/myramm/R-BOT-GOLANG';
+      const renderLarge = document.getElementById('ciRenderLargerToggle')?.checked;
+      const showAd = document.getElementById('ciShowAdToggle')?.checked;
+      const nName = document.getElementById('ciNewsletterNameInput')?.value;
+
+      const prevBanner = document.getElementById('ciPrevBannerCard');
+      const prevNewsletter = document.getElementById('ciPrevNewsletterBadge');
+      const prevImage = document.getElementById('ciPrevImage');
+      const prevImgContainer = document.getElementById('ciPrevImgContainer');
+      const prevTitle = document.getElementById('ciPrevTitle');
+      const prevBody = document.getElementById('ciPrevBody');
+      const prevSourceText = document.getElementById('ciPrevSourceText');
+      const prevAdBadge = document.getElementById('ciPrevAdBadge');
+      const enabledLabel = document.getElementById('ciEnabledLabel');
+
+      if (enabledLabel) enabledLabel.textContent = enabled ? 'Aktif' : 'Nonaktif';
+
+      if (prevBanner) {
+        prevBanner.style.display = enabled ? 'block' : 'none';
+      }
+
+      if (prevTitle) prevTitle.textContent = title;
+      if (prevBody) prevBody.textContent = body;
+      if (prevImage) prevImage.src = thumbUrl;
+
+      if (prevImgContainer) {
+        if (renderLarge) {
+          prevImgContainer.style.height = '140px';
+          prevImgContainer.style.display = 'block';
+        } else {
+          prevImgContainer.style.height = '80px';
+          prevImgContainer.style.display = 'block';
+        }
+      }
+
+      if (prevAdBadge) {
+        prevAdBadge.style.display = showAd ? 'block' : 'none';
+      }
+
+      if (prevSourceText) {
+        try {
+          const urlObj = new URL(sourceUrl);
+          prevSourceText.textContent = urlObj.hostname;
+        } catch (_) {
+          prevSourceText.textContent = sourceUrl.replace(/^https?:\/\//, '').split('/')[0] || 'link';
+        }
+      }
+
+      if (prevNewsletter) {
+        if (nName && nName.trim()) {
+          prevNewsletter.style.display = 'flex';
+          const nameEl = document.getElementById('ciPrevNewsletterName');
+          if (nameEl) nameEl.textContent = nName.trim();
+        } else {
+          prevNewsletter.style.display = 'none';
+        }
+      }
+    }
+
+    function resetContextInfoDefault() {
+      document.getElementById('ciEnabledToggle').checked = true;
+      document.getElementById('ciTitleInput').value = 'R-BOT WhatsApp Assistant';
+      document.getElementById('ciBodyInput').value = 'Multi-Device High Performance Bot';
+      document.getElementById('ciThumbnailUrlInput').value = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80';
+      document.getElementById('ciSourceUrlInput').value = 'https://github.com/myramm/R-BOT-GOLANG';
+      document.getElementById('ciRenderLargerToggle').checked = true;
+      document.getElementById('ciShowAdToggle').checked = false;
+      document.getElementById('ciNewsletterNameInput').value = 'R-BOT Official Updates';
+      document.getElementById('ciNewsletterJidInput').value = '120363043891829012@newsletter';
+      updateCiPreview();
+      showToast('Form ContextInfo di-reset ke template default.', 'info');
+    }
+
+    async function saveContextInfoWeb() {
+      const payload = {
+        enabled: document.getElementById('ciEnabledToggle')?.checked,
+        title: document.getElementById('ciTitleInput')?.value || '',
+        body: document.getElementById('ciBodyInput')?.value || '',
+        thumbnailUrl: document.getElementById('ciThumbnailUrlInput')?.value || '',
+        sourceUrl: document.getElementById('ciSourceUrlInput')?.value || '',
+        renderLargerThumbnail: document.getElementById('ciRenderLargerToggle')?.checked,
+        showAdAttribution: document.getElementById('ciShowAdToggle')?.checked,
+        newsletterName: document.getElementById('ciNewsletterNameInput')?.value || '',
+        newsletterJid: document.getElementById('ciNewsletterJidInput')?.value || ''
+      };
+
+      try {
+        const res = await fetch('/api/context-info', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast(data.message || 'Konfigurasi ContextInfo berhasil disimpan!', 'success');
+          fetchStatus();
+        } else {
+          showToast('Gagal menyimpan: ' + (data.error || 'Terjadi kesalahan'), 'error');
+        }
       } catch (err) {
-        body.innerHTML = `<div style="color: var(--danger); text-align: center; padding: 2rem;">Gagal terhubung ke server</div>`;
+        showToast('Gagal terhubung ke server: ' + err.message, 'error');
       }
     }
 

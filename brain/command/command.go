@@ -24,6 +24,7 @@ import (
 	"rbot/brain/premium"
 	"rbot/brain/settings"
 	"rbot/brain/sponsor"
+	"rbot/lib/httpx"
 )
 
 // Handler adalah fungsi eksekusi command. Mengembalikan error untuk logging.
@@ -128,16 +129,126 @@ func (c *Ctx) IsGroup() bool { return c.Evt.Info.IsGroup }
 // ArgStr menggabungkan seluruh argumen jadi satu string.
 func (c *Ctx) ArgStr() string { return strings.Join(c.Args, " ") }
 
-// Reply mengirim balasan teks yang mengutip (quote) pesan pemicu.
+var (
+	thumbMu          sync.RWMutex
+	cachedThumbURL   string
+	cachedThumbBytes []byte
+)
+
+// GetThumbnailBytes mengambil byte thumbnail dari URL (dengan caching in-memory).
+func GetThumbnailBytes(url string) []byte {
+	if url == "" {
+		return nil
+	}
+	thumbMu.RLock()
+	if cachedThumbURL == url && len(cachedThumbBytes) > 0 {
+		b := cachedThumbBytes
+		thumbMu.RUnlock()
+		return b
+	}
+	thumbMu.RUnlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	b, err := httpx.GetBytes(ctx, url, 5*time.Second, 2*1024*1024)
+	if err == nil && len(b) > 0 {
+		thumbMu.Lock()
+		cachedThumbURL = url
+		cachedThumbBytes = b
+		thumbMu.Unlock()
+		return b
+	}
+	return nil
+}
+
+// ApplyCustomContextInfo menyematkan konfigurasi ExternalAdReply dan Newsletter
+// ke ContextInfo pesan keluar bila fitur custom context info diaktifkan.
+func ApplyCustomContextInfo(ci *waE2E.ContextInfo) {
+	if ci == nil {
+		return
+	}
+	cfg := settings.GetContextInfo()
+	if !cfg.Enabled {
+		return
+	}
+
+	if cfg.IsForwarded {
+		ci.IsForwarded = proto.Bool(true)
+	}
+	if cfg.ForwardingScore > 0 {
+		ci.ForwardingScore = proto.Uint32(cfg.ForwardingScore)
+	}
+
+	if cfg.NewsletterName != "" || cfg.NewsletterJID != "" {
+		jid := cfg.NewsletterJID
+		if jid == "" {
+			jid = "120363000000000000@newsletter"
+		}
+		name := cfg.NewsletterName
+		if name == "" {
+			name = config.C.BotName + " Official"
+		}
+		msgID := cfg.ServerMessageID
+		if msgID <= 0 {
+			msgID = 1
+		}
+		ci.ForwardedNewsletterMessageInfo = &waE2E.ContextInfo_ForwardedNewsletterMessageInfo{
+			NewsletterJID:   proto.String(jid),
+			NewsletterName:  proto.String(name),
+			ServerMessageID: proto.Int32(msgID),
+		}
+	}
+
+	if cfg.Title != "" || cfg.Body != "" || cfg.SourceURL != "" || cfg.ThumbnailURL != "" {
+		mediaType := waE2E.ContextInfo_ExternalAdReplyInfo_IMAGE
+		if cfg.MediaType == 2 {
+			mediaType = waE2E.ContextInfo_ExternalAdReplyInfo_VIDEO
+		}
+		adReply := &waE2E.ContextInfo_ExternalAdReplyInfo{
+			MediaType:             &mediaType,
+			RenderLargerThumbnail: proto.Bool(cfg.RenderLargerThumbnail),
+			ShowAdAttribution:     proto.Bool(cfg.ShowAdAttribution),
+		}
+		if cfg.Title != "" {
+			adReply.Title = proto.String(cfg.Title)
+		}
+		if cfg.Body != "" {
+			adReply.Body = proto.String(cfg.Body)
+		}
+		if cfg.SourceURL != "" {
+			adReply.SourceURL = proto.String(cfg.SourceURL)
+			adReply.MediaURL = proto.String(cfg.SourceURL)
+		}
+		if cfg.ThumbnailURL != "" {
+			adReply.ThumbnailURL = proto.String(cfg.ThumbnailURL)
+			if thumbBytes := GetThumbnailBytes(cfg.ThumbnailURL); len(thumbBytes) > 0 {
+				adReply.Thumbnail = thumbBytes
+			}
+		}
+		ci.ExternalAdReply = adReply
+	}
+}
+
+// BuildContextInfo membuat ContextInfo dengan quote (bila diminta) dan menyematkan
+// ExternalAdReply / Newsletter info sesuai konfigurasi yang aktif.
+func (c *Ctx) BuildContextInfo(quoted bool) *waE2E.ContextInfo {
+	ci := &waE2E.ContextInfo{}
+	if quoted && c.Evt != nil {
+		ci.StanzaID = proto.String(c.Evt.Info.ID)
+		ci.Participant = proto.String(c.Evt.Info.Sender.String())
+		ci.QuotedMessage = c.Evt.Message
+	}
+	ApplyCustomContextInfo(ci)
+	return ci
+}
+
+// Reply mengirim balasan teks yang mengutip (quote) pesan pemicu dengan ContextInfo custom.
 func (c *Ctx) Reply(ctx context.Context, text string) (whatsmeow.SendResponse, error) {
+	ci := c.BuildContextInfo(true)
 	msg := &waE2E.Message{
 		ExtendedTextMessage: &waE2E.ExtendedTextMessage{
-			Text: proto.String(text),
-			ContextInfo: &waE2E.ContextInfo{
-				StanzaID:      proto.String(c.Evt.Info.ID),
-				Participant:   proto.String(c.Evt.Info.Sender.String()),
-				QuotedMessage: c.Evt.Message,
-			},
+			Text:        proto.String(text),
+			ContextInfo: ci,
 		},
 	}
 	return c.Client.SendMessage(ctx, c.Evt.Info.Chat, msg)
@@ -148,22 +259,18 @@ func (c *Ctx) SendText(ctx context.Context, text string) (whatsmeow.SendResponse
 	return c.Client.SendMessage(ctx, c.Evt.Info.Chat, &waE2E.Message{Conversation: proto.String(text)})
 }
 
-// ReplyMentions seperti Reply tapi menandai (mention) daftar JID, sehingga tag
-// @nomor pada teks bisa diklik & memberi notifikasi (port opsi { mentions } Baileys).
+// ReplyMentions seperti Reply tapi menandai (mention) daftar JID.
 func (c *Ctx) ReplyMentions(ctx context.Context, text string, mentions []types.JID) (whatsmeow.SendResponse, error) {
 	jids := make([]string, len(mentions))
 	for i, m := range mentions {
 		jids[i] = m.String()
 	}
+	ci := c.BuildContextInfo(true)
+	ci.MentionedJID = jids
 	msg := &waE2E.Message{
 		ExtendedTextMessage: &waE2E.ExtendedTextMessage{
-			Text: proto.String(text),
-			ContextInfo: &waE2E.ContextInfo{
-				StanzaID:      proto.String(c.Evt.Info.ID),
-				Participant:   proto.String(c.Evt.Info.Sender.String()),
-				QuotedMessage: c.Evt.Message,
-				MentionedJID:  jids,
-			},
+			Text:        proto.String(text),
+			ContextInfo: ci,
 		},
 	}
 	return c.Client.SendMessage(ctx, c.Evt.Info.Chat, msg)
@@ -314,6 +421,8 @@ var (
 	IsGroupAdminHook func(ctx context.Context, client *whatsmeow.Client, evt *events.Message) bool
 	// StatsHook: catat statistik pemakaian command.
 	StatsHook func(cmdName string, evt *events.Message)
+	// SubBotStatsHook: catat statistik pemakaian command khusus sub-bot / jadibot.
+	SubBotStatsHook func(client *whatsmeow.Client, cmdName string, evt *events.Message, isError bool)
 	// ErrorHook menerima error command/panic agar runtime dapat meneruskannya
 	// ke owner tanpa membuat command dispatcher bergantung pada transport tujuan.
 	ErrorHook func(ctx context.Context, c *Ctx, err error)
@@ -549,6 +658,9 @@ func Dispatch(ctx context.Context, client *whatsmeow.Client, evt *events.Message
 	if StatsHook != nil {
 		StatsHook(cmd.Name, evt)
 	}
+	if subBot && SubBotStatsHook != nil {
+		SubBotStatsHook(client, cmd.Name, evt, false)
+	}
 
 	func() {
 		defer func() {
@@ -556,11 +668,17 @@ func Dispatch(ctx context.Context, client *whatsmeow.Client, evt *events.Message
 				err := fmt.Errorf("panic: %v", r)
 				log.Printf("[rbot] panic di command %q: %v", key, err)
 				notifyErrorHook(ctx, c, err)
+				if subBot && SubBotStatsHook != nil {
+					SubBotStatsHook(client, cmd.Name, evt, true)
+				}
 			}
 		}()
 		if err := cmd.Handler(ctx, c); err != nil {
 			log.Printf("[rbot] error command %q: %v", key, err)
 			notifyErrorHook(ctx, c, err)
+			if subBot && SubBotStatsHook != nil {
+				SubBotStatsHook(client, cmd.Name, evt, true)
+			}
 		}
 	}()
 

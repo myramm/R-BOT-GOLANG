@@ -305,6 +305,7 @@ func attachQuote(msg *waE2E.Message, evt *events.Message) {
 		Participant:   proto.String(evt.Info.Sender.String()),
 		QuotedMessage: evt.Message,
 	}
+	ApplyCustomContextInfo(ci)
 	switch {
 	case msg.ImageMessage != nil:
 		msg.ImageMessage.ContextInfo = ci

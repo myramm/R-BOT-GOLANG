@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -22,6 +23,8 @@ import (
 
 	"rbot/brain/command"
 	"rbot/brain/config"
+	"rbot/brain/stats"
+	"rbot/brain/store"
 	"rbot/brain/welcome"
 )
 
@@ -33,7 +36,52 @@ type SubBotInfo struct {
 	ConnectedAt time.Time
 }
 
-// SubBot merepresentasikan satu sesi sub-bot yang berjalan.
+// CmdLogEntry mendeskripsikan satu entri log eksekusi command pada sub-bot.
+type CmdLogEntry struct {
+	Timestamp  string `json:"timestamp"`
+	Sender     string `json:"sender"`
+	SenderName string `json:"senderName"`
+	Chat       string `json:"chat"`
+	IsGroup    bool   `json:"isGroup"`
+	Command    string `json:"command"`
+	Status     string `json:"status"` // "success" | "error"
+}
+
+// SubBotUserStats mendeskripsikan statistik per user pada sub-bot.
+type SubBotUserStats struct {
+	JID   string `json:"jid"`
+	Name  string `json:"name"`
+	Phone string `json:"phone"`
+	Chats int64  `json:"chats"`
+	Cmds  int64  `json:"cmds"`
+}
+
+// SubBotGroupStats mendeskripsikan statistik per grup pada sub-bot.
+type SubBotGroupStats struct {
+	JID  string `json:"jid"`
+	Name string `json:"name"`
+	Cmds int64  `json:"cmds"`
+}
+
+// SubBotCmdCount mendeskripsikan ranking command.
+type SubBotCmdCount struct {
+	Name  string `json:"name"`
+	Count int64  `json:"count"`
+}
+
+// PersistedSubBotStats menyimpan data statistik sub-bot di store disk.
+type PersistedSubBotStats struct {
+	TotalCmds  int64                     `json:"totalCmds"`
+	CmdCounts  map[string]int64          `json:"cmdCounts"`
+	CmdErrors  map[string]int64          `json:"cmdErrors"`
+	Users      map[string]*stats.Counter `json:"users"`
+	UserNames  map[string]string         `json:"userNames"`
+	Groups     map[string]int64          `json:"groups"`
+	GroupNames map[string]string         `json:"groupNames"`
+	RecentCmds []CmdLogEntry             `json:"recentCmds"`
+}
+
+// SubBot merepresentasikan satu sesi sub-bot yang berjalan beserta metrik telemetry-nya.
 type SubBot struct {
 	Client       *whatsmeow.Client
 	Container    *sqlstore.Container
@@ -41,7 +89,18 @@ type SubBot struct {
 	JID          types.JID
 	OwnerJID     types.JID
 	ConnectedAt  time.Time
+	LastAct      time.Time
 	MessageCount int64
+	TotalCmds    int64
+	CmdCounts    map[string]int64
+	CmdErrors    map[string]int64
+	Users        map[string]*stats.Counter
+	UserNames    map[string]string
+	Groups       map[string]int64
+	GroupNames   map[string]string
+	RecentCmds   []CmdLogEntry
+	LogBuffer    []string
+	mu           sync.RWMutex
 }
 
 // Manager mengelola map sub-bot aktif.
@@ -52,11 +111,403 @@ type Manager struct {
 
 var defaultManager = NewManager()
 
+func init() {
+	command.SubBotStatsHook = func(client *whatsmeow.Client, cmdName string, evt *events.Message, isError bool) {
+		defaultManager.RecordCmdFromClient(client, cmdName, evt, isError)
+	}
+}
+
 // NewManager membuat instance Manager baru.
 func NewManager() *Manager {
 	return &Manager{
 		bots: make(map[string]*SubBot),
 	}
+}
+
+func newSubBot(client *whatsmeow.Client, container *sqlstore.Container, phone string, ownerJID types.JID) *SubBot {
+	sb := &SubBot{
+		Client:      client,
+		Container:   container,
+		Phone:       phone,
+		OwnerJID:    ownerJID,
+		ConnectedAt: time.Now(),
+		LastAct:     time.Now(),
+		CmdCounts:   make(map[string]int64),
+		CmdErrors:   make(map[string]int64),
+		Users:       make(map[string]*stats.Counter),
+		UserNames:   make(map[string]string),
+		Groups:      make(map[string]int64),
+		GroupNames:  make(map[string]string),
+		RecentCmds:  make([]CmdLogEntry, 0, 50),
+		LogBuffer:   make([]string, 0, 100),
+	}
+
+	var p PersistedSubBotStats
+	found, err := store.Get("jadibot_stats_"+phone, &p)
+	if err == nil && found {
+		sb.TotalCmds = p.TotalCmds
+		if p.CmdCounts != nil {
+			sb.CmdCounts = p.CmdCounts
+		}
+		if p.CmdErrors != nil {
+			sb.CmdErrors = p.CmdErrors
+		}
+		if p.Users != nil {
+			sb.Users = p.Users
+		}
+		if p.UserNames != nil {
+			sb.UserNames = p.UserNames
+		}
+		if p.Groups != nil {
+			sb.Groups = p.Groups
+		}
+		if p.GroupNames != nil {
+			sb.GroupNames = p.GroupNames
+		}
+		if p.RecentCmds != nil {
+			sb.RecentCmds = p.RecentCmds
+		}
+	}
+	return sb
+}
+
+func (sb *SubBot) ensureMaps() {
+	if sb.CmdCounts == nil {
+		sb.CmdCounts = make(map[string]int64)
+	}
+	if sb.CmdErrors == nil {
+		sb.CmdErrors = make(map[string]int64)
+	}
+	if sb.Users == nil {
+		sb.Users = make(map[string]*stats.Counter)
+	}
+	if sb.UserNames == nil {
+		sb.UserNames = make(map[string]string)
+	}
+	if sb.Groups == nil {
+		sb.Groups = make(map[string]int64)
+	}
+	if sb.GroupNames == nil {
+		sb.GroupNames = make(map[string]string)
+	}
+	if sb.RecentCmds == nil {
+		sb.RecentCmds = make([]CmdLogEntry, 0, 50)
+	}
+	if sb.LogBuffer == nil {
+		sb.LogBuffer = make([]string, 0, 100)
+	}
+}
+
+func (sb *SubBot) saveStats() {
+	if sb.Phone == "" {
+		return
+	}
+	p := PersistedSubBotStats{
+		TotalCmds:  sb.TotalCmds,
+		CmdCounts:  sb.CmdCounts,
+		CmdErrors:  sb.CmdErrors,
+		Users:      sb.Users,
+		UserNames:  sb.UserNames,
+		Groups:     sb.Groups,
+		GroupNames: sb.GroupNames,
+		RecentCmds: sb.RecentCmds,
+	}
+	_ = store.Set("jadibot_stats_"+sb.Phone, p)
+}
+
+func senderKeySubBot(evt *events.Message) string {
+	if evt == nil {
+		return ""
+	}
+	sender := evt.Info.Sender
+	if sender.IsEmpty() {
+		sender = evt.Info.Chat
+	}
+	user := config.BareNumber(sender.User)
+	if user == "" {
+		return ""
+	}
+	return types.NewJID(user, sender.Server).String()
+}
+
+// RecordChat mencatat pesan masuk di sub-bot.
+func (sb *SubBot) RecordChat(evt *events.Message) {
+	if evt == nil {
+		return
+	}
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
+	sb.ensureMaps()
+
+	sb.MessageCount++
+	sb.LastAct = time.Now()
+
+	senderJID := senderKeySubBot(evt)
+	if senderJID != "" {
+		if sb.Users[senderJID] == nil {
+			sb.Users[senderJID] = &stats.Counter{}
+		}
+		sb.Users[senderJID].Chats++
+		if name := strings.TrimSpace(evt.Info.PushName); name != "" {
+			sb.UserNames[senderJID] = name
+		}
+	}
+
+	if evt.Info.IsGroup {
+		gJID := evt.Info.Chat.String()
+		if _, exists := sb.Groups[gJID]; !exists {
+			sb.Groups[gJID] = 0
+		}
+	}
+
+	sb.saveStats()
+}
+
+// RecordCmd mencatat eksekusi command pada sub-bot.
+func (sb *SubBot) RecordCmd(cmdName string, evt *events.Message, isError bool) {
+	if cmdName == "" || evt == nil {
+		return
+	}
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
+	sb.ensureMaps()
+
+	sb.TotalCmds++
+	sb.CmdCounts[cmdName]++
+	if isError {
+		sb.CmdErrors[cmdName]++
+	}
+	sb.LastAct = time.Now()
+
+	senderJID := senderKeySubBot(evt)
+	senderName := strings.TrimSpace(evt.Info.PushName)
+	if senderName == "" {
+		senderName = "User"
+	}
+
+	if senderJID != "" {
+		if sb.Users[senderJID] == nil {
+			sb.Users[senderJID] = &stats.Counter{}
+		}
+		sb.Users[senderJID].Cmds++
+		sb.UserNames[senderJID] = senderName
+	}
+
+	chatJID := evt.Info.Chat.String()
+	if evt.Info.IsGroup {
+		sb.Groups[chatJID]++
+	}
+
+	status := "success"
+	if isError {
+		status = "error"
+	}
+
+	entry := CmdLogEntry{
+		Timestamp:  time.Now().Format("15:04:05"),
+		Sender:     senderJID,
+		SenderName: senderName,
+		Chat:       chatJID,
+		IsGroup:    evt.Info.IsGroup,
+		Command:    cmdName,
+		Status:     status,
+	}
+
+	sb.RecentCmds = append([]CmdLogEntry{entry}, sb.RecentCmds...)
+	if len(sb.RecentCmds) > 50 {
+		sb.RecentCmds = sb.RecentCmds[:50]
+	}
+
+	sb.saveStats()
+}
+
+// AddLog menambahkan baris log ke ring buffer terisolasi milik sub-bot.
+func (sb *SubBot) AddLog(line string) {
+	if line == "" {
+		return
+	}
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
+	sb.ensureMaps()
+	sb.LogBuffer = append(sb.LogBuffer, line)
+	if len(sb.LogBuffer) > 200 {
+		sb.LogBuffer = sb.LogBuffer[len(sb.LogBuffer)-200:]
+	}
+}
+
+// GetLogs mengambil salinan log sub-bot.
+func (sb *SubBot) GetLogs() []string {
+	sb.mu.RLock()
+	defer sb.mu.RUnlock()
+	out := make([]string, len(sb.LogBuffer))
+	copy(out, sb.LogBuffer)
+	return out
+}
+
+func (sb *SubBot) buildStatsInternal() map[string]any {
+	sb.ensureMaps()
+	topCommands := make([]SubBotCmdCount, 0, len(sb.CmdCounts))
+	for name, count := range sb.CmdCounts {
+		topCommands = append(topCommands, SubBotCmdCount{Name: name, Count: count})
+	}
+	sort.Slice(topCommands, func(i, j int) bool { return topCommands[i].Count > topCommands[j].Count })
+	if len(topCommands) > 15 {
+		topCommands = topCommands[:15]
+	}
+
+	var totalErrors int64
+	for _, errCount := range sb.CmdErrors {
+		totalErrors += errCount
+	}
+
+	topUsers := make([]SubBotUserStats, 0, len(sb.Users))
+	for jid, counter := range sb.Users {
+		if counter == nil {
+			continue
+		}
+		name := sb.UserNames[jid]
+		if name == "" {
+			name = "User"
+		}
+		phone := config.BareNumber(jid)
+		topUsers = append(topUsers, SubBotUserStats{
+			JID:   jid,
+			Name:  name,
+			Phone: phone,
+			Chats: counter.Chats,
+			Cmds:  counter.Cmds,
+		})
+	}
+	sort.Slice(topUsers, func(i, j int) bool {
+		if topUsers[i].Cmds != topUsers[j].Cmds {
+			return topUsers[i].Cmds > topUsers[j].Cmds
+		}
+		return topUsers[i].Chats > topUsers[j].Chats
+	})
+	if len(topUsers) > 25 {
+		topUsers = topUsers[:25]
+	}
+
+	topGroups := make([]SubBotGroupStats, 0, len(sb.Groups))
+	for gJID, cmds := range sb.Groups {
+		name := sb.GroupNames[gJID]
+		if name == "" {
+			name = gJID
+		}
+		topGroups = append(topGroups, SubBotGroupStats{
+			JID:  gJID,
+			Name: name,
+			Cmds: cmds,
+		})
+	}
+	sort.Slice(topGroups, func(i, j int) bool { return topGroups[i].Cmds > topGroups[j].Cmds })
+	if len(topGroups) > 25 {
+		topGroups = topGroups[:25]
+	}
+
+	recent := make([]CmdLogEntry, len(sb.RecentCmds))
+	copy(recent, sb.RecentCmds)
+
+	return map[string]any{
+		"totalErrors": totalErrors,
+		"topCommands": topCommands,
+		"topUsers":    topUsers,
+		"topGroups":   topGroups,
+		"recentCmds":  recent,
+	}
+}
+
+// GetDetailMap mengembalikan map detail lengkap sub-bot.
+func (sb *SubBot) GetDetailMap(idx int) map[string]any {
+	sb.mu.RLock()
+	defer sb.mu.RUnlock()
+
+	jidStr := sb.JID.String()
+	if jidStr == "" && sb.Client != nil && sb.Client.Store != nil && sb.Client.Store.ID != nil {
+		jidStr = sb.Client.Store.ID.String()
+	}
+
+	connected := sb.Client != nil && sb.Client.IsConnected()
+	loggedIn := sb.Client != nil && sb.Client.IsLoggedIn()
+
+	status := "Offline"
+	if connected && loggedIn {
+		status = "Online"
+	} else if connected && !loggedIn {
+		status = "Starting"
+	}
+
+	storageBytes := getSubBotStorageBytes(sb.Phone)
+	storageMb := fmt.Sprintf("%.2f MB", float64(storageBytes)/1024/1024)
+
+	statsMap := sb.buildStatsInternal()
+
+	lastActStr := sb.LastAct.Format("15:04:05")
+	if sb.LastAct.IsZero() {
+		lastActStr = "-"
+	}
+
+	return map[string]any{
+		"id":           sb.Phone,
+		"name":         fmt.Sprintf("Jadibot #%d (+%s)", idx, sb.Phone),
+		"phone":        sb.Phone,
+		"jid":          jidStr,
+		"ownerJid":     sb.OwnerJID.String(),
+		"status":       status,
+		"uptime":       int64(time.Since(sb.ConnectedAt).Seconds()),
+		"startTime":    sb.ConnectedAt.Format("2006-01-02 15:04:05"),
+		"lastActivity": lastActStr,
+		"messageCount": sb.MessageCount,
+		"totalCmds":    sb.TotalCmds,
+		"totalUsers":   len(sb.Users),
+		"totalGroups":  len(sb.Groups),
+		"errorCount":   statsMap["totalErrors"],
+		"topCommands":  statsMap["topCommands"],
+		"topUsers":     statsMap["topUsers"],
+		"topGroups":    statsMap["topGroups"],
+		"recentCmds":   statsMap["recentCmds"],
+		"connected":    connected,
+		"loggedIn":     loggedIn,
+		"storageBytes": storageBytes,
+		"storageMb":    storageMb,
+		"goroutines":   12 + (sb.MessageCount % 5),
+		"pid":          os.Getpid(),
+		"version":      "1.0.0",
+	}
+}
+
+// RecordCmdFromClient mencari instance sub-bot berdasarkan client whatsmeow dan mencatat command-nya.
+func (m *Manager) RecordCmdFromClient(client *whatsmeow.Client, cmdName string, evt *events.Message, isError bool) {
+	if client == nil {
+		return
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, bot := range m.bots {
+		if bot.Client == client {
+			bot.RecordCmd(cmdName, evt, isError)
+			return
+		}
+	}
+}
+
+// GetSubBotDetail mengambil detail lengkap dan log dari sub-bot tertentu.
+func GetSubBotDetail(phone string) (map[string]any, []string, error) {
+	return defaultManager.GetSubBotDetail(phone)
+}
+
+func (m *Manager) GetSubBotDetail(phone string) (map[string]any, []string, error) {
+	phoneDigits := NormalizePhone(phone)
+	m.mu.RLock()
+	bot, exists := m.bots[phoneDigits]
+	m.mu.RUnlock()
+	if !exists || bot == nil {
+		return nil, nil, fmt.Errorf("jadibot %s tidak ditemukan", phone)
+	}
+
+	detail := bot.GetDetailMap(1)
+	logs := bot.GetLogs()
+	return detail, logs, nil
 }
 
 // GetWebList mengembalikan list detail sub-bot untuk web monitoring dashboard.
@@ -115,7 +566,7 @@ func (m *Manager) IsConnected(phone string) bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	bot, exists := m.bots[phoneDigits]
-	if !exists || bot.Client == nil {
+	if !exists || bot == nil || bot.Client == nil {
 		return false
 	}
 	return bot.Client.IsLoggedIn()
@@ -141,6 +592,10 @@ func (m *Manager) GetGlobalWebSummary() map[string]any {
 	online := 0
 	offline := 0
 	var totalStorage int64
+	var totalCommands int64
+	var totalMessages int64
+	allUsers := make(map[string]bool)
+	allCmds := make(map[string]int64)
 
 	for _, bot := range m.bots {
 		connected := bot.Client != nil && bot.Client.IsConnected()
@@ -151,14 +606,39 @@ func (m *Manager) GetGlobalWebSummary() map[string]any {
 			offline++
 		}
 		totalStorage += getSubBotStorageBytes(bot.Phone)
+
+		bot.mu.RLock()
+		bot.ensureMaps()
+		totalCommands += bot.TotalCmds
+		totalMessages += bot.MessageCount
+		for u := range bot.Users {
+			allUsers[u] = true
+		}
+		for cmd, count := range bot.CmdCounts {
+			allCmds[cmd] += count
+		}
+		bot.mu.RUnlock()
+	}
+
+	topCmds := make([]SubBotCmdCount, 0, len(allCmds))
+	for name, count := range allCmds {
+		topCmds = append(topCmds, SubBotCmdCount{Name: name, Count: count})
+	}
+	sort.Slice(topCmds, func(i, j int) bool { return topCmds[i].Count > topCmds[j].Count })
+	if len(topCmds) > 10 {
+		topCmds = topCmds[:10]
 	}
 
 	return map[string]any{
-		"total":        total,
-		"online":       online,
-		"offline":      offline,
-		"max":          config.C.MaxJadibot,
-		"totalStorage": totalStorage,
+		"total":         total,
+		"online":        online,
+		"offline":       offline,
+		"max":           config.C.MaxJadibot,
+		"totalStorage":  totalStorage,
+		"totalCommands": totalCommands,
+		"totalMessages": totalMessages,
+		"totalUsers":    len(allUsers),
+		"topCommands":   topCmds,
 	}
 }
 
@@ -169,44 +649,7 @@ func (m *Manager) GetWebList() []map[string]any {
 	out := make([]map[string]any, 0, len(m.bots))
 	idx := 1
 	for _, bot := range m.bots {
-		jidStr := bot.JID.String()
-		if jidStr == "" && bot.Client != nil && bot.Client.Store != nil && bot.Client.Store.ID != nil {
-			jidStr = bot.Client.Store.ID.String()
-		}
-
-		connected := bot.Client != nil && bot.Client.IsConnected()
-		loggedIn := bot.Client != nil && bot.Client.IsLoggedIn()
-
-		status := "Offline"
-		if connected && loggedIn {
-			status = "Online"
-		} else if connected && !loggedIn {
-			status = "Starting"
-		}
-
-		storageBytes := getSubBotStorageBytes(bot.Phone)
-		storageMb := fmt.Sprintf("%.2f MB", float64(storageBytes)/1024/1024)
-
-		out = append(out, map[string]any{
-			"id":           bot.Phone,
-			"name":         fmt.Sprintf("Jadibot #%d (+%s)", idx, bot.Phone),
-			"phone":        bot.Phone,
-			"jid":          jidStr,
-			"ownerJid":     bot.OwnerJID.String(),
-			"status":       status,
-			"uptime":       int64(time.Since(bot.ConnectedAt).Seconds()),
-			"startTime":    bot.ConnectedAt.Format("2006-01-02 15:04:05"),
-			"lastActivity": time.Now().Format("15:04:05"),
-			"messageCount": bot.MessageCount,
-			"errorCount":   0,
-			"connected":    connected,
-			"loggedIn":     loggedIn,
-			"storageBytes": storageBytes,
-			"storageMb":    storageMb,
-			"goroutines":   12 + (bot.MessageCount % 5),
-			"pid":          os.Getpid(),
-			"version":      "1.0.0",
-		})
+		out = append(out, bot.GetDetailMap(idx))
 		idx++
 	}
 	return out
@@ -310,13 +753,7 @@ func (m *Manager) StartPairing(ctx context.Context, phone string, senderJID type
 	clientLog := waLog.Stdout("JadibotClient-"+phoneDigits, level, true)
 	client := whatsmeow.NewClient(device, clientLog)
 
-	sb := &SubBot{
-		Client:      client,
-		Container:   container,
-		Phone:       phoneDigits,
-		OwnerJID:    senderJID,
-		ConnectedAt: time.Now(),
-	}
+	sb := newSubBot(client, container, phoneDigits, senderJID)
 
 	qrReady := make(chan struct{}, 1)
 	client.AddEventHandler(func(rawEvt interface{}) {
@@ -328,10 +765,13 @@ func (m *Manager) StartPairing(ctx context.Context, phone string, senderJID type
 			}
 		case *events.Message:
 			if sb != nil {
-				sb.MessageCount++
+				sb.RecordChat(evt)
 			}
 			if !evt.Info.IsFromMe && evt.Info.Chat.Server != "broadcast" {
-				logIncomingSubBot(client, evt, "jadibot:"+phoneDigits)
+				logLine := logIncomingSubBot(client, evt, "jadibot:"+phoneDigits)
+				if sb != nil {
+					sb.AddLog(logLine)
+				}
 			}
 			go command.Dispatch(ctx, client, evt, true)
 		case *events.Connected:
@@ -492,21 +932,22 @@ func (m *Manager) Init(ctx context.Context) {
 		clientLog := waLog.Stdout("JadibotClient-"+phoneDigits, level, true)
 		client := whatsmeow.NewClient(device, clientLog)
 
-		sb := &SubBot{
-			Client:      client,
-			Container:   container,
-			Phone:       phoneDigits,
-			JID:         *device.ID,
-			ConnectedAt: time.Now(),
-		}
+		sb := newSubBot(client, container, phoneDigits, types.JID{})
+		sb.JID = *device.ID
 
 		client.AddEventHandler(func(rawEvt interface{}) {
 			switch evt := rawEvt.(type) {
 			case *events.Message:
 				if sb != nil {
-					sb.MessageCount++
+					sb.RecordChat(evt)
 				}
-				command.Dispatch(ctx, client, evt, true)
+				if !evt.Info.IsFromMe && evt.Info.Chat.Server != "broadcast" {
+					logLine := logIncomingSubBot(client, evt, "jadibot:"+phoneDigits)
+					if sb != nil {
+						sb.AddLog(logLine)
+					}
+				}
+				go command.Dispatch(ctx, client, evt, true)
 			case *events.GroupInfo:
 				if len(evt.Join) > 0 {
 					go welcome.HandleGroupJoin(ctx, client, evt)
@@ -586,23 +1027,20 @@ func (m *Manager) Restart(ctx context.Context, phone string) error {
 	clientLog := waLog.Stdout("JadibotClient-"+phoneDigits, level, true)
 	client := whatsmeow.NewClient(device, clientLog)
 
-	sb := &SubBot{
-		Client:      client,
-		Container:   container,
-		Phone:       phoneDigits,
-		JID:         *device.ID,
-		OwnerJID:    ownerJID,
-		ConnectedAt: time.Now(),
-	}
+	sb := newSubBot(client, container, phoneDigits, ownerJID)
+	sb.JID = *device.ID
 
 	client.AddEventHandler(func(rawEvt interface{}) {
 		switch evt := rawEvt.(type) {
 		case *events.Message:
 			if sb != nil {
-				sb.MessageCount++
+				sb.RecordChat(evt)
 			}
 			if !evt.Info.IsFromMe && evt.Info.Chat.Server != "broadcast" {
-				logIncomingSubBot(client, evt, "jadibot:"+phoneDigits)
+				logLine := logIncomingSubBot(client, evt, "jadibot:"+phoneDigits)
+				if sb != nil {
+					sb.AddLog(logLine)
+				}
 			}
 			go command.Dispatch(ctx, client, evt, true)
 		case *events.GroupInfo:
@@ -627,9 +1065,9 @@ func (m *Manager) Restart(ctx context.Context, phone string) error {
 	return nil
 }
 
-func logIncomingSubBot(client *whatsmeow.Client, evt *events.Message, botTag string) {
+func logIncomingSubBot(client *whatsmeow.Client, evt *events.Message, botTag string) string {
 	if evt == nil {
-		return
+		return ""
 	}
 	text := command.ExtractText(evt.Message)
 	msgType := getMessageTypeSubBot(evt, text)
@@ -661,6 +1099,7 @@ func logIncomingSubBot(client *whatsmeow.Client, evt *events.Message, botTag str
 		tStr, botTag, msgType, name, senderLID, chatIDStr, chatType, text)
 
 	log.Println(logLine)
+	return logLine
 }
 
 func getChatIDSubBot(client *whatsmeow.Client, evt *events.Message) string {
@@ -745,8 +1184,11 @@ func messageTypeSubBot(msg *waE2E.Message) string {
 	}
 }
 
-// Delete menghentikan sub-bot dan menghapus permanen data session SQLite miliknya.
+// Delete menghentikan sub-bot dan menghapus permanen data session SQLite miliknya beserta data statistik.
 func (m *Manager) Delete(ctx context.Context, phone string) error {
+	phoneDigits := NormalizePhone(phone)
+	_ = store.Delete("jadibot_stats_" + phoneDigits)
 	return m.Stop(ctx, phone, types.JID{}, true)
 }
+
 

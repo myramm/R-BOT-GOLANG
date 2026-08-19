@@ -85,8 +85,27 @@ type Config struct {
 
 	PipedInstances []string `json:"pipedInstances"`
 
+	ContextInfo ContextInfoConfig `json:"contextInfo"`
+
 	// prefixes disortir panjang-desc untuk MatchPrefix; diisi saat Load.
 	prefixes []string
+}
+
+// ContextInfoConfig mendefinisikan pengaturan kustomisasi ContextInfo (banner ExternalAdReply & Newsletter Channel)
+type ContextInfoConfig struct {
+	Enabled               bool   `json:"enabled"`
+	Title                 string `json:"title"`
+	Body                  string `json:"body"`
+	ThumbnailURL          string `json:"thumbnailUrl"`
+	SourceURL             string `json:"sourceUrl"`
+	MediaType             int    `json:"mediaType"`
+	RenderLargerThumbnail bool   `json:"renderLargerThumbnail"`
+	ShowAdAttribution     bool   `json:"showAdAttribution"`
+	NewsletterJID         string `json:"newsletterJid"`
+	NewsletterName        string `json:"newsletterName"`
+	ServerMessageID       int32  `json:"serverMessageId"`
+	ForwardingScore       uint32 `json:"forwardingScore"`
+	IsForwarded           bool   `json:"isForwarded"`
 }
 
 // C adalah instance global config, terisi setelah Load.

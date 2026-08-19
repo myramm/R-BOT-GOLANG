@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"go.mau.fi/whatsmeow/types"
+	"go.mau.fi/whatsmeow/types/events"
 
 	"rbot/brain/config"
 )
@@ -141,3 +142,50 @@ func TestNormalizePhone(t *testing.T) {
 		}
 	}
 }
+
+func TestSubBotTelemetryAndStats(t *testing.T) {
+	mgr := NewManager()
+	phone := "6281234567890"
+	ownerJID := types.NewJID("62811111111", "s.whatsapp.net")
+
+	sb := newSubBot(nil, nil, phone, ownerJID)
+	mgr.bots[phone] = sb
+
+	evt := &events.Message{}
+	evt.Info.Sender = types.NewJID("62899999999", "s.whatsapp.net")
+	evt.Info.Chat = types.NewJID("62899999999", "s.whatsapp.net")
+	evt.Info.PushName = "TestUser"
+
+	sb.RecordChat(evt)
+	sb.RecordCmd("sticker", evt, false)
+	sb.RecordCmd("sticker", evt, false)
+	sb.RecordCmd("ai", evt, true)
+	sb.AddLog("test log line")
+
+	detail, logs, err := mgr.GetSubBotDetail(phone)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if totalCmds, ok := detail["totalCmds"].(int64); !ok || totalCmds != 3 {
+		t.Errorf("expected totalCmds 3, got %v", detail["totalCmds"])
+	}
+	if errorCount, ok := detail["errorCount"].(int64); !ok || errorCount != 1 {
+		t.Errorf("expected errorCount 1, got %v", detail["errorCount"])
+	}
+	if totalUsers, ok := detail["totalUsers"].(int); !ok || totalUsers != 1 {
+		t.Errorf("expected totalUsers 1, got %v", detail["totalUsers"])
+	}
+	if len(logs) != 1 || logs[0] != "test log line" {
+		t.Errorf("expected logs ['test log line'], got %v", logs)
+	}
+
+	summary := mgr.GetGlobalWebSummary()
+	if totalCmds, ok := summary["totalCommands"].(int64); !ok || totalCmds != 3 {
+		t.Errorf("expected global totalCommands 3, got %v", summary["totalCommands"])
+	}
+	if totalUsers, ok := summary["totalUsers"].(int); !ok || totalUsers != 1 {
+		t.Errorf("expected global totalUsers 1, got %v", summary["totalUsers"])
+	}
+}
+

@@ -29,6 +29,10 @@ func TestBuildStatusPayload(t *testing.T) {
 	if !ok || summary == nil {
 		t.Fatal("expected jadibot summary in status payload")
 	}
+
+	if _, ok := payload["contextInfo"]; !ok {
+		t.Fatal("expected contextInfo in status payload")
+	}
 }
 
 func TestUnauthorizedJadibotEndpoints(t *testing.T) {

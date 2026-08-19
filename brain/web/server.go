@@ -421,6 +421,7 @@ func BuildStatusPayload() map[string]any {
 			"webPort":     config.C.Web.Port,
 		},
 		"stats":            overview,
+		"contextInfo":      settings.GetContextInfo(),
 		"jadibot": map[string]any{
 			"count":   jadibot.Count(),
 			"max":     config.C.MaxJadibot,
@@ -500,6 +501,9 @@ func Start(ctx context.Context) {
 
 	// Bot Mode Endpoints (Self / Public)
 	mux.HandleFunc("/api/mode", handleBotMode)
+
+	// ContextInfo Custom Endpoint
+	mux.HandleFunc("/api/context-info", handleContextInfo)
 
 	// File Manager API Endpoints
 	mux.HandleFunc("/api/files/list", handleFileList)
@@ -1110,33 +1114,66 @@ func handleJadibotDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	list := jadibot.GetWebList()
-	var detail map[string]any
-	for _, item := range list {
-		if p, ok := item["phone"].(string); ok && p == phone {
-			detail = item
-			break
-		}
-	}
-
-	if detail == nil {
+	detail, logs, err := jadibot.GetSubBotDetail(phone)
+	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Jadibot tidak ditemukan"})
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
 		return
-	}
-
-	recentLogs := Broadcaster.GetRecentLogs()
-	if len(recentLogs) > 25 {
-		recentLogs = recentLogs[len(recentLogs)-25:]
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"ok":     true,
 		"detail": detail,
-		"logs":   recentLogs,
+		"logs":   logs,
 	})
+}
+
+func handleContextInfo(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	if r.Method == http.MethodGet {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":          true,
+			"contextInfo": settings.GetContextInfo(),
+		})
+		return
+	}
+
+	if r.Method == http.MethodPost {
+		var req config.ContextInfoConfig
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Format request tidak valid"})
+			return
+		}
+
+		if err := settings.SetContextInfo(req); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": fmt.Sprintf("Gagal menyimpan ContextInfo: %v", err)})
+			return
+		}
+
+		RecordAudit(r, "SETTINGS", "Update konfigurasi Custom ContextInfo")
+		BroadcastMetricsNow()
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":          true,
+			"message":     "Pengaturan ContextInfo berhasil disimpan.",
+			"contextInfo": settings.GetContextInfo(),
+		})
+		return
+	}
+
+	http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 }
 
 func handleSWGCGroups(w http.ResponseWriter, r *http.Request) {

@@ -5,6 +5,7 @@ package settings
 import (
 	"sync"
 
+	"rbot/brain/config"
 	"rbot/brain/store"
 )
 
@@ -18,6 +19,7 @@ type data struct {
 	MutedGroups     map[string]bool            `json:"mutedGroups,omitempty"`
 	GlobalBlacklist map[string]bool            `json:"globalBlacklist,omitempty"`
 	GroupBans       map[string]map[string]bool `json:"groupBans,omitempty"`
+	ContextInfo     *config.ContextInfoConfig  `json:"contextInfo,omitempty"`
 }
 
 var (
@@ -255,3 +257,22 @@ func GetGroupBannedUsers(groupID string) []string {
 type invalidButtonMode struct{ mode int }
 
 func (e *invalidButtonMode) Error() string { return "mode button harus antara 0 dan 4" }
+
+// GetContextInfo mengembalikan konfigurasi ContextInfo yang aktif (dari store jika ada, atau fallback ke config.json).
+func GetContextInfo() config.ContextInfoConfig {
+	mu.RLock()
+	defer mu.RUnlock()
+	if cache.ContextInfo != nil {
+		return *cache.ContextInfo
+	}
+	return config.C.ContextInfo
+}
+
+// SetContextInfo menyimpan kustomisasi ContextInfo ke store runtime.
+func SetContextInfo(ci config.ContextInfoConfig) error {
+	mu.Lock()
+	cache.ContextInfo = &ci
+	snapshot := cache
+	mu.Unlock()
+	return store.Set(storeKey, snapshot)
+}

@@ -120,7 +120,7 @@ func HandleGroupJoin(ctx context.Context, client *whatsmeow.Client, evt *events.
 		msgText = strings.ReplaceAll(msgText, "{group}", groupName)
 		msgText = strings.ReplaceAll(msgText, "{desc}", groupDesc)
 
-		mentionedJIDs := []string{userJID.String()}
+		mentionedJIDs := []string{userJID.ToNonAD().String()}
 
 		msg := &waE2E.Message{
 			ExtendedTextMessage: &waE2E.ExtendedTextMessage{

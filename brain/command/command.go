@@ -349,7 +349,9 @@ func (c *Ctx) BuildContextInfo(quoted bool) *waE2E.ContextInfo {
 	ci := &waE2E.ContextInfo{}
 	if quoted && c.Evt != nil {
 		ci.StanzaID = proto.String(c.Evt.Info.ID)
-		ci.Participant = proto.String(c.Evt.Info.Sender.String())
+		if c.Evt.Info.IsGroup {
+			ci.Participant = proto.String(c.Evt.Info.Sender.ToNonAD().String())
+		}
 		ci.QuotedMessage = c.Evt.Message
 	}
 	ApplyCustomContextInfo(ci)
@@ -367,31 +369,20 @@ func (c *Ctx) Reply(ctx context.Context, text string) (whatsmeow.SendResponse, e
 			ContextInfo: ci,
 		},
 	}
-	if ci != nil && ci.ExternalAdReply != nil {
-		if len(ci.ExternalAdReply.Thumbnail) > 0 {
-			msg.ExtendedTextMessage.JPEGThumbnail = ci.ExternalAdReply.Thumbnail
-		}
-		if ci.ExternalAdReply.Title != nil {
-			msg.ExtendedTextMessage.Title = ci.ExternalAdReply.Title
-		}
-		if ci.ExternalAdReply.Body != nil {
-			msg.ExtendedTextMessage.Description = ci.ExternalAdReply.Body
-		}
-		if ci.ExternalAdReply.SourceURL != nil {
-			msg.ExtendedTextMessage.MatchedText = ci.ExternalAdReply.SourceURL
-		}
-	}
 	resp, err := c.Client.SendMessage(ctx, c.Evt.Info.Chat, msg)
 	if err != nil {
 		log.Printf("[rbot] [Reply] Gagal mengirim balasan dengan ContextInfo (%v). Mencoba fallback pengiriman quote standar...", err)
+		simpleCI := &waE2E.ContextInfo{
+			StanzaID:      proto.String(c.Evt.Info.ID),
+			QuotedMessage: c.Evt.Message,
+		}
+		if c.Evt.Info.IsGroup {
+			simpleCI.Participant = proto.String(c.Evt.Info.Sender.ToNonAD().String())
+		}
 		fallbackMsg := &waE2E.Message{
 			ExtendedTextMessage: &waE2E.ExtendedTextMessage{
-				Text: proto.String(text),
-				ContextInfo: &waE2E.ContextInfo{
-					StanzaID:      proto.String(c.Evt.Info.ID),
-					Participant:   proto.String(c.Evt.Info.Sender.String()),
-					QuotedMessage: c.Evt.Message,
-				},
+				Text:        proto.String(text),
+				ContextInfo: simpleCI,
 			},
 		}
 		resp, err = c.Client.SendMessage(ctx, c.Evt.Info.Chat, fallbackMsg)
@@ -411,7 +402,7 @@ func (c *Ctx) SendText(ctx context.Context, text string) (whatsmeow.SendResponse
 func (c *Ctx) ReplyMentions(ctx context.Context, text string, mentions []types.JID) (whatsmeow.SendResponse, error) {
 	jids := make([]string, len(mentions))
 	for i, m := range mentions {
-		jids[i] = m.String()
+		jids[i] = m.ToNonAD().String()
 	}
 	ci := c.BuildContextInfo(true)
 	ci.MentionedJID = jids
@@ -421,32 +412,21 @@ func (c *Ctx) ReplyMentions(ctx context.Context, text string, mentions []types.J
 			ContextInfo: ci,
 		},
 	}
-	if ci != nil && ci.ExternalAdReply != nil {
-		if len(ci.ExternalAdReply.Thumbnail) > 0 {
-			msg.ExtendedTextMessage.JPEGThumbnail = ci.ExternalAdReply.Thumbnail
-		}
-		if ci.ExternalAdReply.Title != nil {
-			msg.ExtendedTextMessage.Title = ci.ExternalAdReply.Title
-		}
-		if ci.ExternalAdReply.Body != nil {
-			msg.ExtendedTextMessage.Description = ci.ExternalAdReply.Body
-		}
-		if ci.ExternalAdReply.SourceURL != nil {
-			msg.ExtendedTextMessage.MatchedText = ci.ExternalAdReply.SourceURL
-		}
-	}
 	resp, err := c.Client.SendMessage(ctx, c.Evt.Info.Chat, msg)
 	if err != nil {
 		log.Printf("[rbot] [ReplyMentions] Gagal mengirim pesan mentions dengan ContextInfo (%v). Mencoba fallback...", err)
+		simpleCI := &waE2E.ContextInfo{
+			StanzaID:      proto.String(c.Evt.Info.ID),
+			QuotedMessage: c.Evt.Message,
+			MentionedJID:  jids,
+		}
+		if c.Evt.Info.IsGroup {
+			simpleCI.Participant = proto.String(c.Evt.Info.Sender.ToNonAD().String())
+		}
 		fallbackMsg := &waE2E.Message{
 			ExtendedTextMessage: &waE2E.ExtendedTextMessage{
-				Text: proto.String(text),
-				ContextInfo: &waE2E.ContextInfo{
-					StanzaID:      proto.String(c.Evt.Info.ID),
-					Participant:   proto.String(c.Evt.Info.Sender.String()),
-					QuotedMessage: c.Evt.Message,
-					MentionedJID:  jids,
-				},
+				Text:        proto.String(text),
+				ContextInfo: simpleCI,
 			},
 		}
 		resp, err = c.Client.SendMessage(ctx, c.Evt.Info.Chat, fallbackMsg)

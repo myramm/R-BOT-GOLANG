@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"rbot/brain/config"
 	"rbot/brain/store"
 )
 
@@ -31,7 +32,7 @@ var defaultAiFixConfig = AiFixConfig{
 	Temperature: 0.3,
 }
 
-// GetAiFixConfig mengambil konfigurasi AI Fixer dari store.
+// GetAiFixConfig mengambil konfigurasi AI Fixer dari store, dengan fallback cerdas ke API AI utama (config.json).
 func GetAiFixConfig() AiFixConfig {
 	var cfg AiFixConfig
 	found, err := store.Get("aifix_config", &cfg)
@@ -39,18 +40,46 @@ func GetAiFixConfig() AiFixConfig {
 		if cfg.Provider == "" {
 			cfg.Provider = "openai"
 		}
+		if cfg.ApiKey == "" {
+			cfg.ApiKey = config.C.AI.APIKey
+		}
 		if cfg.ApiUrl == "" {
-			cfg.ApiUrl = "https://api.openai.com/v1/chat/completions"
+			if strings.HasPrefix(cfg.ApiKey, "sk-or-") {
+				cfg.ApiUrl = "https://openrouter.ai/api/v1/chat/completions"
+			} else {
+				cfg.ApiUrl = "https://api.openai.com/v1/chat/completions"
+			}
 		}
 		if cfg.Model == "" {
-			cfg.Model = "gpt-4o-mini"
+			if len(config.C.AI.Models) > 0 {
+				cfg.Model = config.C.AI.Models[0]
+			} else {
+				cfg.Model = "gpt-4o-mini"
+			}
 		}
 		if cfg.Temperature <= 0 {
 			cfg.Temperature = 0.3
 		}
 		return cfg
 	}
-	return defaultAiFixConfig
+
+	apiKey := config.C.AI.APIKey
+	apiUrl := "https://api.openai.com/v1/chat/completions"
+	model := "gpt-4o-mini"
+	if strings.HasPrefix(apiKey, "sk-or-") {
+		apiUrl = "https://openrouter.ai/api/v1/chat/completions"
+		if len(config.C.AI.Models) > 0 {
+			model = config.C.AI.Models[0]
+		}
+	}
+
+	return AiFixConfig{
+		Provider:    "openai",
+		ApiUrl:      apiUrl,
+		ApiKey:      apiKey,
+		Model:       model,
+		Temperature: 0.3,
+	}
 }
 
 // SetAiFixConfig menyimpan konfigurasi AI Fixer ke store.

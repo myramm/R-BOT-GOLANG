@@ -251,33 +251,55 @@ func (t *Tracker) GetSummary() map[string]any {
 	}
 }
 
-// ParseLogLine memeriksa apakah baris log mengandung indikator error sistem.
+// ParseLogLine memeriksa apakah baris log adalah pesan log berlevel ERROR, FATAL, atau PANIC.
+// Hanya log yang benar-benar berlevel error (berwarna merah / log level ERROR) yang dicatat ke Error Tracker,
+// bukan sembarang baris teks yang kebetulan memuat kata "error" atau "failed".
 func ParseLogLine(line string) {
 	lower := strings.ToLower(line)
-	if strings.Contains(lower, "panic:") || strings.Contains(lower, "fatal:") || strings.Contains(lower, "error") || strings.Contains(lower, "failed") {
-		// Filter out noise or normal logs
-		if strings.Contains(lower, "no error") || strings.Contains(lower, "0 error") || strings.Contains(lower, "errorcount: 0") {
-			return
-		}
 
-		source := "SYSTEM"
-		if strings.Contains(lower, "[command]") || strings.Contains(lower, "command") {
-			source = "COMMAND"
-		} else if strings.Contains(lower, "[jadibot]") || strings.Contains(lower, "jadibot") {
-			source = "JADIBOT"
-		} else if strings.Contains(lower, "[simi]") {
-			source = "SIMI"
-		} else if strings.Contains(lower, "[web]") || strings.Contains(lower, "http:") {
-			source = "WEB_API"
-		} else if strings.Contains(lower, "whatsmeow") || strings.Contains(lower, "whatsapp") {
-			source = "WHATSAPP"
-		}
-
-		cleanMsg := strings.TrimSpace(line)
-		if len(cleanMsg) > 300 {
-			cleanMsg = cleanMsg[:300] + "…"
-		}
-
-		RecordError(source, cleanMsg, line)
+	// Filter keluar log info, debug, warn, tracker, atau metrik normal
+	if strings.Contains(lower, "[info]") || strings.Contains(lower, "level=info") ||
+		strings.Contains(lower, "[debug]") || strings.Contains(lower, "level=debug") ||
+		strings.Contains(lower, "[warn]") || strings.Contains(lower, "level=warn") ||
+		strings.Contains(lower, "errorcount") || strings.Contains(lower, "errortracker") ||
+		strings.Contains(lower, "top command error") || strings.Contains(lower, "no error") ||
+		strings.Contains(lower, "0 error") || strings.Contains(lower, "errors: 0") ||
+		strings.Contains(lower, "metrics") || strings.Contains(lower, "[audit]") {
+		return
 	}
+
+	// Hanya proses jika memiliki penanda log level ERROR / FATAL / PANIC eksplisit
+	isRealError := strings.Contains(lower, "[error]") ||
+		strings.Contains(lower, "level=error") ||
+		strings.Contains(lower, "level=\"error\"") ||
+		strings.Contains(lower, "[fatal]") ||
+		strings.Contains(lower, "level=fatal") ||
+		strings.Contains(lower, "level=\"fatal\"") ||
+		strings.Contains(lower, "panic:") ||
+		strings.Contains(lower, "fatal error:") ||
+		strings.Contains(lower, "[panic]")
+
+	if !isRealError {
+		return
+	}
+
+	source := "SYSTEM"
+	if strings.Contains(lower, "[command]") || strings.Contains(lower, "command") {
+		source = "COMMAND"
+	} else if strings.Contains(lower, "[jadibot]") || strings.Contains(lower, "jadibot") {
+		source = "JADIBOT"
+	} else if strings.Contains(lower, "[simi]") {
+		source = "SIMI"
+	} else if strings.Contains(lower, "[web]") || strings.Contains(lower, "http:") {
+		source = "WEB_API"
+	} else if strings.Contains(lower, "whatsmeow") || strings.Contains(lower, "whatsapp") {
+		source = "WHATSAPP"
+	}
+
+	cleanMsg := strings.TrimSpace(line)
+	if len(cleanMsg) > 300 {
+		cleanMsg = cleanMsg[:300] + "…"
+	}
+
+	RecordError(source, cleanMsg, line)
 }

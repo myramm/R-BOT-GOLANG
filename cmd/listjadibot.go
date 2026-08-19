@@ -37,10 +37,18 @@ func init() {
 
 			var mentions []types.JID
 			for i, b := range bots {
+				ownerJID := b.OwnerJID
+				if ownerJID.IsEmpty() {
+					if !b.JID.IsEmpty() {
+						ownerJID = b.JID.ToNonAD()
+					} else if b.Phone != "" {
+						ownerJID = types.NewJID(b.Phone, types.DefaultUserServer)
+					}
+				}
 				ownerStr := "-"
-				if !b.OwnerJID.IsEmpty() {
-					ownerStr = "@" + b.OwnerJID.User
-					mentions = append(mentions, b.OwnerJID)
+				if !ownerJID.IsEmpty() {
+					ownerStr = "@" + ownerJID.User
+					mentions = append(mentions, ownerJID)
 				}
 				uptimeStr := cmdfunc.FormatUptime(time.Since(b.ConnectedAt))
 				fmt.Fprintf(&sb, "%d. *Nomor:* %s\n   *Owner:* %s\n   *Uptime:* %s\n\n", i+1, b.Phone, ownerStr, uptimeStr)

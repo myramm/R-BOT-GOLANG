@@ -73,14 +73,16 @@ type SubBotCmdCount struct {
 
 // PersistedSubBotStats menyimpan data statistik sub-bot di store disk.
 type PersistedSubBotStats struct {
-	TotalCmds  int64                     `json:"totalCmds"`
-	CmdCounts  map[string]int64          `json:"cmdCounts"`
-	CmdErrors  map[string]int64          `json:"cmdErrors"`
-	Users      map[string]*stats.Counter `json:"users"`
-	UserNames  map[string]string         `json:"userNames"`
-	Groups     map[string]int64          `json:"groups"`
-	GroupNames map[string]string         `json:"groupNames"`
-	RecentCmds []CmdLogEntry             `json:"recentCmds"`
+	OwnerJID    string                    `json:"ownerJid,omitempty"`
+	ConnectedAt time.Time                 `json:"connectedAt,omitempty"`
+	TotalCmds   int64                     `json:"totalCmds"`
+	CmdCounts   map[string]int64          `json:"cmdCounts"`
+	CmdErrors   map[string]int64          `json:"cmdErrors"`
+	Users       map[string]*stats.Counter `json:"users"`
+	UserNames   map[string]string         `json:"userNames"`
+	Groups      map[string]int64          `json:"groups"`
+	GroupNames  map[string]string         `json:"groupNames"`
+	RecentCmds  []CmdLogEntry             `json:"recentCmds"`
 }
 
 // SubBot merepresentasikan satu sesi sub-bot yang berjalan beserta metrik telemetry-nya.
@@ -147,6 +149,14 @@ func newSubBot(client *whatsmeow.Client, container *sqlstore.Container, phone st
 	var p PersistedSubBotStats
 	found, err := store.Get("jadibot_stats_"+phone, &p)
 	if err == nil && found {
+		if sb.OwnerJID.IsEmpty() && p.OwnerJID != "" {
+			if parsed, err := types.ParseJID(p.OwnerJID); err == nil {
+				sb.OwnerJID = parsed
+			}
+		}
+		if !p.ConnectedAt.IsZero() {
+			sb.ConnectedAt = p.ConnectedAt
+		}
 		sb.TotalCmds = p.TotalCmds
 		if p.CmdCounts != nil {
 			sb.CmdCounts = p.CmdCounts
@@ -170,6 +180,11 @@ func newSubBot(client *whatsmeow.Client, container *sqlstore.Container, phone st
 			sb.RecentCmds = p.RecentCmds
 		}
 	}
+	// Jika OwnerJID masih kosong (misal database lama/sesi baru), default ke nomor bot itu sendiri
+	if sb.OwnerJID.IsEmpty() && phone != "" {
+		sb.OwnerJID = types.NewJID(phone, types.DefaultUserServer)
+	}
+	sb.saveStats()
 	return sb
 }
 
@@ -205,14 +220,16 @@ func (sb *SubBot) saveStats() {
 		return
 	}
 	p := PersistedSubBotStats{
-		TotalCmds:  sb.TotalCmds,
-		CmdCounts:  sb.CmdCounts,
-		CmdErrors:  sb.CmdErrors,
-		Users:      sb.Users,
-		UserNames:  sb.UserNames,
-		Groups:     sb.Groups,
-		GroupNames: sb.GroupNames,
-		RecentCmds: sb.RecentCmds,
+		OwnerJID:    sb.OwnerJID.String(),
+		ConnectedAt: sb.ConnectedAt,
+		TotalCmds:   sb.TotalCmds,
+		CmdCounts:   sb.CmdCounts,
+		CmdErrors:   sb.CmdErrors,
+		Users:       sb.Users,
+		UserNames:   sb.UserNames,
+		Groups:      sb.Groups,
+		GroupNames:  sb.GroupNames,
+		RecentCmds:  sb.RecentCmds,
 	}
 	_ = store.Set("jadibot_stats_"+sb.Phone, p)
 }
@@ -800,10 +817,18 @@ func (m *Manager) List() []SubBotInfo {
 		if jid.IsEmpty() && bot.Client != nil && bot.Client.Store != nil && bot.Client.Store.ID != nil {
 			jid = *bot.Client.Store.ID
 		}
+		ownerJID := bot.OwnerJID
+		if ownerJID.IsEmpty() {
+			if !jid.IsEmpty() {
+				ownerJID = jid.ToNonAD()
+			} else if bot.Phone != "" {
+				ownerJID = types.NewJID(bot.Phone, types.DefaultUserServer)
+			}
+		}
 		out = append(out, SubBotInfo{
 			Phone:       bot.Phone,
 			JID:         jid,
-			OwnerJID:    bot.OwnerJID,
+			OwnerJID:    ownerJID,
 			ConnectedAt: bot.ConnectedAt,
 		})
 	}

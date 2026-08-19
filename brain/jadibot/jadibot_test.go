@@ -10,6 +10,7 @@ import (
 	"go.mau.fi/whatsmeow/types/events"
 
 	"rbot/brain/config"
+	"rbot/brain/store"
 )
 
 func TestManagerEmpty(t *testing.T) {
@@ -186,6 +187,28 @@ func TestSubBotTelemetryAndStats(t *testing.T) {
 	}
 	if totalUsers, ok := summary["totalUsers"].(int); !ok || totalUsers != 1 {
 		t.Errorf("expected global totalUsers 1, got %v", summary["totalUsers"])
+	}
+}
+
+func TestSubBotOwnerPersistence(t *testing.T) {
+	dir := t.TempDir()
+	if err := store.Open(dir); err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	defer store.Close()
+
+	phone := "62811130441"
+	ownerJID := types.NewJID("62899998888", "s.whatsapp.net")
+
+	sb1 := newSubBot(nil, nil, phone, ownerJID)
+	if sb1.OwnerJID != ownerJID {
+		t.Fatalf("expected sb1.OwnerJID %v, got %v", ownerJID, sb1.OwnerJID)
+	}
+
+	// Simulate restart: newSubBot called with empty ownerJID (e.g. from Init reading files from disk)
+	sb2 := newSubBot(nil, nil, phone, types.JID{})
+	if sb2.OwnerJID != ownerJID {
+		t.Fatalf("expected restored OwnerJID %v after restart, got %v", ownerJID, sb2.OwnerJID)
 	}
 }
 

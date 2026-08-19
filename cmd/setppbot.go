@@ -131,18 +131,34 @@ func fetchImageFromURL(ctx context.Context, urlStr string) ([]byte, error) {
 }
 
 func ProcessProfilePicture(ctx context.Context, data []byte) ([]byte, error) {
-	return ProcessProfilePictureWithSize(ctx, data, 720)
+	return ProcessProfilePictureWithDimensions(ctx, data, 720, 720)
 }
 
 func ProcessProfilePictureWithSize(ctx context.Context, data []byte, targetDim int) ([]byte, error) {
-	if targetDim <= 0 {
-		targetDim = 720
+	return ProcessProfilePictureWithDimensions(ctx, data, targetDim, targetDim)
+}
+
+// ProcessProfilePictureWithDimensions memproses gambar ke resolusi custom Width (W) x Height (H) dengan auto center-crop aspect ratio dan kompresi JPEG.
+func ProcessProfilePictureWithDimensions(ctx context.Context, data []byte, targetW, targetH int) ([]byte, error) {
+	if targetW <= 0 && targetH <= 0 {
+		targetW, targetH = 720, 720
+	} else if targetW <= 0 {
+		targetW = targetH
+	} else if targetH <= 0 {
+		targetH = targetW
 	}
-	if targetDim < 96 {
-		targetDim = 96
+
+	if targetW < 96 {
+		targetW = 96
 	}
-	if targetDim > 2048 {
-		targetDim = 2048
+	if targetW > 4096 {
+		targetW = 4096
+	}
+	if targetH < 96 {
+		targetH = 96
+	}
+	if targetH > 4096 {
+		targetH = 4096
 	}
 
 	src, _, err := image.Decode(bytes.NewReader(data))
@@ -165,13 +181,33 @@ func ProcessProfilePictureWithSize(ctx context.Context, data []byte, targetDim i
 		return nil, fmt.Errorf("dimensi gambar tidak valid (%dx%d)", w, h)
 	}
 
-	size := w
-	if h < size {
-		size = h
+	targetAspect := float64(targetW) / float64(targetH)
+	srcAspect := float64(w) / float64(h)
+
+	var cropW, cropH int
+	var startX, startY int
+
+	if srcAspect > targetAspect {
+		// Gambar asli lebih lebar -> potong sisi kiri dan kanan
+		cropH = h
+		cropW = int(float64(h) * targetAspect)
+		if cropW > w {
+			cropW = w
+		}
+		startX = bounds.Min.X + (w-cropW)/2
+		startY = bounds.Min.Y
+	} else {
+		// Gambar asli lebih tinggi -> potong sisi atas dan bawah
+		cropW = w
+		cropH = int(float64(w) / targetAspect)
+		if cropH > h {
+			cropH = h
+		}
+		startX = bounds.Min.X
+		startY = bounds.Min.Y + (h-cropH)/2
 	}
-	startX := bounds.Min.X + (w-size)/2
-	startY := bounds.Min.Y + (h-size)/2
-	cropRect := image.Rect(startX, startY, startX+size, startY+size)
+
+	cropRect := image.Rect(startX, startY, startX+cropW, startY+cropH)
 
 	type subImager interface {
 		SubImage(r image.Rectangle) image.Image
@@ -181,16 +217,16 @@ func ProcessProfilePictureWithSize(ctx context.Context, data []byte, targetDim i
 	if si, ok := src.(subImager); ok {
 		cropped = si.SubImage(cropRect)
 	} else {
-		rgba := image.NewRGBA(image.Rect(0, 0, size, size))
+		rgba := image.NewRGBA(image.Rect(0, 0, cropW, cropH))
 		draw.Draw(rgba, rgba.Bounds(), src, cropRect.Min, draw.Src)
 		cropped = rgba
 	}
 
-	dst := image.NewRGBA(image.Rect(0, 0, targetDim, targetDim))
+	dst := image.NewRGBA(image.Rect(0, 0, targetW, targetH))
 	draw.BiLinear.Scale(dst, dst.Bounds(), cropped, cropped.Bounds(), draw.Over, nil)
 
 	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, dst, &jpeg.Options{Quality: 90}); err != nil {
+	if err := jpeg.Encode(&buf, dst, &jpeg.Options{Quality: 92}); err != nil {
 		return nil, fmt.Errorf("gagal encode JPEG foto profil: %w", err)
 	}
 

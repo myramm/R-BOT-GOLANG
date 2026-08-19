@@ -2242,17 +2242,30 @@
           </div>
 
           <div>
-            <label style="font-size: 0.775rem; font-weight: 600; color: var(--text-sub); display: block; margin-bottom: 0.35rem;">4. Pilihan Resolusi (Persegi 1:1 Scale-to-Fit):</label>
-            <div style="display: flex; gap: 0.5rem; align-items: center;">
-              <select id="botPPSizeSelect" class="input-field" style="flex: 1;" onchange="handlePPSizeSelectChange(this.value)">
-                <option value="720" selected>720 x 720 px (Standar Jimp / HD)</option>
-                <option value="1080">1080 x 1080 px (Full HD Ultra Clarity)</option>
-                <option value="640">640 x 640 px (Medium High)</option>
-                <option value="500">500 x 500 px (Standard)</option>
-                <option value="320">320 x 320 px (Compact)</option>
-                <option value="custom">✏️ Custom Ukuran Sendiri...</option>
+            <label style="font-size: 0.775rem; font-weight: 600; color: var(--text-sub); display: block; margin-bottom: 0.35rem;">4. Pilihan Resolusi (Width x Height):</label>
+            <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+              <select id="botPPSizeSelect" class="input-field" onchange="handlePPSizeSelectChange(this.value)">
+                <option value="720x720" selected>720 x 720 px (Persegi 1:1 HD — Standar Jimp)</option>
+                <option value="1080x1080">1080 x 1080 px (Persegi 1:1 Full HD)</option>
+                <option value="1080x1920">1080 x 1920 px (Portrait 9:16 Full Screen / Story)</option>
+                <option value="720x1280">720 x 1280 px (Portrait 9:16 HD)</option>
+                <option value="1920x1080">1920 x 1080 px (Landscape 16:9 Full HD)</option>
+                <option value="640x640">640 x 640 px (Medium High)</option>
+                <option value="500x500">500 x 500 px (Standard)</option>
+                <option value="custom">✏️ Custom 2 Input (Width & Height Manual)...</option>
               </select>
-              <input type="number" id="botPPCustomSizeInput" class="input-field" placeholder="px (contoh: 720)" style="width: 140px; display: none;" min="96" max="2048" value="720">
+
+              <div id="botPPCustomDimensionBox" style="display: none; background: #06090e; padding: 0.65rem; border-radius: 6px; border: 1px solid var(--border-color); gap: 0.5rem; align-items: center;">
+                <div style="flex: 1;">
+                  <label style="font-size: 0.7rem; color: var(--text-muted); display: block; margin-bottom: 0.2rem;">Lebar (Width / W):</label>
+                  <input type="number" id="botPPCustomWidthInput" class="input-field" placeholder="1080" min="96" max="4096" value="1080">
+                </div>
+                <div style="font-size: 0.85rem; font-weight: 700; color: var(--text-muted); margin-top: 1rem;">✕</div>
+                <div style="flex: 1;">
+                  <label style="font-size: 0.7rem; color: var(--text-muted); display: block; margin-bottom: 0.2rem;">Tinggi (Height / H):</label>
+                  <input type="number" id="botPPCustomHeightInput" class="input-field" placeholder="1920" min="96" max="4096" value="1920">
+                </div>
+              </div>
             </div>
           </div>
 
@@ -7946,10 +7959,13 @@
     }
 
     function handlePPSizeSelectChange(val) {
-      const customInput = document.getElementById('botPPCustomSizeInput');
-      if (customInput) {
-        customInput.style.display = val === 'custom' ? 'block' : 'none';
-        if (val === 'custom') customInput.focus();
+      const customBox = document.getElementById('botPPCustomDimensionBox');
+      if (customBox) {
+        customBox.style.display = val === 'custom' ? 'flex' : 'none';
+        if (val === 'custom') {
+          const wIn = document.getElementById('botPPCustomWidthInput');
+          if (wIn) wIn.focus();
+        }
       }
     }
 
@@ -7957,18 +7973,24 @@
       const fileInput = document.getElementById('botPPFileInput');
       const urlInput = document.getElementById('botPPUrlInput');
       const sizeSelect = document.getElementById('botPPSizeSelect');
-      const customSizeInput = document.getElementById('botPPCustomSizeInput');
+      const widthInput = document.getElementById('botPPCustomWidthInput');
+      const heightInput = document.getElementById('botPPCustomHeightInput');
       const targetSelect = document.getElementById('botPPTargetSelect');
       const btn = document.getElementById('submitBotPPBtn');
 
       const file = fileInput && fileInput.files && fileInput.files[0];
       const url = urlInput ? urlInput.value.trim() : '';
       
-      let size = 720;
+      let targetW = 720;
+      let targetH = 720;
+
       if (sizeSelect && sizeSelect.value === 'custom') {
-        size = parseInt(customSizeInput?.value, 10) || 720;
-      } else if (sizeSelect) {
-        size = parseInt(sizeSelect.value, 10) || 720;
+        targetW = parseInt(widthInput?.value, 10) || 1080;
+        targetH = parseInt(heightInput?.value, 10) || 1920;
+      } else if (sizeSelect && sizeSelect.value.includes('x')) {
+        const parts = sizeSelect.value.split('x');
+        targetW = parseInt(parts[0], 10) || 720;
+        targetH = parseInt(parts[1], 10) || targetW;
       }
 
       const targetBot = targetSelect ? targetSelect.value : 'main';
@@ -8008,7 +8030,9 @@
       if (file) {
         const formData = new FormData();
         formData.append('image', file);
-        formData.append('size', size);
+        formData.append('width', targetW);
+        formData.append('height', targetH);
+        formData.append('size', targetW);
         formData.append('bot', targetBot);
 
         fetch('/api/bot/setpp', {
@@ -8026,7 +8050,7 @@
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${authToken}`
           },
-          body: JSON.stringify({ url: url, size: size, bot: targetBot })
+          body: JSON.stringify({ url: url, width: targetW, height: targetH, size: targetW, bot: targetBot })
         })
         .then(res => res.json())
         .then(handlePPResponse)

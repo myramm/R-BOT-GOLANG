@@ -2666,15 +2666,28 @@ func handleSetPPBotWeb(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var rawBytes []byte
-	var targetDim int
+	var targetW, targetH int
 	var targetBot string
 	var err error
 
 	// 1. Cek upload file multipart form
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
 		if parseErr := r.ParseMultipartForm(16 << 20); parseErr == nil {
-			if sVal := r.FormValue("size"); sVal != "" {
-				targetDim, _ = strconv.Atoi(sVal)
+			if wVal := r.FormValue("width"); wVal != "" {
+				targetW, _ = strconv.Atoi(wVal)
+			} else if wVal := r.FormValue("w"); wVal != "" {
+				targetW, _ = strconv.Atoi(wVal)
+			}
+			if hVal := r.FormValue("height"); hVal != "" {
+				targetH, _ = strconv.Atoi(hVal)
+			} else if hVal := r.FormValue("h"); hVal != "" {
+				targetH, _ = strconv.Atoi(hVal)
+			}
+			if targetW <= 0 && targetH <= 0 {
+				if sVal := r.FormValue("size"); sVal != "" {
+					s, _ := strconv.Atoi(sVal)
+					targetW, targetH = s, s
+				}
 			}
 			targetBot = strings.TrimSpace(r.FormValue("bot"))
 			file, _, fErr := r.FormFile("image")
@@ -2685,16 +2698,30 @@ func handleSetPPBotWeb(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 2. Cek JSON payload { "url": "https://...", "size": 1080, "bot": "main" }
+	// 2. Cek JSON payload { "url": "https://...", "width": 1080, "height": 1920, "bot": "main" }
 	if len(rawBytes) == 0 {
 		var req struct {
-			URL  string `json:"url"`
-			Size int    `json:"size"`
-			Bot  string `json:"bot"`
+			URL    string `json:"url"`
+			Size   int    `json:"size"`
+			Width  int    `json:"width"`
+			Height int    `json:"height"`
+			W      int    `json:"w"`
+			H      int    `json:"h"`
+			Bot    string `json:"bot"`
 		}
 		if json.NewDecoder(r.Body).Decode(&req) == nil && strings.TrimSpace(req.URL) != "" {
-			if req.Size > 0 {
-				targetDim = req.Size
+			if req.Width > 0 {
+				targetW = req.Width
+			} else if req.W > 0 {
+				targetW = req.W
+			}
+			if req.Height > 0 {
+				targetH = req.Height
+			} else if req.H > 0 {
+				targetH = req.H
+			}
+			if targetW <= 0 && targetH <= 0 && req.Size > 0 {
+				targetW, targetH = req.Size, req.Size
 			}
 			if req.Bot != "" {
 				targetBot = req.Bot
@@ -2754,15 +2781,19 @@ func handleSetPPBotWeb(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if targetDim <= 0 {
-		targetDim = 720
+	if targetW <= 0 && targetH <= 0 {
+		targetW, targetH = 720, 720
+	} else if targetW <= 0 {
+		targetW = targetH
+	} else if targetH <= 0 {
+		targetH = targetW
 	}
 
-	// 3. Crop 1:1 & Resize ke targetDim x targetDim JPEG menggunakan cmd.ProcessProfilePictureWithSize
+	// 3. Crop & Resize ke targetW x targetH JPEG menggunakan cmd.ProcessProfilePictureWithDimensions
 	procCtx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
 	defer cancel()
 
-	imgJpeg, err := cmd.ProcessProfilePictureWithSize(procCtx, rawBytes, targetDim)
+	imgJpeg, err := cmd.ProcessProfilePictureWithDimensions(procCtx, rawBytes, targetW, targetH)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)

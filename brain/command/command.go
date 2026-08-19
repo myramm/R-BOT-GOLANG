@@ -343,18 +343,75 @@ func ApplyCustomContextInfo(ci *waE2E.ContextInfo) {
 	ci.ExternalAdReply = adReply
 }
 
+// cleanQuotedMessage membersihkan pesan yang dikutip agar tidak memiliki ContextInfo bersarang
+// dan mengekstrak pesan asli dari pembungkus Ephemeral / ViewOnce sehingga WA Mobile dapat merendernya.
+func cleanQuotedMessage(m *waE2E.Message) *waE2E.Message {
+	if m == nil {
+		return nil
+	}
+	if eph := m.GetEphemeralMessage(); eph != nil && eph.Message != nil {
+		m = eph.Message
+	}
+	if viewOnce := m.GetViewOnceMessage(); viewOnce != nil && viewOnce.Message != nil {
+		m = viewOnce.Message
+	}
+	if viewOnceV2 := m.GetViewOnceMessageV2(); viewOnceV2 != nil && viewOnceV2.Message != nil {
+		m = viewOnceV2.Message
+	}
+
+	clean := &waE2E.Message{}
+	switch {
+	case m.Conversation != nil:
+		clean.Conversation = m.Conversation
+	case m.ExtendedTextMessage != nil:
+		clean.ExtendedTextMessage = &waE2E.ExtendedTextMessage{
+			Text: m.ExtendedTextMessage.Text,
+		}
+	case m.ImageMessage != nil:
+		im := *m.ImageMessage
+		im.ContextInfo = nil
+		clean.ImageMessage = &im
+	case m.VideoMessage != nil:
+		vm := *m.VideoMessage
+		vm.ContextInfo = nil
+		clean.VideoMessage = &vm
+	case m.DocumentMessage != nil:
+		dm := *m.DocumentMessage
+		dm.ContextInfo = nil
+		clean.DocumentMessage = &dm
+	case m.AudioMessage != nil:
+		am := *m.AudioMessage
+		am.ContextInfo = nil
+		clean.AudioMessage = &am
+	case m.StickerMessage != nil:
+		sm := *m.StickerMessage
+		sm.ContextInfo = nil
+		clean.StickerMessage = &sm
+	default:
+		text := ExtractText(m)
+		if text != "" {
+			clean.Conversation = proto.String(text)
+		} else {
+			clean = m
+		}
+	}
+	return clean
+}
+
 // BuildContextInfo membuat ContextInfo dengan quote (bila diminta) dan menyematkan
 // ExternalAdReply / Newsletter info sesuai konfigurasi yang aktif.
 func (c *Ctx) BuildContextInfo(quoted bool) *waE2E.ContextInfo {
 	ci := &waE2E.ContextInfo{}
 	if quoted && c.Evt != nil && c.Evt.Info.ID != "" {
 		ci.StanzaID = proto.String(c.Evt.Info.ID)
-		participant := c.Evt.Info.Sender.ToNonAD().String()
-		if participant != "" {
-			ci.Participant = proto.String(participant)
+		// Di WA Biasa / Mobile, Participant HANYA boleh ada di Grup (bukan Private Chat)
+		if c.Evt.Info.IsGroup {
+			if participant := c.Evt.Info.Sender.ToNonAD().String(); participant != "" {
+				ci.Participant = proto.String(participant)
+			}
 		}
 		if c.Evt.Message != nil {
-			ci.QuotedMessage = c.Evt.Message
+			ci.QuotedMessage = cleanQuotedMessage(c.Evt.Message)
 		}
 	}
 	ApplyCustomContextInfo(ci)
@@ -377,10 +434,12 @@ func (c *Ctx) Reply(ctx context.Context, text string) (whatsmeow.SendResponse, e
 		log.Printf("[rbot] [Reply] Gagal mengirim ExtendedTextMessage (%v). Mencoba fallback quote standar...", err)
 		simpleCI := &waE2E.ContextInfo{
 			StanzaID:      proto.String(c.Evt.Info.ID),
-			QuotedMessage: c.Evt.Message,
+			QuotedMessage: cleanQuotedMessage(c.Evt.Message),
 		}
-		if participant := c.Evt.Info.Sender.ToNonAD().String(); participant != "" {
-			simpleCI.Participant = proto.String(participant)
+		if c.Evt.Info.IsGroup {
+			if participant := c.Evt.Info.Sender.ToNonAD().String(); participant != "" {
+				simpleCI.Participant = proto.String(participant)
+			}
 		}
 		fallbackMsg := &waE2E.Message{
 			ExtendedTextMessage: &waE2E.ExtendedTextMessage{
@@ -424,11 +483,13 @@ func (c *Ctx) ReplyMentions(ctx context.Context, text string, mentions []types.J
 		log.Printf("[rbot] [ReplyMentions] Gagal mengirim pesan mentions dengan ContextInfo (%v). Mencoba fallback...", err)
 		simpleCI := &waE2E.ContextInfo{
 			StanzaID:      proto.String(c.Evt.Info.ID),
-			QuotedMessage: c.Evt.Message,
+			QuotedMessage: cleanQuotedMessage(c.Evt.Message),
 			MentionedJID:  jids,
 		}
-		if participant := c.Evt.Info.Sender.ToNonAD().String(); participant != "" {
-			simpleCI.Participant = proto.String(participant)
+		if c.Evt.Info.IsGroup {
+			if participant := c.Evt.Info.Sender.ToNonAD().String(); participant != "" {
+				simpleCI.Participant = proto.String(participant)
+			}
 		}
 		fallbackMsg := &waE2E.Message{
 			ExtendedTextMessage: &waE2E.ExtendedTextMessage{

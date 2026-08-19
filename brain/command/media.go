@@ -302,7 +302,7 @@ func buildMediaMessage(kind MediaKind, up whatsmeow.UploadResponse, caption, fil
 func attachQuote(msg *waE2E.Message, evt *events.Message) {
 	ci := &waE2E.ContextInfo{
 		StanzaID:      proto.String(evt.Info.ID),
-		QuotedMessage: evt.Message,
+		QuotedMessage: cleanQuotedMessage(evt.Message),
 	}
 	if evt.Info.IsGroup {
 		ci.Participant = proto.String(evt.Info.Sender.ToNonAD().String())

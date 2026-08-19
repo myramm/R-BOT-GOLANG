@@ -27,6 +27,9 @@ func Candidates(evt *events.Message) []string {
 	}
 	add(evt.Info.Sender)
 	add(evt.Info.SenderAlt)
+	if !evt.Info.IsGroup {
+		add(evt.Info.Chat)
+	}
 	return out
 }
 
@@ -36,11 +39,14 @@ func SenderPhone(evt *events.Message) string {
 	if evt == nil {
 		return ""
 	}
-	if evt.Info.Sender.Server == "s.whatsapp.net" {
+	if evt.Info.Sender.Server == "s.whatsapp.net" && evt.Info.Sender.User != "" {
 		return evt.Info.Sender.User
 	}
 	if evt.Info.SenderAlt.Server == "s.whatsapp.net" && !evt.Info.SenderAlt.IsEmpty() {
 		return evt.Info.SenderAlt.User
+	}
+	if !evt.Info.IsGroup && evt.Info.Chat.Server == "s.whatsapp.net" && evt.Info.Chat.User != "" {
+		return evt.Info.Chat.User
 	}
 	return evt.Info.Sender.User
 }

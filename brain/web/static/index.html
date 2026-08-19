@@ -2242,14 +2242,18 @@
           </div>
 
           <div>
-            <label style="font-size: 0.775rem; font-weight: 600; color: var(--text-sub); display: block; margin-bottom: 0.35rem;">4. Custom Ukuran Resolusi (Persegi 1:1):</label>
-            <select id="botPPSizeSelect" class="input-field">
-              <option value="720" selected>720 x 720 px (HD Standard — Direkomendasikan)</option>
-              <option value="1080">1080 x 1080 px (Full HD Ultra Clarity)</option>
-              <option value="640">640 x 640 px (Medium High)</option>
-              <option value="500">500 x 500 px (Standard)</option>
-              <option value="320">320 x 320 px (Low Bandwidth / Compact)</option>
-            </select>
+            <label style="font-size: 0.775rem; font-weight: 600; color: var(--text-sub); display: block; margin-bottom: 0.35rem;">4. Pilihan Resolusi (Persegi 1:1 Scale-to-Fit):</label>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+              <select id="botPPSizeSelect" class="input-field" style="flex: 1;" onchange="handlePPSizeSelectChange(this.value)">
+                <option value="720" selected>720 x 720 px (Standar Jimp / HD)</option>
+                <option value="1080">1080 x 1080 px (Full HD Ultra Clarity)</option>
+                <option value="640">640 x 640 px (Medium High)</option>
+                <option value="500">500 x 500 px (Standard)</option>
+                <option value="320">320 x 320 px (Compact)</option>
+                <option value="custom">✏️ Custom Ukuran Sendiri...</option>
+              </select>
+              <input type="number" id="botPPCustomSizeInput" class="input-field" placeholder="px (contoh: 720)" style="width: 140px; display: none;" min="96" max="2048" value="720">
+            </div>
           </div>
 
           <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.5rem;">
@@ -7941,16 +7945,32 @@
       .catch(err => console.error(err));
     }
 
+    function handlePPSizeSelectChange(val) {
+      const customInput = document.getElementById('botPPCustomSizeInput');
+      if (customInput) {
+        customInput.style.display = val === 'custom' ? 'block' : 'none';
+        if (val === 'custom') customInput.focus();
+      }
+    }
+
     function submitSetBotPP() {
       const fileInput = document.getElementById('botPPFileInput');
       const urlInput = document.getElementById('botPPUrlInput');
       const sizeSelect = document.getElementById('botPPSizeSelect');
+      const customSizeInput = document.getElementById('botPPCustomSizeInput');
       const targetSelect = document.getElementById('botPPTargetSelect');
       const btn = document.getElementById('submitBotPPBtn');
 
       const file = fileInput && fileInput.files && fileInput.files[0];
       const url = urlInput ? urlInput.value.trim() : '';
-      const size = sizeSelect ? parseInt(sizeSelect.value, 10) || 720 : 720;
+      
+      let size = 720;
+      if (sizeSelect && sizeSelect.value === 'custom') {
+        size = parseInt(customSizeInput?.value, 10) || 720;
+      } else if (sizeSelect) {
+        size = parseInt(sizeSelect.value, 10) || 720;
+      }
+
       const targetBot = targetSelect ? targetSelect.value : 'main';
 
       if (!file && !url) {

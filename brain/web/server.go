@@ -3000,31 +3000,41 @@ func handleWelcomeGroups(w http.ResponseWriter, r *http.Request) {
 	cli := waClient
 	stateMu.RUnlock()
 
-	if cli == nil || !cli.IsConnected() || !cli.IsLoggedIn() {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"ok":     true,
-			"groups": []welcome.GroupWelcomeData{},
-			"info":   "WhatsApp bot belum terhubung.",
-		})
-		return
+	var allGroups []welcome.GroupWelcomeData
+
+	// 1. Ambil grup dari Bot Utama (jika terhubung & login)
+	if cli != nil && cli.IsConnected() && cli.IsLoggedIn() {
+		mainGroups, err := welcome.GetGroupsWelcomeData(r.Context(), cli)
+		if err == nil {
+			allGroups = append(allGroups, mainGroups...)
+		}
 	}
 
-	groups, err := welcome.GetGroupsWelcomeData(r.Context(), cli)
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"ok":     false,
-			"error":  err.Error(),
-			"groups": []welcome.GroupWelcomeData{},
+	// 2. Ambil grup dari seluruh Jadibot Sub-Bot yang aktif
+	subBotGroups := jadibot.GetAllSubBotGroups(r.Context())
+	for _, sbg := range subBotGroups {
+		jidStr := sbg.JID
+		name := sbg.Name
+		if name == "" {
+			name = "Grup Tanpa Nama"
+		}
+		allGroups = append(allGroups, welcome.GroupWelcomeData{
+			JID:            jidStr,
+			Name:           name,
+			Enabled:        welcome.IsEnabled(jidStr),
+			Template:       welcome.GetTemplate(jidStr),
+			HasCustomMsg:   welcome.HasCustomTemplate(jidStr),
+			ParticipantCnt: sbg.Participants,
+			BotType:        sbg.BotType,
+			BotPhone:       sbg.BotPhone,
+			BotLabel:       sbg.BotLabel,
 		})
-		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"ok":               true,
-		"groups":           groups,
+		"groups":           allGroups,
 		"default_template": welcome.DefaultTemplate(),
 	})
 }
@@ -3204,31 +3214,41 @@ func handleGoodbyeGroups(w http.ResponseWriter, r *http.Request) {
 	cli := waClient
 	stateMu.RUnlock()
 
-	if cli == nil || !cli.IsConnected() || !cli.IsLoggedIn() {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"ok":     true,
-			"groups": []goodbye.GroupGoodbyeData{},
-			"info":   "WhatsApp bot belum terhubung.",
-		})
-		return
+	var allGroups []goodbye.GroupGoodbyeData
+
+	// 1. Ambil grup dari Bot Utama (jika terhubung & login)
+	if cli != nil && cli.IsConnected() && cli.IsLoggedIn() {
+		mainGroups, err := goodbye.GetGroupsGoodbyeData(r.Context(), cli)
+		if err == nil {
+			allGroups = append(allGroups, mainGroups...)
+		}
 	}
 
-	groups, err := goodbye.GetGroupsGoodbyeData(r.Context(), cli)
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"ok":     false,
-			"error":  err.Error(),
-			"groups": []goodbye.GroupGoodbyeData{},
+	// 2. Ambil grup dari seluruh Jadibot Sub-Bot yang aktif
+	subBotGroups := jadibot.GetAllSubBotGroups(r.Context())
+	for _, sbg := range subBotGroups {
+		jidStr := sbg.JID
+		name := sbg.Name
+		if name == "" {
+			name = "Grup Tanpa Nama"
+		}
+		allGroups = append(allGroups, goodbye.GroupGoodbyeData{
+			JID:            jidStr,
+			Name:           name,
+			Enabled:        goodbye.IsEnabled(jidStr),
+			Template:       goodbye.GetTemplate(jidStr),
+			HasCustomMsg:   goodbye.HasCustomTemplate(jidStr),
+			ParticipantCnt: sbg.Participants,
+			BotType:        sbg.BotType,
+			BotPhone:       sbg.BotPhone,
+			BotLabel:       sbg.BotLabel,
 		})
-		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"ok":               true,
-		"groups":           groups,
+		"groups":           allGroups,
 		"default_template": goodbye.DefaultTemplate(),
 	})
 }

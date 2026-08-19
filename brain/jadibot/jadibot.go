@@ -926,6 +926,13 @@ func (m *Manager) StartPairing(ctx context.Context, phone string, senderJID type
 				}
 			}
 			go command.Dispatch(ctx, client, evt, true)
+		case *events.GroupInfo:
+			if len(evt.Join) > 0 {
+				go welcome.HandleGroupJoin(ctx, client, evt)
+			}
+			if len(evt.Leave) > 0 {
+				go goodbye.HandleGroupLeave(ctx, client, evt)
+			}
 		case *events.Connected:
 			if client.Store != nil && client.Store.ID != nil {
 				sb.JID = *client.Store.ID

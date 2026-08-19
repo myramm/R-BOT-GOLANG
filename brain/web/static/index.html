@@ -2521,7 +2521,7 @@
           <select id="swgcGroupSelect" class="form-input" style="width: 100%;">
             <option value="">-- Memuat daftar grup... --</option>
           </select>
-          <span style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-top: 0.35rem;">Daftar grup yang diikuti oleh bot utama</span>
+          <span style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-top: 0.35rem;">Daftar grup yang diikuti oleh Bot Utama dan seluruh Jadibot sub-bot yang aktif</span>
         </div>
 
         <div style="margin-bottom: 1.25rem;">
@@ -2712,11 +2712,16 @@
       <div class="panel" style="padding: 1.25rem;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
           <div>
-            <h3 style="margin: 0; font-size: 1.05rem;">📋 Daftar Grup WhatsApp</h3>
+            <h3 style="margin: 0; font-size: 1.05rem;">📋 Daftar Grup WhatsApp (Bot Utama & Seluruh Jadibot)</h3>
             <p style="margin: 0.2rem 0 0 0; color: var(--text-muted); font-size: 0.775rem;">Aktifkan atau matikan pesan welcome untuk masing-masing grup.</p>
           </div>
-          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-            <input type="text" id="welcomeGroupSearch" class="input-field" placeholder="🔍 Cari nama grup..." onkeyup="filterWelcomeGroups()" style="min-width: 180px; padding: 0.35rem 0.65rem; font-size: 0.85rem;">
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+            <input type="text" id="welcomeGroupSearch" class="input-field" placeholder="🔍 Cari nama grup / JID..." onkeyup="filterWelcomeGroups()" style="min-width: 180px; padding: 0.35rem 0.65rem; font-size: 0.85rem;">
+            <select id="welcomeBotFilter" class="select-field" onchange="filterWelcomeGroups()" style="background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.35rem 0.65rem; font-size: 0.85rem;">
+              <option value="ALL">🌐 Semua Bot & Jadibot</option>
+              <option value="main">🤖 Bot Utama Saja</option>
+              <option value="jadibot">🧬 Seluruh Jadibot Saja</option>
+            </select>
             <button class="btn btn-secondary btn-sm" onclick="loadWelcomeWeb()">🔄 Refresh</button>
           </div>
         </div>
@@ -2726,14 +2731,15 @@
           <table>
             <thead>
               <tr>
-                <th style="width: 35%;">Nama Grup</th>
+                <th style="width: 32%;">Nama Grup & JID</th>
+                <th>Bot Asal (Instance)</th>
                 <th>Status Welcome</th>
                 <th>Format Template</th>
                 <th style="text-align: right;">Aksi</th>
               </tr>
             </thead>
             <tbody id="welcomeTableBody">
-              <tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Memuat data grup...</td></tr>
+              <tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Memuat data grup...</td></tr>
             </tbody>
           </table>
         </div>
@@ -2749,7 +2755,7 @@
     <section id="view-goodbye" class="view-container">
       <div class="greeting-header" style="margin-bottom: 1rem;">
         <h2 style="margin: 0; font-size: 1.35rem;">👋 Pengaturan Pesan Goodbye / Member Keluar</h2>
-        <p style="margin: 0.25rem 0 0 0; color: var(--text-sub); font-size: 0.85rem;">Kelola status aktif dan kustomisasi teks ucapan perpisahan otomatis saat ada member yang keluar / di-kick dari grup WhatsApp.</p>
+        <p style="margin: 0.25rem 0 0 0; color: var(--text-sub); font-size: 0.85rem;">Kelola status aktif dan kustomisasi teks ucapan perpisahan otomatis saat ada member yang keluar / di-kick dari grup WhatsApp (Bot Utama & Seluruh Jadibot).</p>
       </div>
 
       <!-- Quick Info Banner -->
@@ -2764,11 +2770,16 @@
       <div class="panel" style="padding: 1.25rem;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
           <div>
-            <h3 style="margin: 0; font-size: 1.05rem;">📋 Daftar Grup WhatsApp</h3>
+            <h3 style="margin: 0; font-size: 1.05rem;">📋 Daftar Grup WhatsApp (Bot Utama & Seluruh Jadibot)</h3>
             <p style="margin: 0.2rem 0 0 0; color: var(--text-muted); font-size: 0.775rem;">Aktifkan atau matikan pesan goodbye untuk masing-masing grup.</p>
           </div>
-          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-            <input type="text" id="goodbyeGroupSearch" class="input-field" placeholder="🔍 Cari nama grup..." onkeyup="filterGoodbyeGroups()" style="min-width: 180px; padding: 0.35rem 0.65rem; font-size: 0.85rem;">
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+            <input type="text" id="goodbyeGroupSearch" class="input-field" placeholder="🔍 Cari nama grup / JID..." onkeyup="filterGoodbyeGroups()" style="min-width: 180px; padding: 0.35rem 0.65rem; font-size: 0.85rem;">
+            <select id="goodbyeBotFilter" class="select-field" onchange="filterGoodbyeGroups()" style="background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.35rem 0.65rem; font-size: 0.85rem;">
+              <option value="ALL">🌐 Semua Bot & Jadibot</option>
+              <option value="main">🤖 Bot Utama Saja</option>
+              <option value="jadibot">🧬 Seluruh Jadibot Saja</option>
+            </select>
             <button class="btn btn-secondary btn-sm" onclick="loadGoodbyeWeb()">🔄 Refresh</button>
           </div>
         </div>
@@ -2778,14 +2789,15 @@
           <table>
             <thead>
               <tr>
-                <th style="width: 35%;">Nama Grup</th>
+                <th style="width: 32%;">Nama Grup & JID</th>
+                <th>Bot Asal (Instance)</th>
                 <th>Status Goodbye</th>
                 <th>Format Template</th>
                 <th style="text-align: right;">Aksi</th>
               </tr>
             </thead>
             <tbody id="goodbyeTableBody">
-              <tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Memuat data grup...</td></tr>
+              <tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Memuat data grup...</td></tr>
             </tbody>
           </table>
         </div>
@@ -3832,7 +3844,7 @@
     async function loadWelcomeWeb() {
       const tableBody = document.getElementById('welcomeTableBody');
       const mobileList = document.getElementById('welcomeMobileList');
-      if (tableBody) tableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Memuat data grup...</td></tr>';
+      if (tableBody) tableBody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Memuat data grup...</td></tr>';
       if (mobileList) mobileList.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 1.5rem; font-size: 0.85rem;">Memuat data grup...</div>';
 
       try {
@@ -3842,30 +3854,65 @@
         const json = await res.json();
         if (!json.ok && json.error) {
           showToast(json.error, 'danger');
-          if (tableBody) tableBody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--danger); padding: 1.5rem;">${escapeHtml(json.error)}</td></tr>`;
+          if (tableBody) tableBody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--danger); padding: 1.5rem;">${escapeHtml(json.error)}</td></tr>`;
           if (mobileList) mobileList.innerHTML = `<div style="text-align: center; color: var(--danger); padding: 1.5rem;">${escapeHtml(json.error)}</div>`;
           return;
         }
 
         allWelcomeGroups = json.groups || [];
         defaultWelcomeTemplate = json.default_template || '';
-        renderWelcomeGroups(allWelcomeGroups);
+
+        updateWelcomeBotSelectOptions();
+        filterWelcomeGroups();
       } catch (err) {
         showToast('Gagal memuat grup: ' + err.message, 'danger');
-        if (tableBody) tableBody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--danger); padding: 1.5rem;">${escapeHtml(err.message)}</td></tr>`;
+        if (tableBody) tableBody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--danger); padding: 1.5rem;">${escapeHtml(err.message)}</td></tr>`;
       }
+    }
+
+    function updateWelcomeBotSelectOptions() {
+      const botSelect = document.getElementById('welcomeBotFilter');
+      if (!botSelect) return;
+      const currentVal = botSelect.value || 'ALL';
+
+      const botOptionsMap = new Map();
+      allWelcomeGroups.forEach(g => {
+        if (g.botPhone && g.botPhone !== 'main' && !botOptionsMap.has(g.botPhone)) {
+          botOptionsMap.set(g.botPhone, g.botLabel || `🧬 Jadibot (${g.botPhone})`);
+        }
+      });
+
+      let html = `
+        <option value="ALL">🌐 Semua Bot & Jadibot</option>
+        <option value="main">🤖 Bot Utama Saja</option>
+        <option value="jadibot">🧬 Seluruh Jadibot Saja</option>
+      `;
+
+      botOptionsMap.forEach((label, phone) => {
+        html += `<option value="${escapeHtml(phone)}">${escapeHtml(label)}</option>`;
+      });
+
+      botSelect.innerHTML = html;
+      botSelect.value = currentVal;
     }
 
     function filterWelcomeGroups() {
       const query = (document.getElementById('welcomeGroupSearch')?.value || '').toLowerCase().trim();
-      if (!query) {
-        renderWelcomeGroups(allWelcomeGroups);
-        return;
-      }
-      const filtered = allWelcomeGroups.filter(g => 
-        (g.name || '').toLowerCase().includes(query) || 
-        (g.jid || '').toLowerCase().includes(query)
-      );
+      const botFilter = document.getElementById('welcomeBotFilter')?.value || 'ALL';
+
+      let filtered = allWelcomeGroups.filter(g => {
+        const matchSearch = (g.name || '').toLowerCase().includes(query) || (g.jid || '').toLowerCase().includes(query);
+        let matchBot = true;
+        if (botFilter === 'main') {
+          matchBot = (g.botType === 'main');
+        } else if (botFilter === 'jadibot') {
+          matchBot = (g.botType === 'jadibot');
+        } else if (botFilter !== 'ALL') {
+          matchBot = (g.botPhone === botFilter);
+        }
+        return matchSearch && matchBot;
+      });
+
       renderWelcomeGroups(filtered);
     }
 
@@ -3873,8 +3920,8 @@
       const tableBody = document.getElementById('welcomeTableBody');
       const mobileList = document.getElementById('welcomeMobileList');
       if (!groups || groups.length === 0) {
-        const emptyMsg = 'Tidak ada grup WhatsApp yang ditemukan.';
-        if (tableBody) tableBody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">${emptyMsg}</td></tr>`;
+        const emptyMsg = 'Tidak ada grup WhatsApp yang cocok dengan pencarian/filter.';
+        if (tableBody) tableBody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">${emptyMsg}</td></tr>`;
         if (mobileList) mobileList.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 1.5rem; font-size: 0.85rem;">${emptyMsg}</div>`;
         return;
       }
@@ -3885,11 +3932,15 @@
       groups.forEach((g) => {
         const isEnabled = g.enabled;
         const statusBadge = isEnabled 
-          ? '<span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 9999px;">🟢 Aktif</span>'
-          : '<span class="badge" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 9999px;">🔴 Nonaktif</span>';
+          ? '<span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 9999px; font-weight: 600;">🟢 Aktif</span>'
+          : '<span class="badge" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 9999px; font-weight: 600;">🔴 Nonaktif</span>';
+
+        const botBadge = (g.botType === 'jadibot')
+          ? `<span class="badge" style="background: rgba(139,92,246,0.15); color: #a78bfa; border: 1px solid rgba(139,92,246,0.3); font-size: 0.725rem; font-weight: 600;">${escapeHtml(g.botLabel || '🧬 Jadibot')}</span>`
+          : `<span class="badge" style="background: rgba(16,185,129,0.15); color: #10b981; border: 1px solid rgba(16,185,129,0.3); font-size: 0.725rem; font-weight: 600;">🤖 Bot Utama</span>`;
 
         const templateType = g.has_custom_msg 
-          ? '<span style="font-size: 0.75rem; color: var(--accent);">✏️ Kustom</span>'
+          ? '<span style="font-size: 0.75rem; color: var(--accent); font-weight: 600;">✏️ Kustom</span>'
           : '<span style="font-size: 0.75rem; color: var(--text-muted);">Standard</span>';
 
         const toggleBtn = isEnabled
@@ -3903,6 +3954,7 @@
               <div style="font-weight: 600; color: var(--text-main); font-size: 0.875rem;">${escapeHtml(g.name || 'Grup Tanpa Nama')}</div>
               <div style="font-size: 0.725rem; color: var(--text-muted); font-family: var(--font-mono);">${escapeHtml(g.jid)} • ${g.participant_count || 0} Member</div>
             </td>
+            <td>${botBadge}</td>
             <td>${statusBadge}</td>
             <td>${templateType}</td>
             <td style="text-align: right;">
@@ -3917,15 +3969,18 @@
         // Mobile Card
         mobileHtml += `
           <div class="panel" style="padding: 0.85rem; border: 1px solid var(--border-color); border-radius: 8px;">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem; gap: 0.5rem;">
               <div>
                 <div style="font-weight: 600; color: var(--text-main); font-size: 0.875rem;">${escapeHtml(g.name || 'Grup Tanpa Nama')}</div>
-                <div style="font-size: 0.7rem; color: var(--text-muted); font-family: var(--font-mono);">${escapeHtml(g.jid)}</div>
+                <div style="font-size: 0.7rem; color: var(--text-muted); font-family: var(--font-mono);">${escapeHtml(g.jid)} • ${g.participant_count || 0} Member</div>
               </div>
-              <div>${statusBadge}</div>
+              <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.35rem;">
+                ${statusBadge}
+                ${botBadge}
+              </div>
             </div>
             <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.75rem; padding-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.05);">
-              <div style="font-size: 0.75rem;">${templateType}</div>
+              <div style="font-size: 0.75rem;">Format: ${templateType}</div>
               <div style="display: flex; gap: 0.35rem;">
                 <button class="btn btn-secondary btn-sm" onclick="openEditWelcomeModal('${escapeHtml(g.jid)}')">✏️ Edit</button>
                 ${toggleBtn}
@@ -4056,7 +4111,7 @@
     async function loadGoodbyeWeb() {
       const tableBody = document.getElementById('goodbyeTableBody');
       const mobileList = document.getElementById('goodbyeMobileList');
-      if (tableBody) tableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Memuat data grup...</td></tr>';
+      if (tableBody) tableBody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Memuat data grup...</td></tr>';
       if (mobileList) mobileList.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 1.5rem; font-size: 0.85rem;">Memuat data grup...</div>';
 
       try {
@@ -4066,30 +4121,65 @@
         const json = await res.json();
         if (!json.ok && json.error) {
           showToast(json.error, 'danger');
-          if (tableBody) tableBody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--danger); padding: 1.5rem;">${escapeHtml(json.error)}</td></tr>`;
+          if (tableBody) tableBody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--danger); padding: 1.5rem;">${escapeHtml(json.error)}</td></tr>`;
           if (mobileList) mobileList.innerHTML = `<div style="text-align: center; color: var(--danger); padding: 1.5rem;">${escapeHtml(json.error)}</div>`;
           return;
         }
 
         allGoodbyeGroups = json.groups || [];
         defaultGoodbyeTemplate = json.default_template || '';
-        renderGoodbyeGroups(allGoodbyeGroups);
+
+        updateGoodbyeBotSelectOptions();
+        filterGoodbyeGroups();
       } catch (err) {
         showToast('Gagal memuat grup: ' + err.message, 'danger');
-        if (tableBody) tableBody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--danger); padding: 1.5rem;">${escapeHtml(err.message)}</td></tr>`;
+        if (tableBody) tableBody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--danger); padding: 1.5rem;">${escapeHtml(err.message)}</td></tr>`;
       }
+    }
+
+    function updateGoodbyeBotSelectOptions() {
+      const botSelect = document.getElementById('goodbyeBotFilter');
+      if (!botSelect) return;
+      const currentVal = botSelect.value || 'ALL';
+
+      const botOptionsMap = new Map();
+      allGoodbyeGroups.forEach(g => {
+        if (g.botPhone && g.botPhone !== 'main' && !botOptionsMap.has(g.botPhone)) {
+          botOptionsMap.set(g.botPhone, g.botLabel || `🧬 Jadibot (${g.botPhone})`);
+        }
+      });
+
+      let html = `
+        <option value="ALL">🌐 Semua Bot & Jadibot</option>
+        <option value="main">🤖 Bot Utama Saja</option>
+        <option value="jadibot">🧬 Seluruh Jadibot Saja</option>
+      `;
+
+      botOptionsMap.forEach((label, phone) => {
+        html += `<option value="${escapeHtml(phone)}">${escapeHtml(label)}</option>`;
+      });
+
+      botSelect.innerHTML = html;
+      botSelect.value = currentVal;
     }
 
     function filterGoodbyeGroups() {
       const query = (document.getElementById('goodbyeGroupSearch')?.value || '').toLowerCase().trim();
-      if (!query) {
-        renderGoodbyeGroups(allGoodbyeGroups);
-        return;
-      }
-      const filtered = allGoodbyeGroups.filter(g => 
-        (g.name || '').toLowerCase().includes(query) || 
-        (g.jid || '').toLowerCase().includes(query)
-      );
+      const botFilter = document.getElementById('goodbyeBotFilter')?.value || 'ALL';
+
+      let filtered = allGoodbyeGroups.filter(g => {
+        const matchSearch = (g.name || '').toLowerCase().includes(query) || (g.jid || '').toLowerCase().includes(query);
+        let matchBot = true;
+        if (botFilter === 'main') {
+          matchBot = (g.botType === 'main');
+        } else if (botFilter === 'jadibot') {
+          matchBot = (g.botType === 'jadibot');
+        } else if (botFilter !== 'ALL') {
+          matchBot = (g.botPhone === botFilter);
+        }
+        return matchSearch && matchBot;
+      });
+
       renderGoodbyeGroups(filtered);
     }
 
@@ -4097,8 +4187,8 @@
       const tableBody = document.getElementById('goodbyeTableBody');
       const mobileList = document.getElementById('goodbyeMobileList');
       if (!groups || groups.length === 0) {
-        const emptyMsg = 'Tidak ada grup WhatsApp yang ditemukan.';
-        if (tableBody) tableBody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">${emptyMsg}</td></tr>`;
+        const emptyMsg = 'Tidak ada grup WhatsApp yang cocok dengan pencarian/filter.';
+        if (tableBody) tableBody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">${emptyMsg}</td></tr>`;
         if (mobileList) mobileList.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 1.5rem; font-size: 0.85rem;">${emptyMsg}</div>`;
         return;
       }
@@ -4109,11 +4199,15 @@
       groups.forEach((g) => {
         const isEnabled = g.enabled;
         const statusBadge = isEnabled 
-          ? '<span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 9999px;">🟢 Aktif</span>'
-          : '<span class="badge" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 9999px;">🔴 Nonaktif</span>';
+          ? '<span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 9999px; font-weight: 600;">🟢 Aktif</span>'
+          : '<span class="badge" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 9999px; font-weight: 600;">🔴 Nonaktif</span>';
+
+        const botBadge = (g.botType === 'jadibot')
+          ? `<span class="badge" style="background: rgba(139,92,246,0.15); color: #a78bfa; border: 1px solid rgba(139,92,246,0.3); font-size: 0.725rem; font-weight: 600;">${escapeHtml(g.botLabel || '🧬 Jadibot')}</span>`
+          : `<span class="badge" style="background: rgba(16,185,129,0.15); color: #10b981; border: 1px solid rgba(16,185,129,0.3); font-size: 0.725rem; font-weight: 600;">🤖 Bot Utama</span>`;
 
         const templateType = g.has_custom_msg 
-          ? '<span style="font-size: 0.75rem; color: var(--accent);">✏️ Kustom</span>'
+          ? '<span style="font-size: 0.75rem; color: var(--accent); font-weight: 600;">✏️ Kustom</span>'
           : '<span style="font-size: 0.75rem; color: var(--text-muted);">Standard</span>';
 
         const toggleBtn = isEnabled
@@ -4126,6 +4220,7 @@
               <div style="font-weight: 600; color: var(--text-main); font-size: 0.875rem;">${escapeHtml(g.name || 'Grup Tanpa Nama')}</div>
               <div style="font-size: 0.725rem; color: var(--text-muted); font-family: var(--font-mono);">${escapeHtml(g.jid)} • ${g.participant_count || 0} Member</div>
             </td>
+            <td>${botBadge}</td>
             <td>${statusBadge}</td>
             <td>${templateType}</td>
             <td style="text-align: right;">
@@ -4139,15 +4234,18 @@
 
         mobileHtml += `
           <div class="panel" style="padding: 0.85rem; border: 1px solid var(--border-color); border-radius: 8px;">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem; gap: 0.5rem;">
               <div>
                 <div style="font-weight: 600; color: var(--text-main); font-size: 0.875rem;">${escapeHtml(g.name || 'Grup Tanpa Nama')}</div>
-                <div style="font-size: 0.7rem; color: var(--text-muted); font-family: var(--font-mono);">${escapeHtml(g.jid)}</div>
+                <div style="font-size: 0.7rem; color: var(--text-muted); font-family: var(--font-mono);">${escapeHtml(g.jid)} • ${g.participant_count || 0} Member</div>
               </div>
-              <div>${statusBadge}</div>
+              <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.35rem;">
+                ${statusBadge}
+                ${botBadge}
+              </div>
             </div>
             <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.75rem; padding-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.05);">
-              <div style="font-size: 0.75rem;">${templateType}</div>
+              <div style="font-size: 0.75rem;">Format: ${templateType}</div>
               <div style="display: flex; gap: 0.35rem;">
                 <button class="btn btn-secondary btn-sm" onclick="openEditGoodbyeModal('${escapeHtml(g.jid)}')">✏️ Edit</button>
                 ${toggleBtn}

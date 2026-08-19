@@ -150,6 +150,9 @@ type GroupWelcomeData struct {
 	Template       string `json:"template"`
 	HasCustomMsg   bool   `json:"has_custom_msg"`
 	ParticipantCnt int    `json:"participant_count"`
+	BotType        string `json:"botType"`
+	BotPhone       string `json:"botPhone"`
+	BotLabel       string `json:"botLabel"`
 }
 
 // GetGroupsWelcomeData mengambil daftar seluruh grup yang diikuti bot dan status welcome-nya.
@@ -166,13 +169,20 @@ func GetGroupsWelcomeData(ctx context.Context, client *whatsmeow.Client) ([]Grou
 	results := make([]GroupWelcomeData, 0, len(groups))
 	for _, g := range groups {
 		jidStr := g.JID.String()
+		name := g.Name
+		if name == "" {
+			name = "Grup Tanpa Nama"
+		}
 		results = append(results, GroupWelcomeData{
 			JID:            jidStr,
-			Name:           g.Name,
+			Name:           name,
 			Enabled:        IsEnabled(jidStr),
 			Template:       GetTemplate(jidStr),
 			HasCustomMsg:   HasCustomTemplate(jidStr),
 			ParticipantCnt: len(g.Participants),
+			BotType:        "main",
+			BotPhone:       "main",
+			BotLabel:       "🤖 Bot Utama",
 		})
 	}
 

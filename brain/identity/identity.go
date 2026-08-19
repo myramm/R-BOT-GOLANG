@@ -45,8 +45,11 @@ func SenderPhone(evt *events.Message) string {
 	return evt.Info.Sender.User
 }
 
-// IsOwner true bila salah satu kandidat ID pengirim ada di config.Owners.
+// IsOwner true bila salah satu kandidat ID pengirim ada di config.Owners atau pesan dikirim dari akun bot sendiri (IsFromMe).
 func IsOwner(evt *events.Message) bool {
+	if evt != nil && evt.Info.IsFromMe {
+		return true
+	}
 	cands := Candidates(evt)
 	if len(cands) == 0 {
 		return false

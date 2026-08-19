@@ -347,12 +347,15 @@ func ApplyCustomContextInfo(ci *waE2E.ContextInfo) {
 // ExternalAdReply / Newsletter info sesuai konfigurasi yang aktif.
 func (c *Ctx) BuildContextInfo(quoted bool) *waE2E.ContextInfo {
 	ci := &waE2E.ContextInfo{}
-	if quoted && c.Evt != nil {
+	if quoted && c.Evt != nil && c.Evt.Info.ID != "" {
 		ci.StanzaID = proto.String(c.Evt.Info.ID)
-		if c.Evt.Info.IsGroup {
-			ci.Participant = proto.String(c.Evt.Info.Sender.ToNonAD().String())
+		participant := c.Evt.Info.Sender.ToNonAD().String()
+		if participant != "" {
+			ci.Participant = proto.String(participant)
 		}
-		ci.QuotedMessage = c.Evt.Message
+		if c.Evt.Message != nil {
+			ci.QuotedMessage = c.Evt.Message
+		}
 	}
 	ApplyCustomContextInfo(ci)
 	return ci
@@ -371,13 +374,13 @@ func (c *Ctx) Reply(ctx context.Context, text string) (whatsmeow.SendResponse, e
 	}
 	resp, err := c.Client.SendMessage(ctx, c.Evt.Info.Chat, msg)
 	if err != nil {
-		log.Printf("[rbot] [Reply] Gagal mengirim balasan dengan ContextInfo (%v). Mencoba fallback pengiriman quote standar...", err)
+		log.Printf("[rbot] [Reply] Gagal mengirim ExtendedTextMessage (%v). Mencoba fallback quote standar...", err)
 		simpleCI := &waE2E.ContextInfo{
 			StanzaID:      proto.String(c.Evt.Info.ID),
 			QuotedMessage: c.Evt.Message,
 		}
-		if c.Evt.Info.IsGroup {
-			simpleCI.Participant = proto.String(c.Evt.Info.Sender.ToNonAD().String())
+		if participant := c.Evt.Info.Sender.ToNonAD().String(); participant != "" {
+			simpleCI.Participant = proto.String(participant)
 		}
 		fallbackMsg := &waE2E.Message{
 			ExtendedTextMessage: &waE2E.ExtendedTextMessage{
@@ -387,10 +390,14 @@ func (c *Ctx) Reply(ctx context.Context, text string) (whatsmeow.SendResponse, e
 		}
 		resp, err = c.Client.SendMessage(ctx, c.Evt.Info.Chat, fallbackMsg)
 		if err != nil {
-			return c.Client.SendMessage(ctx, c.Evt.Info.Chat, &waE2E.Message{Conversation: proto.String(text)})
+			log.Printf("[rbot] [Reply] Fallback quote gagal (%v). Mengirim plain text...", err)
+			resp, err = c.Client.SendMessage(ctx, c.Evt.Info.Chat, &waE2E.Message{Conversation: proto.String(text)})
+			if err != nil {
+				log.Printf("[rbot] [Reply] Plain text juga gagal: %v", err)
+			}
 		}
 	}
-	return resp, nil
+	return resp, err
 }
 
 // SendText mengirim teks biasa tanpa quote.
@@ -420,8 +427,8 @@ func (c *Ctx) ReplyMentions(ctx context.Context, text string, mentions []types.J
 			QuotedMessage: c.Evt.Message,
 			MentionedJID:  jids,
 		}
-		if c.Evt.Info.IsGroup {
-			simpleCI.Participant = proto.String(c.Evt.Info.Sender.ToNonAD().String())
+		if participant := c.Evt.Info.Sender.ToNonAD().String(); participant != "" {
+			simpleCI.Participant = proto.String(participant)
 		}
 		fallbackMsg := &waE2E.Message{
 			ExtendedTextMessage: &waE2E.ExtendedTextMessage{
@@ -431,10 +438,11 @@ func (c *Ctx) ReplyMentions(ctx context.Context, text string, mentions []types.J
 		}
 		resp, err = c.Client.SendMessage(ctx, c.Evt.Info.Chat, fallbackMsg)
 		if err != nil {
-			return c.Client.SendMessage(ctx, c.Evt.Info.Chat, &waE2E.Message{Conversation: proto.String(text)})
+			log.Printf("[rbot] [ReplyMentions] Fallback quote gagal (%v). Mengirim plain text...", err)
+			resp, err = c.Client.SendMessage(ctx, c.Evt.Info.Chat, &waE2E.Message{Conversation: proto.String(text)})
 		}
 	}
-	return resp, nil
+	return resp, err
 }
 
 // React memasang reaksi emoji ke pesan pemicu (best-effort, error diabaikan).
@@ -743,11 +751,13 @@ func Dispatch(ctx context.Context, client *whatsmeow.Client, evt *events.Message
 
 	// 0. Cek Mode Self (Hanya Owner yang boleh memakai bot saat Self Mode aktif)
 	if settings.IsSelfMode() && !IsOwner(evt) {
+		log.Printf("[rbot] [Dispatch] ⚠️ Command '.%s' dari %s diabaikan: Mode Self aktif dan pengirim bukan owner", key, evt.Info.Sender)
 		return
 	}
 
 	// 1. Cek Global Blacklist (100% diblokir dari bot di mana pun, kecuali Owner)
 	if settings.IsUserBlacklisted(cands) && !IsOwner(evt) {
+		log.Printf("[rbot] [Dispatch] ⚠️ Command '.%s' dari %s diabaikan: Pengirim di-blacklist", key, evt.Info.Sender)
 		return
 	}
 
@@ -770,6 +780,7 @@ func Dispatch(ctx context.Context, client *whatsmeow.Client, evt *events.Message
 	}
 	if cmd.OwnerOnly {
 		if subBot || !IsOwner(evt) {
+			log.Printf("[rbot] [Dispatch] ⚠️ Command '.%s' adalah Owner Only, ditolak untuk %s", key, evt.Info.Sender)
 			return
 		}
 	}
@@ -786,6 +797,7 @@ func Dispatch(ctx context.Context, client *whatsmeow.Client, evt *events.Message
 		// KECUALI command "mute" (.unmute / .unmutegc / .unbangc) yang hanya bisa dieksekusi Admin/Owner.
 		if settings.IsGroupMuted(groupID) {
 			if cmd.Name != "mute" {
+				log.Printf("[rbot] [Dispatch] ⚠️ Command '.%s' diabaikan: Grup %s sedang di-mute", key, groupID)
 				return
 			}
 		}
@@ -797,10 +809,13 @@ func Dispatch(ctx context.Context, client *whatsmeow.Client, evt *events.Message
 				isAdmin = IsGroupAdminHook(ctx, client, evt)
 			}
 			if !isAdmin {
+				log.Printf("[rbot] [Dispatch] ⚠️ Command '.%s' diabaikan: Pengirim %s di-ban di grup %s", key, evt.Info.Sender, groupID)
 				return
 			}
 		}
 	}
+
+	log.Printf("[rbot] [Dispatch] 🚀 Eksekusi command '.%s' dari %s di %s (SubBot: %v)", key, evt.Info.Sender, evt.Info.Chat, subBot)
 
 	// Member grup official bayar energi lebih murah. Dicek sekali per command.
 	member := !subBot && !config.C.Energy.IsUnlimited() && heavyCommands[cmd.Name] &&
@@ -811,6 +826,7 @@ func Dispatch(ctx context.Context, client *whatsmeow.Client, evt *events.Message
 	if chargesEnergy {
 		cost = energy.BiayaEfektif(cmd.Name, member)
 		if !energy.HasEnergy(evt, cost) {
+			log.Printf("[rbot] [Dispatch] ⚠️ Energi tidak cukup untuk command '.%s' (butuh %d)", key, cost)
 			_, _ = c.Reply(ctx, energiHabisMessage(evt))
 			return
 		}
@@ -844,6 +860,8 @@ func Dispatch(ctx context.Context, client *whatsmeow.Client, evt *events.Message
 			if subBot && SubBotStatsHook != nil {
 				SubBotStatsHook(client, cmd.Name, evt, true)
 			}
+		} else {
+			log.Printf("[rbot] [Dispatch] ✅ Sukses eksekusi '.%s' untuk %s", key, evt.Info.Sender)
 		}
 	}()
 

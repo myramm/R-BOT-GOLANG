@@ -120,8 +120,14 @@ func run(ctx context.Context) error {
 	client.AddEventHandler(func(rawEvt any) {
 		switch evt := rawEvt.(type) {
 		case *events.Message:
-			if evt.Info.IsFromMe || evt.Info.Chat.Server == "broadcast" {
+			if evt.Info.Chat.Server == "broadcast" {
 				return
+			}
+			if evt.Info.IsFromMe {
+				text := command.ExtractText(evt.Message)
+				if config.MatchPrefix(text) == "" {
+					return
+				}
 			}
 			logIncomingMessage(client, evt, "rbot")
 			stats.AddChat(evt)

@@ -2087,7 +2087,7 @@
           <span>✨ Kustomisasi WhatsApp ContextInfo (ExternalAdReply & Channel Banner)</span>
           <div style="display: flex; align-items: center; gap: 0.5rem;">
             <label style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.8rem; font-weight: 600; cursor: pointer;">
-              <input type="checkbox" id="ciEnabledToggle" onchange="updateCiPreview()" style="transform: scale(1.15);">
+              <input type="checkbox" id="ciEnabledToggle" onchange="toggleContextInfoInstant(this.checked)" style="transform: scale(1.15);">
               <span id="ciEnabledLabel">Aktif</span>
             </label>
           </div>
@@ -6836,7 +6836,7 @@
       if (!ci) return;
 
       const enabledEl = document.getElementById('ciEnabledToggle');
-      if (enabledEl && document.activeElement !== enabledEl) {
+      if (enabledEl) {
         enabledEl.checked = !!ci.enabled;
       }
 
@@ -6883,8 +6883,42 @@
       updateCiPreview();
     }
 
+    async function toggleContextInfoInstant(enabled) {
+      updateCiPreview();
+      const payload = {
+        enabled: !!enabled,
+        title: document.getElementById('ciTitleInput')?.value || '',
+        body: document.getElementById('ciBodyInput')?.value || '',
+        thumbnailUrl: document.getElementById('ciThumbnailUrlInput')?.value || '',
+        sourceUrl: document.getElementById('ciSourceUrlInput')?.value || '',
+        renderLargerThumbnail: document.getElementById('ciRenderLargerToggle')?.checked !== false,
+        showAdAttribution: !!document.getElementById('ciShowAdToggle')?.checked,
+        newsletterName: document.getElementById('ciNewsletterNameInput')?.value || '',
+        newsletterJid: document.getElementById('ciNewsletterJidInput')?.value || ''
+      };
+
+      try {
+        const res = await fetch('/api/context-info', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast(`ContextInfo WhatsApp berhasil di-${enabled ? 'aktifkan (ON)' : 'nonaktifkan (OFF)'}!`, 'success');
+          if (data.contextInfo) {
+            renderContextInfoSettings(data.contextInfo);
+          }
+        } else {
+          showToast('Gagal mengubah status: ' + (data.error || 'Terjadi kesalahan'), 'error');
+        }
+      } catch (err) {
+        showToast('Gagal terhubung ke server: ' + err.message, 'error');
+      }
+    }
+
     function updateCiPreview() {
-      const enabled = document.getElementById('ciEnabledToggle')?.checked;
+      const enabled = !!document.getElementById('ciEnabledToggle')?.checked;
       const title = document.getElementById('ciTitleInput')?.value || 'R-BOT WhatsApp Assistant';
       const body = document.getElementById('ciBodyInput')?.value || 'Multi-Device High Performance Bot';
       const thumbUrl = document.getElementById('ciThumbnailUrlInput')?.value || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80';
@@ -6903,7 +6937,10 @@
       const prevAdBadge = document.getElementById('ciPrevAdBadge');
       const enabledLabel = document.getElementById('ciEnabledLabel');
 
-      if (enabledLabel) enabledLabel.textContent = enabled ? 'Aktif' : 'Nonaktif';
+      if (enabledLabel) {
+        enabledLabel.textContent = enabled ? 'Aktif' : 'Nonaktif';
+        enabledLabel.style.color = enabled ? 'var(--success)' : 'var(--danger)';
+      }
 
       if (prevBanner) {
         prevBanner.style.display = enabled ? 'block' : 'none';

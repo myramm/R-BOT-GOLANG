@@ -132,6 +132,15 @@ func Load(path string) error {
 	return nil
 }
 
+// Save menyimpan konfigurasi aktif C ke file path (e.g. config.json).
+func Save(path string) error {
+	data, err := json.MarshalIndent(C, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o600)
+}
+
 // MainPrefix mengembalikan prefix utama (yang pertama di config).
 func MainPrefix() string {
 	if len(C.Prefix) > 0 {

@@ -278,5 +278,6 @@ func SetContextInfo(ci config.ContextInfoConfig) error {
 	config.C.ContextInfo = ci
 	snapshot := cache
 	mu.Unlock()
+	_ = config.Save("config.json")
 	return store.Set(storeKey, snapshot)
 }

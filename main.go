@@ -23,6 +23,7 @@ import (
 
 	"rbot/brain/command"
 	"rbot/brain/config"
+	"rbot/brain/goodbye"
 	"rbot/brain/jadibot"
 	"rbot/brain/lifecycle"
 	"rbot/brain/settings"
@@ -145,6 +146,9 @@ func run(ctx context.Context) error {
 		case *events.GroupInfo:
 			if len(evt.Join) > 0 {
 				go welcome.HandleGroupJoin(ctx, client, evt)
+			}
+			if len(evt.Leave) > 0 {
+				go goodbye.HandleGroupLeave(ctx, client, evt)
 			}
 		case *events.Connected:
 			log.Printf("[rbot] terhubung ke WhatsApp sebagai %s", client.Store.ID)

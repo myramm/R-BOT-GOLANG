@@ -5,6 +5,8 @@ import (
 	"log"
 	"os"
 	"sync"
+
+	"rbot/brain/errortracker"
 )
 
 type logSubscriber chan string
@@ -58,6 +60,8 @@ func (b *LoggerBroadcaster) AddLine(line string) {
 		default:
 		}
 	}
+
+	errortracker.ParseLogLine(line)
 }
 
 func (b *LoggerBroadcaster) GetRecentLogs() []string {

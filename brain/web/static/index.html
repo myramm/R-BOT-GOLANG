@@ -157,7 +157,21 @@
       padding: 0.5rem 0.75rem;
       display: flex;
       flex-direction: column;
-      gap: 0.25rem;
+      gap: 0.2rem;
+      overflow-y: auto;
+    }
+
+    .nav-section-title {
+      font-size: 0.675rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      padding: 0.6rem 0.5rem 0.2rem 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      user-select: none;
     }
 
     .nav-item {
@@ -1392,64 +1406,75 @@
       </div>
 
       <nav class="sidebar-nav">
+        <!-- 1. MONITORING & TELEMETRY -->
+        <div class="nav-section-title">📊 Monitoring & Stats</div>
         <button class="nav-item active" onclick="switchNav('overview', this); closeMobileDrawer();">
           <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
           Overview
         </button>
-
         <button class="nav-item" onclick="switchNav('activity', this); closeMobileDrawer();">
           <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-          Activity
+          Activity Feed
         </button>
-
         <button class="nav-item" onclick="switchNav('users', this); closeMobileDrawer();">
           <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
           Users & Groups
         </button>
-
         <button class="nav-item" onclick="switchNav('commands', this); closeMobileDrawer();">
           <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
           Commands
         </button>
-
         <button class="nav-item" onclick="switchNav('logs', this); closeMobileDrawer();">
           <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
           Logs & Audit
         </button>
-
-        <button class="nav-item" onclick="switchNav('settings', this); closeMobileDrawer();">
-          <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-          Settings
+        <button class="nav-item" onclick="switchNav('errors', this); closeMobileDrawer();" style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="display: flex; align-items: center; gap: 0.75rem;">
+            <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" style="color: var(--danger);"><path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+            Error & AI Fix
+          </span>
+          <span id="navErrorBadgeMobile" class="badge badge-danger" style="display: none; font-size: 0.65rem; padding: 0.1rem 0.35rem;">0</span>
         </button>
 
+        <!-- 2. BOT INSTANCES & ENGINE -->
+        <div class="nav-section-title">🤖 Bot & Engine</div>
         <button class="nav-item" onclick="switchNav('jadibot', this); closeMobileDrawer();">
           <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-          🤖 Jadibot Manager
+          Jadibot Manager
         </button>
-
         <button class="nav-item" onclick="switchNav('terminal', this); closeMobileDrawer();">
           <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M4 17l6-6-6-6m8 14h8"/></svg>
-          Terminal
+          Terminal Console
         </button>
-
         <button class="nav-item" onclick="switchNav('files', this); closeMobileDrawer();">
           <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
           File Manager
         </button>
 
+        <!-- 3. OTOMASI & WHATSAPP -->
+        <div class="nav-section-title">✨ Otomasi & WhatsApp</div>
+        <button class="nav-item" onclick="switchNav('welcome', this); closeMobileDrawer();">
+          <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>
+          Pesan Welcome
+        </button>
+        <button class="nav-item" onclick="switchNav('goodbye', this); closeMobileDrawer();">
+          <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+          Pesan Goodbye
+        </button>
         <button class="nav-item" onclick="switchNav('swgc', this); closeMobileDrawer();">
           <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
           Group Status (SWGC)
         </button>
-
         <button class="nav-item" onclick="switchNav('simi', this); closeMobileDrawer();">
           <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
           Simi-Simi AI
         </button>
 
-        <button class="nav-item" onclick="switchNav('welcome', this); closeMobileDrawer();">
-          <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>
-          Pesan Welcome
+        <!-- 4. PENGATURAN -->
+        <div class="nav-section-title">⚙️ Konfigurasi</div>
+        <button class="nav-item" onclick="switchNav('settings', this); closeMobileDrawer();">
+          <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          Settings & ContextInfo
         </button>
       </nav>
 
@@ -1547,64 +1572,75 @@
     </div>
 
     <nav class="sidebar-nav">
+      <!-- 1. MONITORING & TELEMETRY -->
+      <div class="nav-section-title">📊 Monitoring & Stats</div>
       <button class="nav-item active" onclick="switchNav('overview', this)">
         <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
         Overview
       </button>
-
       <button class="nav-item" onclick="switchNav('activity', this)">
         <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-        Activity
+        Activity Feed
       </button>
-
       <button class="nav-item" onclick="switchNav('users', this)">
         <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
         Users & Groups
       </button>
-
       <button class="nav-item" onclick="switchNav('commands', this)">
         <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
         Commands
       </button>
-
       <button class="nav-item" onclick="switchNav('logs', this)">
         <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
         Logs & Audit
       </button>
-
-      <button class="nav-item" onclick="switchNav('settings', this)">
-        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-        Settings
+      <button class="nav-item" onclick="switchNav('errors', this)" style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="display: flex; align-items: center; gap: 0.75rem;">
+          <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" style="color: var(--danger);"><path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+          Error & AI Fix
+        </span>
+        <span id="navErrorBadgeDesktop" class="badge badge-danger" style="display: none; font-size: 0.65rem; padding: 0.1rem 0.35rem;">0</span>
       </button>
 
+      <!-- 2. BOT INSTANCES & ENGINE -->
+      <div class="nav-section-title">🤖 Bot & Engine</div>
       <button class="nav-item" onclick="switchNav('jadibot', this)">
         <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-        🤖 Jadibot Manager
+        Jadibot Manager
       </button>
-
       <button class="nav-item" onclick="switchNav('terminal', this)">
         <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M4 17l6-6-6-6m8 14h8"/></svg>
-        Terminal
+        Terminal Console
       </button>
-
       <button class="nav-item" onclick="switchNav('files', this)">
         <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
         File Manager
       </button>
 
+      <!-- 3. OTOMASI & WHATSAPP -->
+      <div class="nav-section-title">✨ Otomasi & WhatsApp</div>
+      <button class="nav-item" onclick="switchNav('welcome', this)">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>
+        Pesan Welcome
+      </button>
+      <button class="nav-item" onclick="switchNav('goodbye', this)">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+        Pesan Goodbye
+      </button>
       <button class="nav-item" onclick="switchNav('swgc', this)">
         <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
         Group Status (SWGC)
       </button>
-
       <button class="nav-item" onclick="switchNav('simi', this)">
         <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
         Simi-Simi AI
       </button>
 
-      <button class="nav-item" onclick="switchNav('welcome', this)">
-        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>
-        Pesan Welcome
+      <!-- 4. PENGATURAN -->
+      <div class="nav-section-title">⚙️ Konfigurasi</div>
+      <button class="nav-item" onclick="switchNav('settings', this)">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        Settings & ContextInfo
       </button>
     </nav>
 
@@ -2284,6 +2320,20 @@
           </div>
         </div>
       </div>
+
+      <!-- Panel Setup API AI Fixer Engine -->
+      <div class="panel" style="margin-top: 1.25rem;">
+        <div class="panel-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+          <span>🤖 Setup API AI Fixer & Diagnostics Engine</span>
+          <button class="btn btn-primary btn-sm" onclick="openAiConfigModal()">⚙️ Buka Pengaturan API AI</button>
+        </div>
+        <p style="font-size: 0.825rem; color: var(--text-sub); margin-bottom: 0.75rem;">
+          Atur integrasi LLM (OpenAI / OpenRouter / Groq / Google Gemini / Local Ollama) untuk mendiagnosis crash dan memperbaiki pesan error bot secara instan.
+        </p>
+        <div style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.5; background: #06090e; padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border-color);">
+          💡 <strong>Tips:</strong> Klik tombol <strong>🤖 Setup API AI</strong> di atas atau di menu <strong>Error Center</strong> untuk mengganti Base URL, Model Name, dan API Key kapan pun.
+        </div>
+      </div>
     </section>
 
     <!-- VIEW 7: TERMINAL -->
@@ -2655,6 +2705,138 @@
       </div>
     </section>
 
+    <!-- VIEW 12: PESAN PERPISAHAN (GOODBYE MESSAGE) -->
+    <section id="view-goodbye" class="view-container">
+      <div class="greeting-header" style="margin-bottom: 1rem;">
+        <h2 style="margin: 0; font-size: 1.35rem;">👋 Pengaturan Pesan Goodbye / Member Keluar</h2>
+        <p style="margin: 0.25rem 0 0 0; color: var(--text-sub); font-size: 0.85rem;">Kelola status aktif dan kustomisasi teks ucapan perpisahan otomatis saat ada member yang keluar / di-kick dari grup WhatsApp.</p>
+      </div>
+
+      <!-- Quick Info Banner -->
+      <div class="panel" style="margin-bottom: 1rem; padding: 1rem; border-left: 4px solid var(--accent); background: rgba(59, 130, 246, 0.05);">
+        <div style="font-size: 0.85rem; color: var(--text-sub); line-height: 1.5;">
+          💡 <strong>Informasi:</strong> Fitur ini mengirimkan pesan perpisahan otomatis ketika member keluar sendiri atau dikeluarkan dari grup.<br>
+          Gunakan tag <code>@user</code> untuk mention member yang keluar dan <code>{group}</code> untuk nama grup.
+        </div>
+      </div>
+
+      <!-- Groups List Panel -->
+      <div class="panel" style="padding: 1.25rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+          <div>
+            <h3 style="margin: 0; font-size: 1.05rem;">📋 Daftar Grup WhatsApp</h3>
+            <p style="margin: 0.2rem 0 0 0; color: var(--text-muted); font-size: 0.775rem;">Aktifkan atau matikan pesan goodbye untuk masing-masing grup.</p>
+          </div>
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <input type="text" id="goodbyeGroupSearch" class="input-field" placeholder="🔍 Cari nama grup..." onkeyup="filterGoodbyeGroups()" style="min-width: 180px; padding: 0.35rem 0.65rem; font-size: 0.85rem;">
+            <button class="btn btn-secondary btn-sm" onclick="loadGoodbyeWeb()">🔄 Refresh</button>
+          </div>
+        </div>
+
+        <!-- Table for Desktop -->
+        <div class="table-responsive desktop-only">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 35%;">Nama Grup</th>
+                <th>Status Goodbye</th>
+                <th>Format Template</th>
+                <th style="text-align: right;">Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="goodbyeTableBody">
+              <tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Memuat data grup...</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Card List for Mobile -->
+        <div id="goodbyeMobileList" class="mobile-only" style="display: flex; flex-direction: column; gap: 0.75rem;">
+          <div style="text-align: center; color: var(--text-muted); padding: 1.5rem; font-size: 0.85rem;">Memuat data grup...</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW 13: PUSAT LOG ERROR & AI FIXER -->
+    <section id="view-errors" class="view-container">
+      <div class="greeting-header" style="margin-bottom: 1rem;">
+        <h2 style="margin: 0; font-size: 1.35rem;">🚨 Error Center & AI Diagnostics (Fix with AI)</h2>
+        <p style="margin: 0.25rem 0 0 0; color: var(--text-sub); font-size: 0.85rem;">Pusat pencatatan otomatis semua error/panic sistem dengan fitur diagnosa cerdas dan rekomendasi perbaikan berbasis AI.</p>
+      </div>
+
+      <!-- KPI Metrics Row -->
+      <div class="metric-grid" style="margin-bottom: 1.25rem;">
+        <div class="metric-card">
+          <div class="metric-title">Total Error Tercatat</div>
+          <div class="metric-value" id="errMetricTotal" style="color: var(--danger);">0</div>
+          <div class="metric-change" id="errMetricTotalSub">Riwayat runtime</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-title">Error Unresolved</div>
+          <div class="metric-value" id="errMetricUnresolved" style="color: var(--warning);">0</div>
+          <div class="metric-change">Perlu perhatian</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-title">AI Fixer Engine</div>
+          <div class="metric-value" id="errMetricAiStatus" style="font-size: 1.15rem; color: var(--accent);">Ready</div>
+          <div class="metric-change" id="errMetricAiModel">Custom Model</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-title">Sumber Error Terbanyak</div>
+          <div class="metric-value" id="errMetricTopSource" style="font-size: 1.25rem; color: var(--text-main);">-</div>
+          <div class="metric-change">Kategori dominan</div>
+        </div>
+      </div>
+
+      <!-- Main Panel with Filters & Actions -->
+      <div class="panel" style="padding: 1.25rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.75rem;">
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+            <input type="text" id="errSearchInput" class="input-field" placeholder="🔍 Cari pesan / konteks error..." onkeyup="filterErrorsWeb()" style="min-width: 220px; font-size: 0.85rem; padding: 0.4rem 0.65rem;">
+            
+            <select id="errSourceFilter" class="select-field" onchange="filterErrorsWeb()" style="font-size: 0.85rem; padding: 0.4rem 0.65rem; background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 6px;">
+              <option value="ALL">Semua Sumber (All)</option>
+              <option value="COMMAND">⚡ Command</option>
+              <option value="JADIBOT">🧬 Jadibot</option>
+              <option value="WHATSAPP">💬 WhatsApp</option>
+              <option value="SYSTEM">💻 System / Panic</option>
+              <option value="WEB_API">🌐 Web API</option>
+              <option value="SIMI">🤖 Simi AI</option>
+              <option value="DATABASE">💾 Database</option>
+            </select>
+          </div>
+
+          <div style="display: flex; gap: 0.45rem; flex-wrap: wrap;">
+            <button class="btn btn-primary btn-sm" onclick="openAiConfigModal()">🤖 Setup API AI</button>
+            <button class="btn btn-secondary btn-sm" onclick="loadErrorsWeb()">🔄 Refresh</button>
+            <button class="btn btn-danger btn-sm" onclick="confirmClearErrors()">🗑️ Clear All</button>
+          </div>
+        </div>
+
+        <!-- Desktop Errors Table -->
+        <div class="table-responsive desktop-only">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 110px;">Sumber</th>
+                <th style="width: 160px;">Waktu & Frekuensi</th>
+                <th>Pesan & Detail Error</th>
+                <th style="width: 200px; text-align: right;">Aksi & AI Fix</th>
+              </tr>
+            </thead>
+            <tbody id="errorsTableBody">
+              <tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 2rem;">Memuat daftar error...</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Mobile Errors Cards -->
+        <div id="errorsMobileList" class="mobile-only" style="display: flex; flex-direction: column; gap: 0.75rem;">
+          <div style="text-align: center; color: var(--text-muted); padding: 2rem;">Memuat daftar error...</div>
+        </div>
+      </div>
+    </section>
+
   </div>
 
   <!-- MODAL: Edit Welcome Message Template -->
@@ -2685,6 +2867,132 @@
           <button class="btn btn-secondary" onclick="closeEditWelcomeModal()">Batal</button>
           <button class="btn btn-primary" onclick="saveWelcomeTemplateWeb()">💾 Simpan Template</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Edit Goodbye Message Template -->
+  <div id="modalEditGoodbye" class="modal-backdrop">
+    <div class="modal-box" style="max-width: 540px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h3 style="margin: 0; font-size: 1.1rem;">✏️ Edit Pesan Goodbye / Member Keluar</h3>
+        <button class="btn btn-secondary btn-sm" onclick="closeEditGoodbyeModal()">✕</button>
+      </div>
+      <div style="margin-bottom: 0.85rem;">
+        <div style="font-size: 0.8rem; color: var(--text-muted);">Grup Target:</div>
+        <div id="editGoodbyeGroupName" style="font-weight: 700; color: var(--text-main); font-size: 0.95rem;">-</div>
+        <input type="hidden" id="editGoodbyeGroupJID">
+      </div>
+      <div style="margin-bottom: 1rem;">
+        <label style="font-size: 0.775rem; font-weight: 600; color: var(--text-sub); display: block; margin-bottom: 0.35rem;">Format Teks Goodbye:</label>
+        <textarea id="editGoodbyeTemplateInput" class="input-field" rows="5" style="width: 100%; resize: vertical; font-family: var(--font-mono); font-size: 0.85rem; line-height: 1.5; padding: 0.75rem; border-radius: 8px;" placeholder="Tulis format ucapan perpisahan..."></textarea>
+        <div style="font-size: 0.725rem; color: var(--text-muted); margin-top: 0.35rem; line-height: 1.4;">
+          Tag yang tersedia:<br>
+          • <code>@user</code> / <code>{user}</code> : Mention member yang keluar/di-kick<br>
+          • <code>{group}</code> : Nama grup<br>
+          • <code>{desc}</code> : Deskripsi grup
+        </div>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+        <button class="btn btn-secondary btn-sm" onclick="resetGoodbyeTemplateWeb()">🔄 Reset ke Bawaan</button>
+        <div style="display: flex; gap: 0.5rem;">
+          <button class="btn btn-secondary" onclick="closeEditGoodbyeModal()">Batal</button>
+          <button class="btn btn-primary" onclick="saveGoodbyeTemplateWeb()">💾 Simpan Template</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Setup API AI Fixer -->
+  <div id="modalAiConfig" class="modal-backdrop">
+    <div class="modal-box" style="max-width: 580px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h3 style="margin: 0; font-size: 1.15rem;">🤖 Setup API AI Fixer (Custom Endpoint & Key)</h3>
+        <button class="btn btn-secondary btn-sm" onclick="closeAiConfigModal()">✕</button>
+      </div>
+      <p style="font-size: 0.825rem; color: var(--text-sub); margin-bottom: 1rem; line-height: 1.4;">
+        Atur penyedia API AI pilihan Anda (OpenAI compatible / Google Gemini / OpenRouter / Groq / Ollama lokal / endpoint kustom). API Key disimpan secara aman di backend.
+      </p>
+
+      <div style="display: flex; flex-direction: column; gap: 0.85rem; margin-bottom: 1.25rem;">
+        <div>
+          <label style="font-size: 0.775rem; font-weight: 600; color: var(--text-sub); display: block; margin-bottom: 0.3rem;">Penyedia / Format API (Provider):</label>
+          <select id="aifixProviderSelect" class="select-field" onchange="onAiProviderChange()" style="width: 100%; background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.45rem 0.65rem;">
+            <option value="openai">OpenAI Compatible (OpenAI, OpenRouter, Groq, DeepSeek, Ollama, dll)</option>
+            <option value="gemini">Google Gemini (Gemini Flash / Pro)</option>
+          </select>
+        </div>
+
+        <div>
+          <label style="font-size: 0.775rem; font-weight: 600; color: var(--text-sub); display: block; margin-bottom: 0.3rem;">API Base URL / Endpoint:</label>
+          <input type="text" id="aifixApiUrlInput" class="input-field" placeholder="https://api.openai.com/v1/chat/completions">
+          <div id="aifixUrlHint" style="font-size: 0.7rem; color: var(--text-muted); margin-top: 0.2rem;">
+            Default OpenAI: <code>https://api.openai.com/v1/chat/completions</code> | OpenRouter: <code>https://openrouter.ai/api/v1/chat/completions</code> | Ollama: <code>http://localhost:11434/v1/chat/completions</code>
+          </div>
+        </div>
+
+        <div>
+          <label style="font-size: 0.775rem; font-weight: 600; color: var(--text-sub); display: block; margin-bottom: 0.3rem;">API Key (Kunci Rahasia):</label>
+          <div style="display: flex; gap: 0.5rem;">
+            <input type="password" id="aifixApiKeyInput" class="input-field" placeholder="sk-... atau API Key Anda" style="flex: 1;">
+            <button class="btn btn-secondary btn-sm" type="button" onclick="toggleApiKeyVisibility('aifixApiKeyInput', this)">👁️</button>
+          </div>
+          <div id="aifixKeyStatus" style="font-size: 0.7rem; color: var(--text-muted); margin-top: 0.2rem;"></div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 0.75rem;">
+          <div>
+            <label style="font-size: 0.775rem; font-weight: 600; color: var(--text-sub); display: block; margin-bottom: 0.3rem;">Model Name:</label>
+            <input type="text" id="aifixModelInput" class="input-field" placeholder="gpt-4o-mini / gemini-1.5-flash">
+          </div>
+          <div>
+            <label style="font-size: 0.775rem; font-weight: 600; color: var(--text-sub); display: block; margin-bottom: 0.3rem;">Temperature:</label>
+            <input type="number" id="aifixTempInput" class="input-field" step="0.1" min="0" max="1" value="0.3">
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+        <button class="btn btn-secondary btn-sm" onclick="testAiConnection()">🧪 Test Koneksi AI</button>
+        <div style="display: flex; gap: 0.5rem;">
+          <button class="btn btn-secondary" onclick="closeAiConfigModal()">Batal</button>
+          <button class="btn btn-primary" onclick="saveAiConfigWeb()">💾 Simpan Konfigurasi</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: AI Fix Result & Diagnostics Drawer -->
+  <div id="modalAiFixResult" class="modal-backdrop">
+    <div class="modal-box" style="max-width: 760px; max-height: 90vh; display: flex; flex-direction: column;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem;">
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <span style="font-size: 1.25rem;">🤖</span>
+          <h3 style="margin: 0; font-size: 1.15rem;">Diagnostik & Solusi Perbaikan AI</h3>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="closeAiFixResultModal()">✕</button>
+      </div>
+
+      <div style="background: #06090e; padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 1rem; font-size: 0.8rem;">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem;">
+          <span id="aifixModalSourceBadge" class="badge badge-danger">ERROR</span>
+          <span id="aifixModalTime" style="color: var(--text-muted); font-family: var(--font-mono); font-size: 0.725rem;">-</span>
+        </div>
+        <div id="aifixModalMsg" style="font-weight: 700; color: var(--text-main); font-family: var(--font-mono); word-break: break-all;">-</div>
+      </div>
+
+      <div id="aifixLoadingBox" style="display: none; text-align: center; padding: 2.5rem 1rem;">
+        <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">⏳</div>
+        <div style="font-weight: 700; color: var(--accent);">AI sedang menganalisis log error & memeriksa kode...</div>
+        <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.25rem;">Memeriksa penyebab root cause dan menyusun rekomendasi perbaikan...</div>
+      </div>
+
+      <div id="aifixResultBody" style="flex: 1; overflow-y: auto; padding: 0.75rem; background: #080c14; border-radius: 8px; border: 1px solid var(--border-color); font-size: 0.875rem; line-height: 1.6; color: var(--text-main); white-space: pre-wrap; font-family: inherit;">
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 0.75rem;">
+        <button class="btn btn-secondary btn-sm" onclick="copyAiFixAnalysis()">📋 Copy Solusi</button>
+        <button class="btn btn-primary" onclick="closeAiFixResultModal()">Tutup</button>
       </div>
     </div>
   </div>
@@ -3110,6 +3418,40 @@
       renderCommandsTables(d.topCommands || [], d.topCommandErrors || []);
       renderAuditTable(d.auditLogs || []);
 
+      // Error Badges and Summary Metrics
+      if (d.errors) {
+        const unres = d.errors.unresolved || 0;
+        const total = d.errors.total || 0;
+        
+        const badgeDesk = document.getElementById('navErrorBadgeDesktop');
+        const badgeMob = document.getElementById('navErrorBadgeMobile');
+        if (badgeDesk) {
+          badgeDesk.textContent = unres;
+          badgeDesk.style.display = unres > 0 ? 'inline-block' : 'none';
+        }
+        if (badgeMob) {
+          badgeMob.textContent = unres;
+          badgeMob.style.display = unres > 0 ? 'inline-block' : 'none';
+        }
+
+        const totalEl = document.getElementById('errMetricTotal');
+        if (totalEl) totalEl.textContent = total;
+        const unresEl = document.getElementById('errMetricUnresolved');
+        if (unresEl) unresEl.textContent = unres;
+        
+        const sources = d.errors.sources || {};
+        let topSrc = '-';
+        let topCnt = 0;
+        for (const [src, cnt] of Object.entries(sources)) {
+          if (cnt > topCnt) {
+            topCnt = cnt;
+            topSrc = src;
+          }
+        }
+        const topSrcEl = document.getElementById('errMetricTopSource');
+        if (topSrcEl) topSrcEl.textContent = topSrc;
+      }
+
       // Pairing Banner Handler
       const pairingBanner = document.getElementById('pairingBanner');
       const pairingCodeDisplay = document.getElementById('pairingCodeDisplay');
@@ -3245,6 +3587,12 @@
       }
       if (viewId === 'welcome') {
         loadWelcomeWeb();
+      }
+      if (viewId === 'goodbye') {
+        loadGoodbyeWeb();
+      }
+      if (viewId === 'errors') {
+        loadErrorsWeb();
       }
     }
 
@@ -3540,6 +3888,654 @@
         filterWelcomeGroups();
       } catch (err) {
         showToast('Error: ' + err.message, 'danger');
+      }
+    }
+
+    // -------------------------------------------------------------
+    // PESAN GOODBYE (MEMBER KELUAR) JAVASCRIPT CONTROLLER
+    // -------------------------------------------------------------
+    let allGoodbyeGroups = [];
+    let defaultGoodbyeTemplate = '';
+
+    async function loadGoodbyeWeb() {
+      const tableBody = document.getElementById('goodbyeTableBody');
+      const mobileList = document.getElementById('goodbyeMobileList');
+      if (tableBody) tableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Memuat data grup...</td></tr>';
+      if (mobileList) mobileList.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 1.5rem; font-size: 0.85rem;">Memuat data grup...</div>';
+
+      try {
+        const res = await fetch('/api/goodbye/groups', {
+          headers: { 'Authorization': 'Bearer ' + authToken }
+        });
+        const json = await res.json();
+        if (!json.ok && json.error) {
+          showToast(json.error, 'danger');
+          if (tableBody) tableBody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--danger); padding: 1.5rem;">${escapeHtml(json.error)}</td></tr>`;
+          if (mobileList) mobileList.innerHTML = `<div style="text-align: center; color: var(--danger); padding: 1.5rem;">${escapeHtml(json.error)}</div>`;
+          return;
+        }
+
+        allGoodbyeGroups = json.groups || [];
+        defaultGoodbyeTemplate = json.default_template || '';
+        renderGoodbyeGroups(allGoodbyeGroups);
+      } catch (err) {
+        showToast('Gagal memuat grup: ' + err.message, 'danger');
+        if (tableBody) tableBody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--danger); padding: 1.5rem;">${escapeHtml(err.message)}</td></tr>`;
+      }
+    }
+
+    function filterGoodbyeGroups() {
+      const query = (document.getElementById('goodbyeGroupSearch')?.value || '').toLowerCase().trim();
+      if (!query) {
+        renderGoodbyeGroups(allGoodbyeGroups);
+        return;
+      }
+      const filtered = allGoodbyeGroups.filter(g => 
+        (g.name || '').toLowerCase().includes(query) || 
+        (g.jid || '').toLowerCase().includes(query)
+      );
+      renderGoodbyeGroups(filtered);
+    }
+
+    function renderGoodbyeGroups(groups) {
+      const tableBody = document.getElementById('goodbyeTableBody');
+      const mobileList = document.getElementById('goodbyeMobileList');
+      if (!groups || groups.length === 0) {
+        const emptyMsg = 'Tidak ada grup WhatsApp yang ditemukan.';
+        if (tableBody) tableBody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">${emptyMsg}</td></tr>`;
+        if (mobileList) mobileList.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 1.5rem; font-size: 0.85rem;">${emptyMsg}</div>`;
+        return;
+      }
+
+      let tableHtml = '';
+      let mobileHtml = '';
+
+      groups.forEach((g) => {
+        const isEnabled = g.enabled;
+        const statusBadge = isEnabled 
+          ? '<span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 9999px;">🟢 Aktif</span>'
+          : '<span class="badge" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 9999px;">🔴 Nonaktif</span>';
+
+        const templateType = g.has_custom_msg 
+          ? '<span style="font-size: 0.75rem; color: var(--accent);">✏️ Kustom</span>'
+          : '<span style="font-size: 0.75rem; color: var(--text-muted);">Standard</span>';
+
+        const toggleBtn = isEnabled
+          ? `<button class="btn btn-danger btn-sm" onclick="toggleGoodbyeWeb('${escapeHtml(g.jid)}', false)">Matikan</button>`
+          : `<button class="btn btn-primary btn-sm" onclick="toggleGoodbyeWeb('${escapeHtml(g.jid)}', true)">Aktifkan</button>`;
+
+        tableHtml += `
+          <tr>
+            <td>
+              <div style="font-weight: 600; color: var(--text-main); font-size: 0.875rem;">${escapeHtml(g.name || 'Grup Tanpa Nama')}</div>
+              <div style="font-size: 0.725rem; color: var(--text-muted); font-family: var(--font-mono);">${escapeHtml(g.jid)} • ${g.participant_count || 0} Member</div>
+            </td>
+            <td>${statusBadge}</td>
+            <td>${templateType}</td>
+            <td style="text-align: right;">
+              <div style="display: inline-flex; gap: 0.4rem;">
+                <button class="btn btn-secondary btn-sm" onclick="openEditGoodbyeModal('${escapeHtml(g.jid)}')">✏️ Edit Pesan</button>
+                ${toggleBtn}
+              </div>
+            </td>
+          </tr>
+        `;
+
+        mobileHtml += `
+          <div class="panel" style="padding: 0.85rem; border: 1px solid var(--border-color); border-radius: 8px;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">
+              <div>
+                <div style="font-weight: 600; color: var(--text-main); font-size: 0.875rem;">${escapeHtml(g.name || 'Grup Tanpa Nama')}</div>
+                <div style="font-size: 0.7rem; color: var(--text-muted); font-family: var(--font-mono);">${escapeHtml(g.jid)}</div>
+              </div>
+              <div>${statusBadge}</div>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.75rem; padding-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.05);">
+              <div style="font-size: 0.75rem;">${templateType}</div>
+              <div style="display: flex; gap: 0.35rem;">
+                <button class="btn btn-secondary btn-sm" onclick="openEditGoodbyeModal('${escapeHtml(g.jid)}')">✏️ Edit</button>
+                ${toggleBtn}
+              </div>
+            </div>
+          </div>
+        `;
+      });
+
+      if (tableBody) tableBody.innerHTML = tableHtml;
+      if (mobileList) mobileList.innerHTML = mobileHtml;
+    }
+
+    async function toggleGoodbyeWeb(jid, enable) {
+      try {
+        const res = await fetch('/api/goodbye/toggle', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + authToken
+          },
+          body: JSON.stringify({ jid: jid, enabled: enable })
+        });
+        const json = await res.json();
+        if (!json.ok) {
+          showToast(json.error || 'Gagal mengubah status goodbye', 'danger');
+          return;
+        }
+        showToast(`Fitur goodbye berhasil ${enable ? 'diaktifkan' : 'dimatikan'}!`, 'success');
+        const target = allGoodbyeGroups.find(g => g.jid === jid);
+        if (target) target.enabled = enable;
+        filterGoodbyeGroups();
+      } catch (err) {
+        showToast('Error: ' + err.message, 'danger');
+      }
+    }
+
+    function openEditGoodbyeModal(jid) {
+      const target = allGoodbyeGroups.find(g => g.jid === jid);
+      if (!target) return;
+
+      document.getElementById('editGoodbyeGroupJID').value = jid;
+      document.getElementById('editGoodbyeGroupName').innerText = `${target.name || 'Grup'} (${jid})`;
+      document.getElementById('editGoodbyeTemplateInput').value = target.template || defaultGoodbyeTemplate;
+
+      document.getElementById('modalEditGoodbye').classList.add('active');
+    }
+
+    function closeEditGoodbyeModal() {
+      document.getElementById('modalEditGoodbye').classList.remove('active');
+    }
+
+    async function saveGoodbyeTemplateWeb() {
+      const jid = document.getElementById('editGoodbyeGroupJID').value;
+      const tmpl = document.getElementById('editGoodbyeTemplateInput').value;
+
+      if (!tmpl.trim()) {
+        showToast('Format pesan tidak boleh kosong', 'warning');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/goodbye/template', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + authToken
+          },
+          body: JSON.stringify({ jid: jid, template: tmpl, action: 'set' })
+        });
+        const json = await res.json();
+        if (!json.ok) {
+          showToast(json.error || 'Gagal menyimpan template', 'danger');
+          return;
+        }
+        showToast('Template pesan goodbye berhasil disimpan!', 'success');
+        const target = allGoodbyeGroups.find(g => g.jid === jid);
+        if (target) {
+          target.template = json.template;
+          target.has_custom_msg = json.has_custom_msg;
+        }
+        closeEditGoodbyeModal();
+        filterGoodbyeGroups();
+      } catch (err) {
+        showToast('Error: ' + err.message, 'danger');
+      }
+    }
+
+    async function resetGoodbyeTemplateWeb() {
+      const jid = document.getElementById('editGoodbyeGroupJID').value;
+      if (!confirm('Apakah Anda yakin ingin mengembalikan template goodbye grup ini ke format standar?')) {
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/goodbye/template', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + authToken
+          },
+          body: JSON.stringify({ jid: jid, action: 'reset' })
+        });
+        const json = await res.json();
+        if (!json.ok) {
+          showToast(json.error || 'Gagal reset template', 'danger');
+          return;
+        }
+        showToast('Template berhasil di-reset ke bawaan!', 'success');
+        document.getElementById('editGoodbyeTemplateInput').value = json.template;
+        const target = allGoodbyeGroups.find(g => g.jid === jid);
+        if (target) {
+          target.template = json.template;
+          target.has_custom_msg = false;
+        }
+        filterGoodbyeGroups();
+      } catch (err) {
+        showToast('Error: ' + err.message, 'danger');
+      }
+    }
+
+    // -------------------------------------------------------------
+    // ERROR TRACKER & FIX WITH AI JAVASCRIPT CONTROLLER
+    // -------------------------------------------------------------
+    let allErrorsList = [];
+    let currentAiFixId = '';
+    let currentAiFixAnalysisText = '';
+
+    async function loadErrorsWeb() {
+      const tableBody = document.getElementById('errorsTableBody');
+      const mobileList = document.getElementById('errorsMobileList');
+      if (tableBody) tableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 2rem;">⏳ Memuat log error sistem...</td></tr>';
+      if (mobileList) mobileList.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 2rem;">⏳ Memuat log error sistem...</div>';
+
+      try {
+        const res = await fetch('/api/errors', {
+          headers: { 'Authorization': 'Bearer ' + authToken }
+        });
+        const json = await res.json();
+        if (!json.ok) {
+          showToast('Gagal memuat error: ' + (json.error || 'Error server'), 'danger');
+          return;
+        }
+
+        allErrorsList = json.errors || [];
+        filterErrorsWeb();
+      } catch (err) {
+        showToast('Error koneksi: ' + err.message, 'danger');
+      }
+    }
+
+    function filterErrorsWeb() {
+      const search = (document.getElementById('errSearchInput')?.value || '').toLowerCase().trim();
+      const sourceFilter = (document.getElementById('errSourceFilter')?.value || 'ALL').toUpperCase();
+
+      let filtered = allErrorsList.filter(e => {
+        const matchSearch = (e.message || '').toLowerCase().includes(search) || 
+                            (e.context || '').toLowerCase().includes(search) ||
+                            (e.source || '').toLowerCase().includes(search);
+        const matchSource = (sourceFilter === 'ALL') || (e.source === sourceFilter);
+        return matchSearch && matchSource;
+      });
+
+      renderErrorsWeb(filtered);
+    }
+
+    function renderErrorsWeb(errors) {
+      const tableBody = document.getElementById('errorsTableBody');
+      const mobileList = document.getElementById('errorsMobileList');
+      if (!tableBody && !mobileList) return;
+
+      if (!errors || errors.length === 0) {
+        const emptyHtml = `<tr><td colspan="4" style="text-align: center; color: var(--success); padding: 2rem; font-weight: 600;">✨ Tidak ada error sistem yang tercatat. Sistem beroperasi dengan lancar!</td></tr>`;
+        if (tableBody) tableBody.innerHTML = emptyHtml;
+        if (mobileList) mobileList.innerHTML = `<div style="text-align: center; color: var(--success); padding: 2rem; font-weight: 600;">✨ Tidak ada error sistem yang tercatat.</div>`;
+        return;
+      }
+
+      let tableHtml = '';
+      let mobileHtml = '';
+
+      errors.forEach(e => {
+        const sourceColor = e.source === 'COMMAND' ? '#6366f1' : (e.source === 'JADIBOT' ? '#8b5cf6' : (e.source === 'WHATSAPP' ? '#10b981' : (e.source === 'SIMI' ? '#ec4899' : '#ef4444')));
+        const sourceBadge = `<span class="badge" style="background: rgba(255,255,255,0.06); color: ${sourceColor}; border: 1px solid ${sourceColor}40; font-weight: 700; font-family: var(--font-mono); font-size: 0.725rem;">${escapeHtml(e.source)}</span>`;
+
+        const countBadge = e.count > 1 
+          ? `<span class="badge" style="background: rgba(239, 68, 68, 0.15); color: var(--danger); font-weight: 700; font-size: 0.7rem; margin-left: 0.35rem;">⚡ ${e.count}x</span>` 
+          : '';
+
+        const hasAiFix = !!(e.aiAnalysis && e.aiAnalysis.trim());
+        const aiFixBtn = hasAiFix 
+          ? `<button class="btn btn-sm" style="background: rgba(99,102,241,0.2); color: var(--accent); border: 1px solid var(--accent); font-weight: 700;" onclick="triggerAiFix('${e.id}')">✨ Solusi AI</button>`
+          : `<button class="btn btn-primary btn-sm" style="font-weight: 700;" onclick="triggerAiFix('${e.id}')">🤖 Fix with AI</button>`;
+
+        const contextSnippet = e.context 
+          ? `<details style="margin-top: 0.4rem; font-size: 0.75rem; color: var(--text-muted);">
+               <summary style="cursor: pointer; color: var(--accent); font-weight: 600;">Lihat Detail Log / Stack Trace</summary>
+               <pre style="background: #06090e; padding: 0.5rem; border-radius: 6px; border: 1px solid var(--border-color); margin-top: 0.35rem; white-space: pre-wrap; font-family: var(--font-mono); color: #a5b4fc; max-height: 120px; overflow-y: auto;">${escapeHtml(e.context)}</pre>
+             </details>`
+          : '';
+
+        tableHtml += `
+          <tr>
+            <td>${sourceBadge}</td>
+            <td>
+              <div style="font-family: var(--font-mono); font-size: 0.775rem; color: var(--text-main);">${escapeHtml(e.timeStr || '-')}</div>
+              <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 0.15rem;">Hit: ${countBadge || '1x'}</div>
+            </td>
+            <td>
+              <div style="font-weight: 600; color: #f87171; font-family: var(--font-mono); font-size: 0.8rem; word-break: break-word;">${escapeHtml(e.message)}</div>
+              ${contextSnippet}
+            </td>
+            <td style="text-align: right;">
+              <div style="display: flex; gap: 0.35rem; justify-content: flex-end; align-items: center; flex-wrap: wrap;">
+                ${aiFixBtn}
+                <button class="btn btn-secondary btn-sm" onclick="copyErrorDetails('${e.id}')" title="Copy Pesan Error">📋</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteErrorWeb('${e.id}')" title="Hapus Error">🗑️</button>
+              </div>
+            </td>
+          </tr>
+        `;
+
+        mobileHtml += `
+          <div class="panel" style="padding: 0.85rem; border: 1px solid var(--border-color); border-radius: 8px; background: #0c111c;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+              <div style="display: flex; align-items: center; gap: 0.4rem;">
+                ${sourceBadge}
+                ${countBadge}
+              </div>
+              <span style="font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-muted);">${escapeHtml(e.timeStr || '-')}</span>
+            </div>
+            <div style="font-weight: 600; color: #f87171; font-family: var(--font-mono); font-size: 0.8rem; margin: 0.35rem 0; word-break: break-word;">
+              ${escapeHtml(e.message)}
+            </div>
+            ${contextSnippet}
+            <div style="display: flex; justify-content: flex-end; gap: 0.4rem; margin-top: 0.65rem; padding-top: 0.5rem; border-top: 1px solid var(--border-color);">
+              ${aiFixBtn}
+              <button class="btn btn-secondary btn-sm" onclick="copyErrorDetails('${e.id}')">📋</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteErrorWeb('${e.id}')">🗑️</button>
+            </div>
+          </div>
+        `;
+      });
+
+      if (tableBody) tableBody.innerHTML = tableHtml;
+      if (mobileList) mobileList.innerHTML = mobileHtml;
+    }
+
+    function copyErrorDetails(id) {
+      const entry = allErrorsList.find(e => e.id === id);
+      if (!entry) return;
+      const text = `[${entry.source}] ${entry.timeStr}\nError: ${entry.message}\nContext:\n${entry.context || '-'}`;
+      navigator.clipboard.writeText(text).then(() => {
+        showToast('Pesan error disalin ke clipboard!', 'success');
+      }).catch(() => {
+        showToast('Gagal menyalin text', 'error');
+      });
+    }
+
+    async function deleteErrorWeb(id) {
+      try {
+        const res = await fetch('/api/errors/delete', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + authToken
+          },
+          body: JSON.stringify({ id: id })
+        });
+        const json = await res.json();
+        if (json.ok) {
+          showToast('Error berhasil dihapus!', 'success');
+          allErrorsList = allErrorsList.filter(e => e.id !== id);
+          filterErrorsWeb();
+          fetchStatus();
+        } else {
+          showToast('Gagal menghapus: ' + (json.error || 'Terjadi kesalahan'), 'danger');
+        }
+      } catch (err) {
+        showToast('Error: ' + err.message, 'danger');
+      }
+    }
+
+    async function confirmClearErrors() {
+      if (!confirm('Apakah Anda yakin ingin menghapus seluruh riwayat log error sistem?')) {
+        return;
+      }
+      try {
+        const res = await fetch('/api/errors/clear', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + authToken
+          }
+        });
+        const json = await res.json();
+        if (json.ok) {
+          showToast('Seluruh riwayat error sistem berhasil dibersihkan!', 'success');
+          allErrorsList = [];
+          filterErrorsWeb();
+          fetchStatus();
+        } else {
+          showToast('Gagal: ' + (json.error || 'Terjadi kesalahan'), 'danger');
+        }
+      } catch (err) {
+        showToast('Error: ' + err.message, 'danger');
+      }
+    }
+
+    async function triggerAiFix(id) {
+      const entry = allErrorsList.find(e => e.id === id);
+      if (!entry) return;
+
+      currentAiFixId = id;
+
+      const sourceBadge = document.getElementById('aifixModalSourceBadge');
+      const timeEl = document.getElementById('aifixModalTime');
+      const msgEl = document.getElementById('aifixModalMsg');
+      const loadingBox = document.getElementById('aifixLoadingBox');
+      const resultBody = document.getElementById('aifixResultBody');
+
+      if (sourceBadge) sourceBadge.textContent = entry.source || 'ERROR';
+      if (timeEl) timeEl.textContent = entry.timeStr || '-';
+      if (msgEl) msgEl.textContent = entry.message || '-';
+
+      document.getElementById('modalAiFixResult').classList.add('active');
+
+      if (entry.aiAnalysis && entry.aiAnalysis.trim()) {
+        loadingBox.style.display = 'none';
+        resultBody.style.display = 'block';
+        currentAiFixAnalysisText = entry.aiAnalysis;
+        resultBody.innerHTML = formatMarkdownToHtml(entry.aiAnalysis);
+        return;
+      }
+
+      loadingBox.style.display = 'block';
+      resultBody.style.display = 'none';
+      resultBody.innerHTML = '';
+
+      try {
+        const res = await fetch('/api/errors/ai-fix', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + authToken
+          },
+          body: JSON.stringify({ id: id, message: entry.message, source: entry.source, context: entry.context })
+        });
+        const json = await res.json();
+        loadingBox.style.display = 'none';
+        resultBody.style.display = 'block';
+
+        if (!json.ok) {
+          resultBody.innerHTML = `<div style="color: var(--danger); padding: 1rem; text-align: center;">❌ ${escapeHtml(json.error || 'Gagal menganalisis error dengan AI')}</div>`;
+          return;
+        }
+
+        currentAiFixAnalysisText = json.analysis || '';
+        entry.aiAnalysis = json.analysis;
+        resultBody.innerHTML = formatMarkdownToHtml(json.analysis || 'Tidak ada balasan analisis.');
+        filterErrorsWeb();
+      } catch (err) {
+        loadingBox.style.display = 'none';
+        resultBody.style.display = 'block';
+        resultBody.innerHTML = `<div style="color: var(--danger); padding: 1rem;">❌ Gagal terhubung ke AI Engine: ${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    function formatMarkdownToHtml(md) {
+      if (!md) return '';
+      let html = escapeHtml(md);
+      
+      html = html.replace(/```([a-zA-Z]*)\n([\s\S]*?)```/g, function(match, lang, code) {
+        return `<pre style="background: #040711; border: 1px solid #1e293b; border-radius: 6px; padding: 0.75rem; margin: 0.5rem 0; font-family: var(--font-mono); font-size: 0.8rem; overflow-x: auto; color: #38bdf8;"><code>${code}</code></pre>`;
+      });
+
+      html = html.replace(/`([^`]+)`/g, '<code style="background: rgba(255,255,255,0.08); padding: 0.15rem 0.35rem; border-radius: 4px; font-family: var(--font-mono); color: #f43f5e;">$1</code>');
+      html = html.replace(/\*\*([^*]+)\*\*/g, '<strong style="color: var(--text-main); font-weight: 700;">$1</strong>');
+      html = html.replace(/^### (.*$)/gim, '<h4 style="margin: 0.75rem 0 0.25rem 0; color: var(--accent); font-size: 0.95rem;">$1</h4>');
+      html = html.replace(/^## (.*$)/gim, '<h3 style="margin: 1rem 0 0.35rem 0; color: var(--text-main); font-size: 1.05rem;">$1</h3>');
+      html = html.replace(/^# (.*$)/gim, '<h2 style="margin: 1.25rem 0 0.45rem 0; color: var(--text-main); font-size: 1.15rem;">$1</h2>');
+      html = html.replace(/^\s*[\-\*]\s+(.*$)/gim, '<li style="margin-left: 1.25rem; margin-bottom: 0.25rem;">$1</li>');
+
+      return html;
+    }
+
+    function copyAiFixAnalysis() {
+      if (!currentAiFixAnalysisText) return;
+      navigator.clipboard.writeText(currentAiFixAnalysisText).then(() => {
+        showToast('Solusi AI berhasil disalin!', 'success');
+      }).catch(() => {
+        showToast('Gagal menyalin solusi', 'error');
+      });
+    }
+
+    function closeAiFixResultModal() {
+      document.getElementById('modalAiFixResult').classList.remove('active');
+    }
+
+    async function openAiConfigModal() {
+      document.getElementById('modalAiConfig').classList.add('active');
+      try {
+        const res = await fetch('/api/errors/ai-config', {
+          headers: { 'Authorization': 'Bearer ' + authToken }
+        });
+        const json = await res.json();
+        if (json.ok) {
+          const provSelect = document.getElementById('aifixProviderSelect');
+          if (provSelect) provSelect.value = json.provider || 'openai';
+
+          const urlInput = document.getElementById('aifixApiUrlInput');
+          if (urlInput) urlInput.value = json.apiUrl || '';
+
+          const modelInput = document.getElementById('aifixModelInput');
+          if (modelInput) modelInput.value = json.model || '';
+
+          const tempInput = document.getElementById('aifixTempInput');
+          if (tempInput) tempInput.value = json.temperature || 0.3;
+
+          const keyInput = document.getElementById('aifixApiKeyInput');
+          const keyStatus = document.getElementById('aifixKeyStatus');
+          if (keyInput) keyInput.value = '';
+          if (keyStatus) {
+            keyStatus.innerHTML = json.hasApiKey 
+              ? `<span style="color: var(--success);">✓ API Key aktif: <code>${escapeHtml(json.maskedKey)}</code> (Kosongkan jika tidak ingin mengubah)</span>`
+              : `<span style="color: var(--warning);">⚠️ Belum ada API Key terpasang</span>`;
+          }
+
+          onAiProviderChange();
+        }
+      } catch (err) {
+        showToast('Gagal memuat konfigurasi AI: ' + err.message, 'danger');
+      }
+    }
+
+    function closeAiConfigModal() {
+      document.getElementById('modalAiConfig').classList.remove('active');
+    }
+
+    function onAiProviderChange() {
+      const prov = document.getElementById('aifixProviderSelect')?.value;
+      const urlInput = document.getElementById('aifixApiUrlInput');
+      const urlHint = document.getElementById('aifixUrlHint');
+      const modelInput = document.getElementById('aifixModelInput');
+
+      if (prov === 'gemini') {
+        if (!urlInput.value || urlInput.value.includes('openai.com')) {
+          urlInput.value = 'https://generativelanguage.googleapis.com';
+        }
+        if (!modelInput.value || modelInput.value.includes('gpt-')) {
+          modelInput.value = 'gemini-1.5-flash';
+        }
+        if (urlHint) urlHint.innerHTML = 'Default Gemini: <code>https://generativelanguage.googleapis.com</code>';
+      } else {
+        if (!urlInput.value || urlInput.value.includes('googleapis.com')) {
+          urlInput.value = 'https://api.openai.com/v1/chat/completions';
+        }
+        if (!modelInput.value || modelInput.value.includes('gemini-')) {
+          modelInput.value = 'gpt-4o-mini';
+        }
+        if (urlHint) urlHint.innerHTML = 'Default OpenAI: <code>https://api.openai.com/v1/chat/completions</code> | OpenRouter: <code>https://openrouter.ai/api/v1/chat/completions</code> | Ollama: <code>http://localhost:11434/v1/chat/completions</code>';
+      }
+    }
+
+    function toggleApiKeyVisibility(inputId, btn) {
+      const input = document.getElementById(inputId);
+      if (!input) return;
+      if (input.type === 'password') {
+        input.type = 'text';
+        btn.textContent = '🙈';
+      } else {
+        input.type = 'password';
+        btn.textContent = '👁️';
+      }
+    }
+
+    async function saveAiConfigWeb() {
+      const provider = document.getElementById('aifixProviderSelect')?.value || 'openai';
+      const apiUrl = document.getElementById('aifixApiUrlInput')?.value.trim() || '';
+      const apiKey = document.getElementById('aifixApiKeyInput')?.value.trim() || '';
+      const model = document.getElementById('aifixModelInput')?.value.trim() || '';
+      const temperature = parseFloat(document.getElementById('aifixTempInput')?.value) || 0.3;
+
+      const payload = {
+        provider: provider,
+        apiUrl: apiUrl,
+        model: model,
+        temperature: temperature
+      };
+      if (apiKey) {
+        payload.apiKey = apiKey;
+      }
+
+      try {
+        const res = await fetch('/api/errors/ai-config', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + authToken
+          },
+          body: JSON.stringify(payload)
+        });
+        const json = await res.json();
+        if (json.ok) {
+          showToast(json.message || 'Konfigurasi AI Fixer berhasil disimpan!', 'success');
+          closeAiConfigModal();
+          const aiModelEl = document.getElementById('errMetricAiModel');
+          if (aiModelEl) aiModelEl.textContent = model || 'Custom Model';
+        } else {
+          showToast('Gagal menyimpan: ' + (json.error || 'Terjadi kesalahan'), 'danger');
+        }
+      } catch (err) {
+        showToast('Error koneksi: ' + err.message, 'danger');
+      }
+    }
+
+    async function testAiConnection() {
+      const testEntry = {
+        id: "test-probe",
+        source: "SYSTEM",
+        message: "Test AI Fixer probe connection",
+        context: "Verifikasi endpoint API AI Fixer dari Web Dashboard R-BOT"
+      };
+
+      showToast('⚡ Menguji koneksi ke API AI...', 'info');
+      try {
+        const res = await fetch('/api/errors/ai-fix', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + authToken
+          },
+          body: JSON.stringify(testEntry)
+        });
+        const json = await res.json();
+        if (json.ok) {
+          showToast('🎉 Berhasil terhubung ke API AI!', 'success');
+          alert('KONEKSI AI SUKSES:\n\n' + (json.analysis ? json.analysis.substring(0, 200) + '...' : 'OK'));
+        } else {
+          showToast('❌ Tes koneksi gagal: ' + (json.error || 'Unknown error'), 'danger');
+          alert('TES KONEKSI AI GAGAL:\n\n' + (json.error || 'Terjadi kesalahan'));
+        }
+      } catch (err) {
+        showToast('❌ Error jaringan: ' + err.message, 'danger');
       }
     }
 

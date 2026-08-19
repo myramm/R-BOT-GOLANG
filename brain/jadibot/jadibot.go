@@ -23,6 +23,7 @@ import (
 
 	"rbot/brain/command"
 	"rbot/brain/config"
+	"rbot/brain/goodbye"
 	"rbot/brain/stats"
 	"rbot/brain/store"
 	"rbot/brain/welcome"
@@ -952,6 +953,9 @@ func (m *Manager) Init(ctx context.Context) {
 				if len(evt.Join) > 0 {
 					go welcome.HandleGroupJoin(ctx, client, evt)
 				}
+				if len(evt.Leave) > 0 {
+					go goodbye.HandleGroupLeave(ctx, client, evt)
+				}
 			case *events.LoggedOut:
 				log.Printf("[jadibot] sub-bot %s logged out", phoneDigits)
 				_ = m.Stop(context.Background(), phoneDigits, types.JID{}, true)
@@ -1046,6 +1050,9 @@ func (m *Manager) Restart(ctx context.Context, phone string) error {
 		case *events.GroupInfo:
 			if len(evt.Join) > 0 {
 				go welcome.HandleGroupJoin(ctx, client, evt)
+			}
+			if len(evt.Leave) > 0 {
+				go goodbye.HandleGroupLeave(ctx, client, evt)
 			}
 		case *events.LoggedOut:
 			log.Printf("[jadibot] sub-bot %s logged out", phoneDigits)

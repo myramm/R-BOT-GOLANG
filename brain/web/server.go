@@ -35,6 +35,8 @@ import (
 	"rbot/brain/lifecycle"
 	"rbot/brain/settings"
 	"rbot/brain/simi"
+	"rbot/brain/errortracker"
+	"rbot/brain/goodbye"
 	"rbot/brain/stats"
 	"rbot/brain/store"
 	"rbot/brain/swgc"
@@ -422,6 +424,7 @@ func BuildStatusPayload() map[string]any {
 		},
 		"stats":            overview,
 		"contextInfo":      settings.GetContextInfo(),
+		"errors":           errortracker.GetSummary(),
 		"jadibot": map[string]any{
 			"count":   jadibot.Count(),
 			"max":     config.C.MaxJadibot,
@@ -494,10 +497,20 @@ func Start(ctx context.Context) {
 	mux.HandleFunc("/api/simi/stickers/delete", handleSimiStickerDelete)
 	mux.HandleFunc("/api/simi/stickers/clear", handleSimiStickerClear)
 
-	// Welcome Message Endpoints
+	// Welcome & Goodbye Message Endpoints
 	mux.HandleFunc("/api/welcome/groups", handleWelcomeGroups)
 	mux.HandleFunc("/api/welcome/toggle", handleWelcomeToggle)
 	mux.HandleFunc("/api/welcome/template", handleWelcomeTemplate)
+	mux.HandleFunc("/api/goodbye/groups", handleGoodbyeGroups)
+	mux.HandleFunc("/api/goodbye/toggle", handleGoodbyeToggle)
+	mux.HandleFunc("/api/goodbye/template", handleGoodbyeTemplate)
+
+	// System Error Tracker & AI Fixer Endpoints
+	mux.HandleFunc("/api/errors", handleErrorsList)
+	mux.HandleFunc("/api/errors/delete", handleErrorsDelete)
+	mux.HandleFunc("/api/errors/clear", handleErrorsClear)
+	mux.HandleFunc("/api/errors/ai-fix", handleErrorsAiFix)
+	mux.HandleFunc("/api/errors/ai-config", handleErrorsAiConfig)
 
 	// Bot Mode Endpoints (Self / Public)
 	mux.HandleFunc("/api/mode", handleBotMode)
@@ -2928,6 +2941,364 @@ func handleBotMode(w http.ResponseWriter, r *http.Request) {
 			"ok":        true,
 			"self_mode": newSelf,
 			"mode":      modeStr,
+		})
+		return
+	}
+
+	http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+}
+
+// Goodbye Message Handlers
+func handleGoodbyeGroups(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	stateMu.RLock()
+	cli := waClient
+	stateMu.RUnlock()
+
+	if cli == nil || !cli.IsConnected() || !cli.IsLoggedIn() {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":     true,
+			"groups": []goodbye.GroupGoodbyeData{},
+			"info":   "WhatsApp bot belum terhubung.",
+		})
+		return
+	}
+
+	groups, err := goodbye.GetGroupsGoodbyeData(r.Context(), cli)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":     false,
+			"error":  err.Error(),
+			"groups": []goodbye.GroupGoodbyeData{},
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":               true,
+		"groups":           groups,
+		"default_template": goodbye.DefaultTemplate(),
+	})
+}
+
+func handleGoodbyeToggle(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		JID     string `json:"jid"`
+		Enabled bool   `json:"enabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.JID == "" {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	if err := goodbye.SetEnabled(req.JID, req.Enabled); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	statusStr := "OFF"
+	if req.Enabled {
+		statusStr = "ON"
+	}
+	RecordAudit(r, "GOODBYE_TOGGLE", fmt.Sprintf("Ubah status Goodbye %s untuk grup %s via Web Dashboard", statusStr, req.JID))
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":      true,
+		"jid":     req.JID,
+		"enabled": req.Enabled,
+	})
+}
+
+func handleGoodbyeTemplate(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		JID      string `json:"jid"`
+		Template string `json:"template"`
+		Action   string `json:"action"` // "set" | "reset"
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.JID == "" {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	if req.Action == "reset" {
+		_ = goodbye.ResetTemplate(req.JID)
+		RecordAudit(r, "GOODBYE_TEMPLATE", fmt.Sprintf("Reset template goodbye untuk grup %s ke bawaan", req.JID))
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":             true,
+			"jid":            req.JID,
+			"template":       goodbye.DefaultTemplate(),
+			"has_custom_msg": false,
+		})
+		return
+	}
+
+	if err := goodbye.SetTemplate(req.JID, req.Template); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	RecordAudit(r, "GOODBYE_TEMPLATE", fmt.Sprintf("Kustomisasi template goodbye untuk grup %s", req.JID))
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":             true,
+		"jid":            req.JID,
+		"template":       goodbye.GetTemplate(req.JID),
+		"has_custom_msg": true,
+	})
+}
+
+// Error Tracker & AI Fixer Handlers
+func handleErrorsList(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	errorsList := errortracker.GetErrors()
+	summary := errortracker.GetSummary()
+
+	sourceFilter := strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("source")))
+	statusFilter := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("status")))
+
+	filtered := make([]errortracker.ErrorEntry, 0, len(errorsList))
+	for _, e := range errorsList {
+		if sourceFilter != "" && sourceFilter != "ALL" && e.Source != sourceFilter {
+			continue
+		}
+		if statusFilter != "" && statusFilter != "all" && e.Status != statusFilter {
+			continue
+		}
+		filtered = append(filtered, e)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":      true,
+		"errors":  filtered,
+		"summary": summary,
+	})
+}
+
+func handleErrorsDelete(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.ID == "" {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	deleted := errortracker.DeleteError(req.ID)
+	BroadcastMetricsNow()
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":      deleted,
+		"id":      req.ID,
+		"message": "Error berhasil dihapus",
+	})
+}
+
+func handleErrorsClear(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	errortracker.ClearErrors()
+	RecordAudit(r, "ERRORS_CLEAR", "Membersihkan seluruh riwayat error sistem")
+	BroadcastMetricsNow()
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":      true,
+		"message": "Seluruh riwayat error sistem berhasil dibersihkan",
+	})
+}
+
+func handleErrorsAiFix(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		ID      string `json:"id"`
+		Message string `json:"message,omitempty"`
+		Source  string `json:"source,omitempty"`
+		Context string `json:"context,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	var entry errortracker.ErrorEntry
+	if req.ID != "" {
+		if e, found := errortracker.GetErrorByID(req.ID); found {
+			entry = e
+		}
+	}
+
+	if entry.Message == "" {
+		if req.Message == "" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Pesan error atau ID tidak valid"})
+			return
+		}
+		entry = errortracker.ErrorEntry{
+			ID:          req.ID,
+			Source:      req.Source,
+			Message:     req.Message,
+			Context:     req.Context,
+			TimeStr:     time.Now().Format("2006-01-02 15:04:05"),
+			LastSeenStr: time.Now().Format("2006-01-02 15:04:05"),
+			Count:       1,
+		}
+	}
+
+	analysis, err := errortracker.AnalyzeErrorWithAi(r.Context(), entry)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	if entry.ID != "" {
+		errortracker.UpdateAiAnalysis(entry.ID, analysis)
+	}
+
+	RecordAudit(r, "AI_FIX_ANALYSIS", fmt.Sprintf("Menjalankan AI Error Diagnostic untuk: %s", entry.Message))
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":       true,
+		"id":       entry.ID,
+		"analysis": analysis,
+	})
+}
+
+func handleErrorsAiConfig(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	if r.Method == http.MethodGet {
+		cfg := errortracker.GetAiFixConfig()
+		maskedKey := ""
+		if len(cfg.ApiKey) > 8 {
+			maskedKey = cfg.ApiKey[:4] + "••••••••" + cfg.ApiKey[len(cfg.ApiKey)-4:]
+		} else if len(cfg.ApiKey) > 0 {
+			maskedKey = "••••••••"
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":          true,
+			"provider":    cfg.Provider,
+			"apiUrl":      cfg.ApiUrl,
+			"model":       cfg.Model,
+			"temperature": cfg.Temperature,
+			"hasApiKey":   len(cfg.ApiKey) > 0,
+			"maskedKey":   maskedKey,
+		})
+		return
+	}
+
+	if r.Method == http.MethodPost {
+		var req struct {
+			Provider    string  `json:"provider"`
+			ApiUrl      string  `json:"apiUrl"`
+			ApiKey      string  `json:"apiKey"`
+			Model       string  `json:"model"`
+			Temperature float64 `json:"temperature"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Bad request", http.StatusBadRequest)
+			return
+		}
+
+		curr := errortracker.GetAiFixConfig()
+		if req.Provider != "" {
+			curr.Provider = req.Provider
+		}
+		if req.ApiUrl != "" {
+			curr.ApiUrl = req.ApiUrl
+		}
+		if req.ApiKey != "" {
+			curr.ApiKey = req.ApiKey
+		}
+		if req.Model != "" {
+			curr.Model = req.Model
+		}
+		if req.Temperature > 0 {
+			curr.Temperature = req.Temperature
+		}
+
+		if err := errortracker.SetAiFixConfig(curr); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+
+		RecordAudit(r, "AI_CONFIG_UPDATE", fmt.Sprintf("Memperbarui konfigurasi AI Fixer (Provider: %s, Model: %s)", curr.Provider, curr.Model))
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":      true,
+			"message": "Konfigurasi API AI Fixer berhasil disimpan!",
 		})
 		return
 	}

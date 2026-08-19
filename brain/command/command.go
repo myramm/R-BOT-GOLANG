@@ -20,6 +20,7 @@ import (
 
 	"rbot/brain/config"
 	"rbot/brain/energy"
+	"rbot/brain/errortracker"
 	"rbot/brain/identity"
 	"rbot/brain/premium"
 	"rbot/brain/settings"
@@ -667,6 +668,8 @@ func Dispatch(ctx context.Context, client *whatsmeow.Client, evt *events.Message
 			if r := recover(); r != nil {
 				err := fmt.Errorf("panic: %v", r)
 				log.Printf("[rbot] panic di command %q: %v", key, err)
+				errContext := fmt.Sprintf("Command: .%s | Sender: %s | Chat: %s | Args: %s", key, c.Sender().String(), c.Chat().String(), c.ArgStr())
+				errortracker.RecordError("COMMAND", fmt.Sprintf("panic di command .%s: %v", key, r), errContext)
 				notifyErrorHook(ctx, c, err)
 				if subBot && SubBotStatsHook != nil {
 					SubBotStatsHook(client, cmd.Name, evt, true)
@@ -675,6 +678,8 @@ func Dispatch(ctx context.Context, client *whatsmeow.Client, evt *events.Message
 		}()
 		if err := cmd.Handler(ctx, c); err != nil {
 			log.Printf("[rbot] error command %q: %v", key, err)
+			errContext := fmt.Sprintf("Command: .%s | Sender: %s | Chat: %s | Args: %s", key, c.Sender().String(), c.Chat().String(), c.ArgStr())
+			errortracker.RecordError("COMMAND", fmt.Sprintf("error command .%s: %v", key, err), errContext)
 			notifyErrorHook(ctx, c, err)
 			if subBot && SubBotStatsHook != nil {
 				SubBotStatsHook(client, cmd.Name, evt, true)

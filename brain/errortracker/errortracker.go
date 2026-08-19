@@ -27,9 +27,10 @@ type ErrorEntry struct {
 }
 
 type Tracker struct {
-	mu     sync.RWMutex
+	mu     sync.Mutex
 	errors []ErrorEntry
 	max    int
+	loaded bool
 }
 
 var DefaultTracker = &Tracker{
@@ -37,11 +38,35 @@ var DefaultTracker = &Tracker{
 	max:    150,
 }
 
-func init() {
+// Load membaca riwayat error dari DB store ke memori.
+func Load() error {
+	return DefaultTracker.Load()
+}
+
+func (t *Tracker) Load() error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	var saved []ErrorEntry
+	found, err := store.Get("system_errors_registry", &saved)
+	if err != nil {
+		return err
+	}
+	if found && saved != nil {
+		t.errors = saved
+	}
+	t.loaded = true
+	return nil
+}
+
+func (t *Tracker) ensureLoadedLocked() {
+	if t.loaded {
+		return
+	}
 	var saved []ErrorEntry
 	found, err := store.Get("system_errors_registry", &saved)
 	if err == nil && found && saved != nil {
-		DefaultTracker.errors = saved
+		t.errors = saved
+		t.loaded = true
 	}
 }
 
@@ -71,6 +96,7 @@ func (t *Tracker) RecordError(source, message, errContext string) {
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	t.ensureLoadedLocked()
 
 	now := time.Now()
 	nowStr := now.Format("2006-01-02 15:04:05")
@@ -115,8 +141,9 @@ func GetErrors() []ErrorEntry {
 }
 
 func (t *Tracker) GetErrors() []ErrorEntry {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.ensureLoadedLocked()
 	out := make([]ErrorEntry, len(t.errors))
 	copy(out, t.errors)
 	return out
@@ -128,8 +155,9 @@ func GetErrorByID(id string) (ErrorEntry, bool) {
 }
 
 func (t *Tracker) GetErrorByID(id string) (ErrorEntry, bool) {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.ensureLoadedLocked()
 	for _, e := range t.errors {
 		if e.ID == id {
 			return e, true
@@ -146,6 +174,7 @@ func DeleteError(id string) bool {
 func (t *Tracker) DeleteError(id string) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	t.ensureLoadedLocked()
 	found := false
 	filtered := make([]ErrorEntry, 0, len(t.errors))
 	for _, e := range t.errors {
@@ -170,6 +199,7 @@ func ClearErrors() {
 func (t *Tracker) ClearErrors() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	t.ensureLoadedLocked()
 	t.errors = make([]ErrorEntry, 0, 100)
 	t.save()
 }
@@ -182,6 +212,7 @@ func UpdateAiAnalysis(id string, analysis string) bool {
 func (t *Tracker) UpdateAiAnalysis(id string, analysis string) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	t.ensureLoadedLocked()
 	for i := range t.errors {
 		if t.errors[i].ID == id {
 			t.errors[i].AiAnalysis = analysis
@@ -198,8 +229,9 @@ func GetSummary() map[string]any {
 }
 
 func (t *Tracker) GetSummary() map[string]any {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.ensureLoadedLocked()
 
 	total := len(t.errors)
 	unresolved := 0

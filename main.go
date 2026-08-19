@@ -23,6 +23,7 @@ import (
 
 	"rbot/brain/command"
 	"rbot/brain/config"
+	"rbot/brain/errortracker"
 	"rbot/brain/goodbye"
 	"rbot/brain/jadibot"
 	"rbot/brain/lifecycle"
@@ -87,6 +88,7 @@ func run(ctx context.Context) error {
 	if err := settings.Load(); err != nil {
 		return fmt.Errorf("muat settings: %w", err)
 	}
+	_ = errortracker.Load()
 
 	web.Start(ctx)
 

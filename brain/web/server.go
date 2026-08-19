@@ -75,8 +75,9 @@ var (
 	loginAttempts = make(map[string]*loginTracker)
 	loginMu       sync.Mutex
 
-	auditLogs []AuditLog
-	auditMu   sync.RWMutex
+	auditLogs   []AuditLog
+	auditMu     sync.Mutex
+	auditLoaded bool
 
 	waClient    *whatsmeow.Client
 	pairingCode string
@@ -90,6 +91,22 @@ var (
 		subscribers: make(map[metricsSubscriber]bool),
 	}
 )
+
+func loadAuditLogsLocked() {
+	if auditLoaded {
+		return
+	}
+	var saved []AuditLog
+	found, err := store.Get("web_audit_logs", &saved)
+	if err == nil && found && saved != nil {
+		auditLogs = saved
+	}
+	auditLoaded = true
+}
+
+func saveAuditLogsLocked() {
+	_ = store.Set("web_audit_logs", auditLogs)
+}
 
 func (b *MetricsBroadcaster) Subscribe() metricsSubscriber {
 	ch := make(metricsSubscriber, 50)
@@ -163,10 +180,12 @@ func RecordAudit(r *http.Request, action, details string) {
 	}
 
 	auditMu.Lock()
+	loadAuditLogsLocked()
 	auditLogs = append([]AuditLog{entry}, auditLogs...)
 	if len(auditLogs) > 150 {
 		auditLogs = auditLogs[:150]
 	}
+	saveAuditLogsLocked()
 	auditMu.Unlock()
 
 	BroadcastMetricsNow()
@@ -375,9 +394,10 @@ func BuildStatusPayload() map[string]any {
 
 	overview := stats.GetOverview()
 
-	auditMu.RLock()
+	auditMu.Lock()
+	loadAuditLogsLocked()
 	recentAudit := append([]AuditLog(nil), auditLogs...)
-	auditMu.RUnlock()
+	auditMu.Unlock()
 	if len(recentAudit) > 10 {
 		recentAudit = recentAudit[:10]
 	}
@@ -677,9 +697,10 @@ func handleAuditLogs(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
-	auditMu.RLock()
+	auditMu.Lock()
+	loadAuditLogsLocked()
 	logs := append([]AuditLog(nil), auditLogs...)
-	auditMu.RUnlock()
+	auditMu.Unlock()
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "logs": logs})

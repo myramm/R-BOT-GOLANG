@@ -78,3 +78,42 @@ func TestAiFixConfig(t *testing.T) {
 		t.Errorf("expected ApiKey 'test-key-123', got %q", saved.ApiKey)
 	}
 }
+
+func TestErrorTrackerPersistence(t *testing.T) {
+	dir := t.TempDir()
+	if err := store.Open(dir); err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	defer store.Close()
+
+	tr1 := &Tracker{
+		errors: make([]ErrorEntry, 0, 100),
+		max:    50,
+	}
+
+	tr1.RecordError("WHATSAPP", "socket read timeout", "waClient.Connect()")
+	tr1.RecordError("JADIBOT", "pairing failed 401", "sub-bot login")
+
+	if len(tr1.GetErrors()) != 2 {
+		t.Fatalf("expected 2 errors in tr1, got %d", len(tr1.GetErrors()))
+	}
+
+	// Simulate restart by initializing a new Tracker instance and loading from store
+	tr2 := &Tracker{
+		errors: make([]ErrorEntry, 0, 100),
+		max:    50,
+	}
+
+	if err := tr2.Load(); err != nil {
+		t.Fatalf("tr2.Load: %v", err)
+	}
+
+	errors2 := tr2.GetErrors()
+	if len(errors2) != 2 {
+		t.Fatalf("expected 2 errors restored from store, got %d", len(errors2))
+	}
+
+	if errors2[0].Source != "JADIBOT" || errors2[1].Source != "WHATSAPP" {
+		t.Errorf("restored error order/sources mismatch: %+v", errors2)
+	}
+}

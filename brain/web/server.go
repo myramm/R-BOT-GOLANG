@@ -1492,6 +1492,36 @@ func handleJadibotGroups(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// getClientForTargetGroup mencari client WhatsApp (Bot Utama atau Jadibot) yang berpartisipasi di grup target.
+func getClientForTargetGroup(ctx context.Context, groupJID types.JID) (*whatsmeow.Client, string) {
+	stateMu.RLock()
+	mainCli := waClient
+	stateMu.RUnlock()
+
+	// 1. Cek apakah Bot Utama terhubung & login serta tergabung di grup
+	if mainCli != nil && mainCli.IsConnected() && mainCli.IsLoggedIn() {
+		groups, err := mainCli.GetJoinedGroups(ctx)
+		if err == nil {
+			for _, g := range groups {
+				if g.JID == groupJID {
+					return mainCli, "Bot Utama"
+				}
+			}
+		}
+	}
+
+	// 2. Cek apakah ada Sub-Bot Jadibot yang tergabung di grup
+	if jbCli := jadibot.FindClientForGroup(ctx, groupJID.String()); jbCli != nil {
+		return jbCli, "Jadibot"
+	}
+
+	// Fallback ke Bot Utama jika terhubung
+	if mainCli != nil && mainCli.IsConnected() {
+		return mainCli, "Bot Utama"
+	}
+	return nil, ""
+}
+
 func handleSWGCSend(w http.ResponseWriter, r *http.Request) {
 	if !IsAuthenticated(r) {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
@@ -1499,17 +1529,6 @@ func handleSWGCSend(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	stateMu.RLock()
-	cli := waClient
-	stateMu.RUnlock()
-
-	if cli == nil || !cli.IsConnected() {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "WhatsApp client belum terhubung!"})
 		return
 	}
 
@@ -1528,6 +1547,14 @@ func handleSWGCSend(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "JID grup target tidak valid!"})
+		return
+	}
+
+	cli, botSrc := getClientForTargetGroup(r.Context(), targetJID)
+	if cli == nil || !cli.IsConnected() {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "WhatsApp bot (Bot Utama maupun Jadibot) belum terhubung ke grup ini!"})
 		return
 	}
 
@@ -1564,16 +1591,16 @@ func handleSWGCSend(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": fmt.Sprintf("Gagal mengirim SWGC: %v", err)})
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": fmt.Sprintf("Gagal mengirim SWGC (%s): %v", botSrc, err)})
 		return
 	}
 
-	RecordAudit(r, "SWGC_SEND", fmt.Sprintf("Group Status berhasil dikirim ke grup %s", targetJIDRaw))
+	RecordAudit(r, "SWGC_SEND", fmt.Sprintf("Group Status berhasil dikirim ke grup %s via %s", targetJIDRaw, botSrc))
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"ok":      true,
-		"message": fmt.Sprintf("✅ Berhasil mengirim Status Story ke grup %s!", targetJIDRaw),
+		"message": fmt.Sprintf("✅ Berhasil mengirim Status Story ke grup %s (via %s)!", targetJIDRaw, botSrc),
 	})
 }
 
@@ -1584,17 +1611,6 @@ func handleGroupSendMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	stateMu.RLock()
-	cli := waClient
-	stateMu.RUnlock()
-
-	if cli == nil || !cli.IsConnected() {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "WhatsApp client belum terhubung!"})
 		return
 	}
 
@@ -1613,6 +1629,14 @@ func handleGroupSendMessage(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "JID grup target tidak valid!"})
+		return
+	}
+
+	cli, botSrc := getClientForTargetGroup(r.Context(), targetJID)
+	if cli == nil || !cli.IsConnected() {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "WhatsApp bot (Bot Utama maupun Jadibot) belum terhubung ke grup ini!"})
 		return
 	}
 
@@ -1740,12 +1764,12 @@ func handleGroupSendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	RecordAudit(r, "GROUP_MSG_SEND", fmt.Sprintf("Pesan obrolan berhasil dikirim ke grup %s", targetJIDRaw))
+	RecordAudit(r, "GROUP_MSG_SEND", fmt.Sprintf("Pesan obrolan berhasil dikirim ke grup %s via %s", targetJIDRaw, botSrc))
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"ok":      true,
-		"message": fmt.Sprintf("✅ Berhasil mengirim pesan ke grup %s!", targetJIDRaw),
+		"message": fmt.Sprintf("✅ Berhasil mengirim pesan ke grup %s (via %s)!", targetJIDRaw, botSrc),
 	})
 }
 

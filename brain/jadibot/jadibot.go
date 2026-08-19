@@ -564,6 +564,35 @@ func (m *Manager) GetAllSubBotGroups(ctx context.Context) []SubBotGroupInfo {
 	return result
 }
 
+// FindClientForGroup mencari client WhatsApp (sub-bot) yang berpartisipasi dalam grup target.
+func FindClientForGroup(ctx context.Context, groupJID string) *whatsmeow.Client {
+	return defaultManager.FindClientForGroup(ctx, groupJID)
+}
+
+func (m *Manager) FindClientForGroup(ctx context.Context, groupJID string) *whatsmeow.Client {
+	m.mu.RLock()
+	botsCopy := make([]*SubBot, 0, len(m.bots))
+	for _, v := range m.bots {
+		botsCopy = append(botsCopy, v)
+	}
+	m.mu.RUnlock()
+
+	for _, sb := range botsCopy {
+		if sb.Client == nil || !sb.Client.IsConnected() || !sb.Client.IsLoggedIn() {
+			continue
+		}
+		groups, err := sb.Client.GetJoinedGroups(ctx)
+		if err == nil {
+			for _, g := range groups {
+				if g.JID.String() == groupJID {
+					return sb.Client
+				}
+			}
+		}
+	}
+	return nil
+}
+
 // GetSubBotGroupsByPhone mengembalikan daftar grup yang diikuti oleh sub-bot tertentu.
 func GetSubBotGroupsByPhone(ctx context.Context, phone string) ([]SubBotGroupInfo, error) {
 	return defaultManager.GetSubBotGroupsByPhone(ctx, phone)

@@ -138,7 +138,9 @@ func ProcessProfilePictureWithSize(ctx context.Context, data []byte, targetDim i
 	return ProcessProfilePictureWithDimensions(ctx, data, targetDim, targetDim)
 }
 
-// ProcessProfilePictureWithDimensions memproses gambar ke resolusi custom Width (W) x Height (H) dengan auto center-crop aspect ratio dan kompresi JPEG.
+// ProcessProfilePictureWithDimensions memproses gambar ke resolusi Width x Height dengan jaminan output persegi 1:1 JPEG untuk WhatsApp.
+// Jika targetW == targetH -> Mode Center-Crop 1:1.
+// Jika targetW != targetH (misal 1080x1920) -> Mode Full-Fit No-Crop (seluruh gambar tampil penuh di canvas persegi).
 func ProcessProfilePictureWithDimensions(ctx context.Context, data []byte, targetW, targetH int) ([]byte, error) {
 	if targetW <= 0 && targetH <= 0 {
 		targetW, targetH = 720, 720
@@ -148,17 +150,15 @@ func ProcessProfilePictureWithDimensions(ctx context.Context, data []byte, targe
 		targetH = targetW
 	}
 
-	if targetW < 96 {
-		targetW = 96
+	maxDim := targetW
+	if targetH > maxDim {
+		maxDim = targetH
 	}
-	if targetW > 4096 {
-		targetW = 4096
+	if maxDim < 96 {
+		maxDim = 96
 	}
-	if targetH < 96 {
-		targetH = 96
-	}
-	if targetH > 4096 {
-		targetH = 4096
+	if maxDim > 2048 {
+		maxDim = 2048
 	}
 
 	src, _, err := image.Decode(bytes.NewReader(data))
@@ -181,49 +181,54 @@ func ProcessProfilePictureWithDimensions(ctx context.Context, data []byte, targe
 		return nil, fmt.Errorf("dimensi gambar tidak valid (%dx%d)", w, h)
 	}
 
-	targetAspect := float64(targetW) / float64(targetH)
-	srcAspect := float64(w) / float64(h)
+	// WhatsApp Server WAJIB menerima format persegi 1:1 (maxDim x maxDim JPEG)
+	dst := image.NewRGBA(image.Rect(0, 0, maxDim, maxDim))
 
-	var cropW, cropH int
-	var startX, startY int
-
-	if srcAspect > targetAspect {
-		// Gambar asli lebih lebar -> potong sisi kiri dan kanan
-		cropH = h
-		cropW = int(float64(h) * targetAspect)
-		if cropW > w {
-			cropW = w
+	if targetW == targetH {
+		// Mode 1: Auto Center-Crop Square (1:1)
+		size := w
+		if h < size {
+			size = h
 		}
-		startX = bounds.Min.X + (w-cropW)/2
-		startY = bounds.Min.Y
-	} else {
-		// Gambar asli lebih tinggi -> potong sisi atas dan bawah
-		cropW = w
-		cropH = int(float64(w) / targetAspect)
-		if cropH > h {
-			cropH = h
+		startX := bounds.Min.X + (w-size)/2
+		startY := bounds.Min.Y + (h-size)/2
+		cropRect := image.Rect(startX, startY, startX+size, startY+size)
+
+		type subImager interface {
+			SubImage(r image.Rectangle) image.Image
 		}
-		startX = bounds.Min.X
-		startY = bounds.Min.Y + (h-cropH)/2
-	}
-
-	cropRect := image.Rect(startX, startY, startX+cropW, startY+cropH)
-
-	type subImager interface {
-		SubImage(r image.Rectangle) image.Image
-	}
-
-	var cropped image.Image
-	if si, ok := src.(subImager); ok {
-		cropped = si.SubImage(cropRect)
+		var cropped image.Image
+		if si, ok := src.(subImager); ok {
+			cropped = si.SubImage(cropRect)
+		} else {
+			rgba := image.NewRGBA(image.Rect(0, 0, size, size))
+			draw.Draw(rgba, rgba.Bounds(), src, cropRect.Min, draw.Src)
+			cropped = rgba
+		}
+		draw.BiLinear.Scale(dst, dst.Bounds(), cropped, cropped.Bounds(), draw.Over, nil)
 	} else {
-		rgba := image.NewRGBA(image.Rect(0, 0, cropW, cropH))
-		draw.Draw(rgba, rgba.Bounds(), src, cropRect.Min, draw.Src)
-		cropped = rgba
-	}
+		// Mode 2: Full-Fit No-Crop (misal 1080x1920 Full Photo tanpa terpotong)
+		scale := float64(maxDim) / float64(h)
+		if float64(maxDim)/float64(w) < scale {
+			scale = float64(maxDim) / float64(w)
+		}
+		scaledW := int(float64(w) * scale)
+		scaledH := int(float64(h) * scale)
+		if scaledW <= 0 {
+			scaledW = 1
+		}
+		if scaledH <= 0 {
+			scaledH = 1
+		}
 
-	dst := image.NewRGBA(image.Rect(0, 0, targetW, targetH))
-	draw.BiLinear.Scale(dst, dst.Bounds(), cropped, cropped.Bounds(), draw.Over, nil)
+		scaledImg := image.NewRGBA(image.Rect(0, 0, scaledW, scaledH))
+		draw.BiLinear.Scale(scaledImg, scaledImg.Bounds(), src, bounds, draw.Over, nil)
+
+		posX := (maxDim - scaledW) / 2
+		posY := (maxDim - scaledH) / 2
+		destRect := image.Rect(posX, posY, posX+scaledW, posY+scaledH)
+		draw.Draw(dst, destRect, scaledImg, image.Point{}, draw.Over)
+	}
 
 	var buf bytes.Buffer
 	if err := jpeg.Encode(&buf, dst, &jpeg.Options{Quality: 92}); err != nil {

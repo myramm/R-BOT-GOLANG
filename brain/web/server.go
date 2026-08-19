@@ -539,6 +539,10 @@ func Start(ctx context.Context) {
 	// ContextInfo Custom Endpoint
 	mux.HandleFunc("/api/context-info", handleContextInfo)
 
+	// WhatsApp Newsletter / Channel (IDCH) Endpoints
+	mux.HandleFunc("/api/newsletter/info", handleNewsletterInfo)
+	mux.HandleFunc("/api/newsletter/list", handleNewsletterList)
+
 	// File Manager API Endpoints
 	mux.HandleFunc("/api/files/list", handleFileList)
 	mux.HandleFunc("/api/files/read", handleFileRead)
@@ -1209,6 +1213,189 @@ func handleContextInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+}
+
+type NewsletterDetailResponse struct {
+	JID               string `json:"jid"`
+	Name              string `json:"name"`
+	Description       string `json:"description"`
+	Subscribers       int    `json:"subscribers"`
+	InviteCode        string `json:"inviteCode"`
+	InviteURL         string `json:"inviteUrl"`
+	VerificationState string `json:"verificationState"`
+	PictureURL        string `json:"pictureUrl"`
+	PreviewURL        string `json:"previewUrl"`
+	CreationTime      string `json:"creationTime"`
+}
+
+func extractNewsletterInviteCode(input string) (string, bool) {
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return "", false
+	}
+	if idx := strings.Index(input, "/channel/"); idx != -1 {
+		code := input[idx+len("/channel/"):]
+		if qIdx := strings.IndexAny(code, "?#/ "); qIdx != -1 {
+			code = code[:qIdx]
+		}
+		return strings.TrimSpace(code), true
+	}
+	if !strings.Contains(input, "@") && !strings.Contains(input, "/") {
+		return input, true
+	}
+	return input, false
+}
+
+func formatNewsletterMetadata(meta *types.NewsletterMetadata) NewsletterDetailResponse {
+	if meta == nil {
+		return NewsletterDetailResponse{}
+	}
+	pic := ""
+	if meta.ThreadMeta.Picture != nil {
+		pic = meta.ThreadMeta.Picture.URL
+	}
+	preview := meta.ThreadMeta.Preview.URL
+
+	inviteUrl := ""
+	if meta.ThreadMeta.InviteCode != "" {
+		inviteUrl = "https://whatsapp.com/channel/" + meta.ThreadMeta.InviteCode
+	}
+
+	createdStr := ""
+	if !meta.ThreadMeta.CreationTime.IsZero() {
+		createdStr = meta.ThreadMeta.CreationTime.Time.Format("2006-01-02 15:04:05")
+	}
+
+	return NewsletterDetailResponse{
+		JID:               meta.ID.String(),
+		Name:              meta.ThreadMeta.Name.Text,
+		Description:       meta.ThreadMeta.Description.Text,
+		Subscribers:       meta.ThreadMeta.SubscriberCount,
+		InviteCode:        meta.ThreadMeta.InviteCode,
+		InviteURL:         inviteUrl,
+		VerificationState: string(meta.ThreadMeta.VerificationState),
+		PictureURL:        pic,
+		PreviewURL:        preview,
+		CreationTime:      createdStr,
+	}
+}
+
+func handleNewsletterInfo(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	stateMu.RLock()
+	cli := waClient
+	stateMu.RUnlock()
+
+	if cli == nil || !cli.IsConnected() || !cli.IsLoggedIn() {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":    false,
+			"error": "WhatsApp bot belum login atau belum terhubung.",
+		})
+		return
+	}
+
+	query := strings.TrimSpace(r.URL.Query().Get("query"))
+	if query == "" && r.Method == http.MethodPost {
+		var req struct {
+			Query string `json:"query"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		query = strings.TrimSpace(req.Query)
+	}
+
+	if query == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":    false,
+			"error": "Parameter link/JID/invite code saluran diperlukan.",
+		})
+		return
+	}
+
+	var meta *types.NewsletterMetadata
+	var err error
+
+	if strings.HasSuffix(query, "@newsletter") {
+		jid, parseErr := types.ParseJID(query)
+		if parseErr != nil {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Format JID newsletter tidak valid: " + parseErr.Error()})
+			return
+		}
+		meta, err = cli.GetNewsletterInfo(r.Context(), jid)
+	} else {
+		code, _ := extractNewsletterInviteCode(query)
+		if strings.HasSuffix(code, "@newsletter") {
+			jid, _ := types.ParseJID(code)
+			meta, err = cli.GetNewsletterInfo(r.Context(), jid)
+		} else {
+			meta, err = cli.GetNewsletterInfoWithInvite(r.Context(), code)
+		}
+	}
+
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":    false,
+			"error": fmt.Sprintf("Gagal mengambil info saluran: %v", err),
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":   true,
+		"data": formatNewsletterMetadata(meta),
+	})
+}
+
+func handleNewsletterList(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	stateMu.RLock()
+	cli := waClient
+	stateMu.RUnlock()
+
+	if cli == nil || !cli.IsConnected() || !cli.IsLoggedIn() {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":          true,
+			"newsletters": []any{},
+			"info":        "WhatsApp bot belum login atau belum terhubung.",
+		})
+		return
+	}
+
+	list, err := cli.GetSubscribedNewsletters(r.Context())
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":    false,
+			"error": fmt.Sprintf("Gagal memuat saluran yang diikuti: %v", err),
+		})
+		return
+	}
+
+	out := make([]NewsletterDetailResponse, 0, len(list))
+	for _, item := range list {
+		out = append(out, formatNewsletterMetadata(item))
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":          true,
+		"newsletters": out,
+	})
 }
 
 func handleSWGCGroups(w http.ResponseWriter, r *http.Request) {

@@ -18,6 +18,7 @@ import (
 	_ "golang.org/x/image/webp"
 
 	waE2E "go.mau.fi/whatsmeow/proto/waE2E"
+	"go.mau.fi/whatsmeow/types"
 
 	"rbot/brain/command"
 )
@@ -80,9 +81,8 @@ func setppbotHandler(ctx context.Context, c *command.Ctx) error {
 		return e
 	}
 
-	// 4. Update Foto Profil Bot di WhatsApp
-	botJID := c.Client.Store.ID.ToNonAD()
-	if _, err := c.Client.SetGroupPhoto(ctx, botJID, imgJpeg); err != nil {
+	// 4. Update Foto Profil Bot di WhatsApp (Gunakan types.EmptyJID untuk profil akun bot sendiri)
+	if _, err := c.Client.SetGroupPhoto(ctx, types.EmptyJID, imgJpeg); err != nil {
 		c.React(ctx, "❌")
 		_, e := c.Reply(ctx, "❌ Gagal memperbarui foto profil bot: "+err.Error())
 		return e

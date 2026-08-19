@@ -593,6 +593,23 @@ func (m *Manager) FindClientForGroup(ctx context.Context, groupJID string) *what
 	return nil
 }
 
+// GetClientByPhone mengembalikan client whatsmeow dari sub-bot aktif berdasarkan nomor telepon.
+func GetClientByPhone(phone string) *whatsmeow.Client {
+	return defaultManager.GetClientByPhone(phone)
+}
+
+func (m *Manager) GetClientByPhone(phone string) *whatsmeow.Client {
+	phoneDigits := NormalizePhone(phone)
+	m.mu.RLock()
+	sb, ok := m.bots[phoneDigits]
+	m.mu.RUnlock()
+
+	if !ok || sb == nil || sb.Client == nil || !sb.Client.IsConnected() {
+		return nil
+	}
+	return sb.Client
+}
+
 // GetSubBotGroupsByPhone mengembalikan daftar grup yang diikuti oleh sub-bot tertentu.
 func GetSubBotGroupsByPhone(ctx context.Context, phone string) ([]SubBotGroupInfo, error) {
 	return defaultManager.GetSubBotGroupsByPhone(ctx, phone)

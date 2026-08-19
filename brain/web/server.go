@@ -2665,19 +2665,9 @@ func handleSetPPBotWeb(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stateMu.RLock()
-	cli := waClient
-	stateMu.RUnlock()
-
-	if cli == nil || !cli.IsConnected() {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusServiceUnavailable)
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Bot WhatsApp belum terhubung!"})
-		return
-	}
-
 	var rawBytes []byte
 	var targetDim int
+	var targetBot string
 	var err error
 
 	// 1. Cek upload file multipart form
@@ -2686,6 +2676,7 @@ func handleSetPPBotWeb(w http.ResponseWriter, r *http.Request) {
 			if sVal := r.FormValue("size"); sVal != "" {
 				targetDim, _ = strconv.Atoi(sVal)
 			}
+			targetBot = strings.TrimSpace(r.FormValue("bot"))
 			file, _, fErr := r.FormFile("image")
 			if fErr == nil {
 				defer file.Close()
@@ -2694,15 +2685,19 @@ func handleSetPPBotWeb(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 2. Cek JSON payload { "url": "https://...", "size": 1080 }
+	// 2. Cek JSON payload { "url": "https://...", "size": 1080, "bot": "main" }
 	if len(rawBytes) == 0 {
 		var req struct {
 			URL  string `json:"url"`
 			Size int    `json:"size"`
+			Bot  string `json:"bot"`
 		}
 		if json.NewDecoder(r.Body).Decode(&req) == nil && strings.TrimSpace(req.URL) != "" {
 			if req.Size > 0 {
 				targetDim = req.Size
+			}
+			if req.Bot != "" {
+				targetBot = req.Bot
 			}
 			targetURL := strings.TrimSpace(req.URL)
 			if !strings.HasPrefix(targetURL, "http://") && !strings.HasPrefix(targetURL, "https://") {
@@ -2735,6 +2730,30 @@ func handleSetPPBotWeb(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Tentukan client yang akan diganti foto profilnya (Bot Utama atau Jadibot)
+	var cli *whatsmeow.Client
+	botLabel := "Bot Utama"
+	if targetBot != "" && targetBot != "main" {
+		cli = jadibot.GetClientByPhone(targetBot)
+		botLabel = "Jadibot (" + targetBot + ")"
+		if cli == nil || !cli.IsConnected() {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": fmt.Sprintf("Sub-Bot Jadibot (%s) tidak ditemukan atau belum terhubung!", targetBot)})
+			return
+		}
+	} else {
+		stateMu.RLock()
+		cli = waClient
+		stateMu.RUnlock()
+		if cli == nil || !cli.IsConnected() {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Bot Utama WhatsApp belum terhubung!"})
+			return
+		}
+	}
+
 	if targetDim <= 0 {
 		targetDim = 720
 	}
@@ -2751,21 +2770,20 @@ func handleSetPPBotWeb(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 4. Update Foto Profil Bot di WhatsMeow
-	botJID := cli.Store.ID.ToNonAD()
-	if _, err := cli.SetGroupPhoto(procCtx, botJID, imgJpeg); err != nil {
+	// 4. Update Foto Profil Bot di WhatsMeow (Gunakan types.EmptyJID untuk akun sendiri)
+	if _, err := cli.SetGroupPhoto(procCtx, types.EmptyJID, imgJpeg); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Gagal memperbarui foto profil WhatsApp: " + err.Error()})
 		return
 	}
 
-	RecordAudit(r, "SET_PP_BOT", "Memperbarui foto profil bot via Web Dashboard")
+	RecordAudit(r, "SET_PP_BOT", fmt.Sprintf("Memperbarui foto profil %s via Web Dashboard", botLabel))
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"ok":      true,
-		"message": "Foto profil bot berhasil diperbarui!",
+		"message": fmt.Sprintf("Foto profil %s berhasil diperbarui!", botLabel),
 	})
 }
 

@@ -95,6 +95,52 @@ func TestStopPermissions(t *testing.T) {
 	if mgr.Count() != 0 {
 		t.Fatalf("expected count 0 after owner stop, got %d", mgr.Count())
 	}
+
+	// 4. Creator sending with WhatsApp LID (e.g. 238182377492614@lid) with candidate phone -> should succeed
+	mgr.bots[botPhone] = &SubBot{
+		Phone:       botPhone,
+		JID:         types.NewJID(botPhone, "s.whatsapp.net"),
+		OwnerJID:    types.NewJID(botPhone, "s.whatsapp.net"),
+		ConnectedAt: time.Now(),
+	}
+	lidJID := types.NewJID("238182377492614", types.HiddenUserServer)
+	err = mgr.Stop(ctx, botPhone, lidJID, false, "238182377492614", botPhone)
+	if err != nil {
+		t.Fatalf("expected creator with LID and candidate phone to be able to stop sub-bot, got: %v", err)
+	}
+	if mgr.Count() != 0 {
+		t.Fatalf("expected count 0 after LID stop, got %d", mgr.Count())
+	}
+
+	// 5. Empty target auto-detect by candidate ID -> should succeed
+	mgr.bots[botPhone] = &SubBot{
+		Phone:       botPhone,
+		JID:         types.NewJID(botPhone, "s.whatsapp.net"),
+		OwnerJID:    types.NewJID(botPhone, "s.whatsapp.net"),
+		ConnectedAt: time.Now(),
+	}
+	err = mgr.Stop(ctx, "", lidJID, false, "238182377492614", botPhone)
+	if err != nil {
+		t.Fatalf("expected auto-detected empty target stop to succeed, got: %v", err)
+	}
+	if mgr.Count() != 0 {
+		t.Fatalf("expected count 0 after empty target stop, got %d", mgr.Count())
+	}
+
+	// 6. Stop using local Indonesian format (081234567890) -> should succeed
+	mgr.bots[botPhone] = &SubBot{
+		Phone:       botPhone,
+		JID:         types.NewJID(botPhone, "s.whatsapp.net"),
+		OwnerJID:    ownerJID,
+		ConnectedAt: time.Now(),
+	}
+	err = mgr.Stop(ctx, "081234567890", ownerJID, false)
+	if err != nil {
+		t.Fatalf("expected stop with 08xx phone to succeed, got: %v", err)
+	}
+	if mgr.Count() != 0 {
+		t.Fatalf("expected count 0 after 08xx stop, got %d", mgr.Count())
+	}
 }
 
 func TestMaxJadibotLimit(t *testing.T) {

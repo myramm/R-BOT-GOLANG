@@ -726,8 +726,8 @@ func StartPairing(ctx context.Context, phone string, senderJID types.JID) (strin
 }
 
 // Stop menghentikan sub-bot di default manager.
-func Stop(ctx context.Context, target string, requester types.JID, isOwner bool) error {
-	return defaultManager.Stop(ctx, target, requester, isOwner)
+func Stop(ctx context.Context, target string, requester types.JID, isOwner bool, candidateIDs ...string) error {
+	return defaultManager.Stop(ctx, target, requester, isOwner, candidateIDs...)
 }
 
 // Restart merestart sesi sub-bot di default manager.
@@ -1024,29 +1024,86 @@ func (m *Manager) StartPairing(ctx context.Context, phone string, senderJID type
 }
 
 // Stop menghentikan dan menghapus sub-bot berdasarkan nomor telepon atau JID.
-func (m *Manager) Stop(ctx context.Context, target string, requester types.JID, isOwner bool) error {
+func (m *Manager) Stop(ctx context.Context, target string, requester types.JID, isOwner bool, candidateIDs ...string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	target = strings.TrimSpace(target)
 	cleanTarget := config.Digits(target)
+	normTarget := NormalizePhone(target)
+	bareTarget := config.BareNumber(target)
+
 	var foundPhone string
 	var sb *SubBot
 
-	for phone, bot := range m.bots {
-		if phone == target || (cleanTarget != "" && phone == cleanTarget) {
-			sb = bot
-			foundPhone = phone
-			break
-		}
-		if bot.Client != nil && bot.Client.Store != nil && bot.Client.Store.ID != nil {
-			jid := bot.Client.Store.ID
-			if jid.String() == target || jid.User == target || jid.ToNonAD().String() == target || (cleanTarget != "" && config.BareNumber(jid.User) == cleanTarget) {
+	// 1. Cari berdasarkan target eksplisit jika target tidak kosong
+	if target != "" {
+		for phone, bot := range m.bots {
+			// Cek nomor bot
+			if phone == target || phone == normTarget || (cleanTarget != "" && (phone == cleanTarget || phone == normTarget)) || (bareTarget != "" && (phone == bareTarget || config.BareNumber(phone) == bareTarget)) {
 				sb = bot
 				foundPhone = phone
 				break
 			}
-		} else if !bot.JID.IsEmpty() {
-			if bot.JID.String() == target || bot.JID.User == target || bot.JID.ToNonAD().String() == target || (cleanTarget != "" && config.BareNumber(bot.JID.User) == cleanTarget) {
+			// Cek JID bot
+			if bot.Client != nil && bot.Client.Store != nil && bot.Client.Store.ID != nil {
+				jid := bot.Client.Store.ID
+				if jid.String() == target || jid.User == target || jid.ToNonAD().String() == target || (cleanTarget != "" && config.BareNumber(jid.User) == cleanTarget) || (normTarget != "" && config.BareNumber(jid.User) == normTarget) {
+					sb = bot
+					foundPhone = phone
+					break
+				}
+			} else if !bot.JID.IsEmpty() {
+				if bot.JID.String() == target || bot.JID.User == target || bot.JID.ToNonAD().String() == target || (cleanTarget != "" && config.BareNumber(bot.JID.User) == cleanTarget) || (normTarget != "" && config.BareNumber(bot.JID.User) == normTarget) {
+					sb = bot
+					foundPhone = phone
+					break
+				}
+			}
+			// Cek OwnerJID
+			if !bot.OwnerJID.IsEmpty() {
+				if bot.OwnerJID.String() == target || bot.OwnerJID.User == target || bot.OwnerJID.ToNonAD().String() == target || (cleanTarget != "" && config.BareNumber(bot.OwnerJID.User) == cleanTarget) || (normTarget != "" && config.BareNumber(bot.OwnerJID.User) == normTarget) {
+					sb = bot
+					foundPhone = phone
+					break
+				}
+			}
+		}
+	}
+
+	// 2. Jika target kosong atau belum ditemukan, coba cari sub-bot milik requester berdasarkan candidateIDs atau requester JID
+	if sb == nil {
+		allRequesters := make(map[string]bool)
+		for _, cid := range candidateIDs {
+			if cid != "" {
+				allRequesters[cid] = true
+				allRequesters[config.BareNumber(cid)] = true
+				allRequesters[NormalizePhone(cid)] = true
+			}
+		}
+		if !requester.IsEmpty() {
+			allRequesters[requester.String()] = true
+			allRequesters[requester.ToNonAD().String()] = true
+			allRequesters[requester.User] = true
+			allRequesters[config.BareNumber(requester.User)] = true
+			allRequesters[NormalizePhone(requester.User)] = true
+		}
+
+		for phone, bot := range m.bots {
+			botOwnerUser := bot.OwnerJID.User
+			botOwnerBare := config.BareNumber(botOwnerUser)
+			botOwnerNorm := NormalizePhone(botOwnerUser)
+			botPhone := bot.Phone
+			botPhoneBare := config.BareNumber(botPhone)
+			botPhoneNorm := NormalizePhone(botPhone)
+
+			if allRequesters[bot.OwnerJID.String()] || allRequesters[bot.OwnerJID.ToNonAD().String()] ||
+				(botOwnerUser != "" && allRequesters[botOwnerUser]) ||
+				(botOwnerBare != "" && allRequesters[botOwnerBare]) ||
+				(botOwnerNorm != "" && allRequesters[botOwnerNorm]) ||
+				(botPhone != "" && allRequesters[botPhone]) ||
+				(botPhoneBare != "" && allRequesters[botPhoneBare]) ||
+				(botPhoneNorm != "" && allRequesters[botPhoneNorm]) {
 				sb = bot
 				foundPhone = phone
 				break
@@ -1055,15 +1112,69 @@ func (m *Manager) Stop(ctx context.Context, target string, requester types.JID, 
 	}
 
 	if sb == nil {
+		if target == "" {
+			return errors.New("tidak ada sub-bot aktif yang terdaftar untuk akun Anda")
+		}
 		return fmt.Errorf("sub-bot %q tidak ditemukan", target)
 	}
 
 	if !isOwner {
-		sameOwner := sb.OwnerJID == requester ||
-			(sb.OwnerJID.ToNonAD() == requester.ToNonAD() && !sb.OwnerJID.IsEmpty()) ||
-			(sb.OwnerJID.User != "" && config.BareNumber(sb.OwnerJID.User) == config.BareNumber(requester.User)) ||
-			(sb.JID.User != "" && config.BareNumber(sb.JID.User) == config.BareNumber(requester.User)) ||
-			(sb.Client != nil && sb.Client.Store != nil && sb.Client.Store.ID != nil && config.BareNumber(sb.Client.Store.ID.User) == config.BareNumber(requester.User))
+		reqSet := make(map[string]bool)
+		for _, cid := range candidateIDs {
+			if cid != "" {
+				reqSet[cid] = true
+				reqSet[config.BareNumber(cid)] = true
+				reqSet[NormalizePhone(cid)] = true
+			}
+		}
+		if !requester.IsEmpty() {
+			reqSet[requester.String()] = true
+			reqSet[requester.ToNonAD().String()] = true
+			reqSet[requester.User] = true
+			reqSet[config.BareNumber(requester.User)] = true
+			reqSet[NormalizePhone(requester.User)] = true
+		}
+
+		sameOwner := false
+
+		// 1. Cek kecocokan dengan OwnerJID
+		if !sb.OwnerJID.IsEmpty() {
+			if sb.OwnerJID == requester || sb.OwnerJID.ToNonAD() == requester.ToNonAD() ||
+				reqSet[sb.OwnerJID.String()] || reqSet[sb.OwnerJID.ToNonAD().String()] ||
+				reqSet[sb.OwnerJID.User] || reqSet[config.BareNumber(sb.OwnerJID.User)] ||
+				reqSet[NormalizePhone(sb.OwnerJID.User)] {
+				sameOwner = true
+			}
+		}
+
+		// 2. Cek kecocokan dengan sub-bot Phone
+		if !sameOwner && sb.Phone != "" {
+			if reqSet[sb.Phone] || reqSet[config.BareNumber(sb.Phone)] || reqSet[NormalizePhone(sb.Phone)] {
+				sameOwner = true
+			}
+		}
+
+		// 3. Cek kecocokan dengan sub-bot JID / Device ID
+		if !sameOwner && !sb.JID.IsEmpty() {
+			if sb.JID == requester || sb.JID.ToNonAD() == requester.ToNonAD() ||
+				reqSet[sb.JID.String()] || reqSet[sb.JID.ToNonAD().String()] ||
+				reqSet[sb.JID.User] || reqSet[config.BareNumber(sb.JID.User)] ||
+				reqSet[NormalizePhone(sb.JID.User)] {
+				sameOwner = true
+			}
+		}
+
+		// 4. Cek kecocokan dengan Store Device ID
+		if !sameOwner && sb.Client != nil && sb.Client.Store != nil && sb.Client.Store.ID != nil {
+			storeID := sb.Client.Store.ID
+			if *storeID == requester || storeID.ToNonAD() == requester.ToNonAD() ||
+				reqSet[storeID.String()] || reqSet[storeID.ToNonAD().String()] ||
+				reqSet[storeID.User] || reqSet[config.BareNumber(storeID.User)] ||
+				reqSet[NormalizePhone(storeID.User)] {
+				sameOwner = true
+			}
+		}
+
 		if !sameOwner {
 			return errors.New("Anda bukan pembuat sub-bot ini")
 		}

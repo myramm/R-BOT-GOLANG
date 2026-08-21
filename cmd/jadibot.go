@@ -54,7 +54,7 @@ func init() {
 			go func() {
 				time.Sleep(60 * time.Second)
 				if !jadibot.IsConnected(targetPhone) {
-					_ = jadibot.Stop(context.Background(), targetPhone, requesterJID, true)
+					_, _ = jadibot.Stop(context.Background(), targetPhone, requesterJID, true)
 					_, _ = c.Reply(context.Background(), "⏱️ *KODE PAIRING KADALUARSA*\n\n"+
 						"Kode pairing sebelumnya telah kadaluarsa karena tidak dimasukkan dalam kurun waktu 60 detik.\n\n"+
 						"Silakan ketik *.jadibot* kembali untuk mendapatkan kode pairing baru.")

@@ -725,8 +725,8 @@ func StartPairing(ctx context.Context, phone string, senderJID types.JID) (strin
 	return defaultManager.StartPairing(ctx, phone, senderJID)
 }
 
-// Stop menghentikan sub-bot di default manager.
-func Stop(ctx context.Context, target string, requester types.JID, isOwner bool, candidateIDs ...string) error {
+// Stop menghentikan sub-bot di default manager dan mengembalikan nomor telepon bot yang dihentikan.
+func Stop(ctx context.Context, target string, requester types.JID, isOwner bool, candidateIDs ...string) (string, error) {
 	return defaultManager.Stop(ctx, target, requester, isOwner, candidateIDs...)
 }
 
@@ -910,7 +910,7 @@ func (m *Manager) StartPairing(ctx context.Context, phone string, senderJID type
 			return "", fmt.Errorf("sub-bot dengan nomor %s sudah aktif", phoneDigits)
 		}
 		m.mu.Unlock()
-		_ = m.Stop(ctx, phoneDigits, types.JID{}, true)
+		_, _ = m.Stop(ctx, phoneDigits, types.JID{}, true)
 	} else {
 		m.mu.Unlock()
 	}
@@ -986,7 +986,7 @@ func (m *Manager) StartPairing(ctx context.Context, phone string, senderJID type
 			log.Printf("[jadibot] sub-bot %s terhubung sebagai %s", phoneDigits, client.Store.ID)
 		case *events.LoggedOut:
 			log.Printf("[jadibot] sub-bot %s logged out", phoneDigits)
-			_ = m.Stop(context.Background(), phoneDigits, types.JID{}, true)
+			_, _ = m.Stop(context.Background(), phoneDigits, types.JID{}, true)
 		}
 	})
 
@@ -1024,7 +1024,7 @@ func (m *Manager) StartPairing(ctx context.Context, phone string, senderJID type
 }
 
 // Stop menghentikan dan menghapus sub-bot berdasarkan nomor telepon atau JID.
-func (m *Manager) Stop(ctx context.Context, target string, requester types.JID, isOwner bool, candidateIDs ...string) error {
+func (m *Manager) Stop(ctx context.Context, target string, requester types.JID, isOwner bool, candidateIDs ...string) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -1113,9 +1113,9 @@ func (m *Manager) Stop(ctx context.Context, target string, requester types.JID, 
 
 	if sb == nil {
 		if target == "" {
-			return errors.New("tidak ada sub-bot aktif yang terdaftar untuk akun Anda")
+			return "", errors.New("tidak ada sub-bot aktif yang terdaftar untuk akun Anda")
 		}
-		return fmt.Errorf("sub-bot %q tidak ditemukan", target)
+		return "", fmt.Errorf("sub-bot %q tidak ditemukan", target)
 	}
 
 	if !isOwner {
@@ -1176,28 +1176,32 @@ func (m *Manager) Stop(ctx context.Context, target string, requester types.JID, 
 		}
 
 		if !sameOwner {
-			return errors.New("Anda bukan pembuat sub-bot ini")
+			return "", errors.New("Anda bukan pembuat sub-bot ini")
 		}
 	}
 
 	delete(m.bots, foundPhone)
 
-	if sb.Client != nil {
-		if sb.Client.IsConnected() {
-			_ = sb.Client.Logout(ctx)
+	// Disconnect dan bersihkan file secara asinkron dengan sedikit jeda
+	// agar balasan pesan sukses sempat terkirim lewat socket WhatsApp sebelum koneksi ditutup.
+	go func(client *whatsmeow.Client, container *sqlstore.Container, phone string) {
+		time.Sleep(1 * time.Second)
+		if client != nil {
+			if client.IsConnected() {
+				_ = client.Logout(context.Background())
+			}
+			client.Disconnect()
 		}
-		sb.Client.Disconnect()
-	}
-	if sb.Container != nil {
-		_ = sb.Container.Close()
-	}
+		if container != nil {
+			_ = container.Close()
+		}
+		dbPath := filepath.Join("session", "jadibot", phone+".db")
+		_ = os.Remove(dbPath)
+		_ = os.Remove(dbPath + "-shm")
+		_ = os.Remove(dbPath + "-wal")
+	}(sb.Client, sb.Container, foundPhone)
 
-	dbPath := filepath.Join("session", "jadibot", foundPhone+".db")
-	_ = os.Remove(dbPath)
-	_ = os.Remove(dbPath + "-shm")
-	_ = os.Remove(dbPath + "-wal")
-
-	return nil
+	return foundPhone, nil
 }
 
 // Init memindai direktori session/jadibot/ dan merekonseksikan sub-bot yang terdaftar.
@@ -1273,7 +1277,7 @@ func (m *Manager) Init(ctx context.Context) {
 				}
 			case *events.LoggedOut:
 				log.Printf("[jadibot] sub-bot %s logged out", phoneDigits)
-				_ = m.Stop(context.Background(), phoneDigits, types.JID{}, true)
+				_, _ = m.Stop(context.Background(), phoneDigits, types.JID{}, true)
 			}
 		})
 
@@ -1371,7 +1375,7 @@ func (m *Manager) Restart(ctx context.Context, phone string) error {
 			}
 		case *events.LoggedOut:
 			log.Printf("[jadibot] sub-bot %s logged out", phoneDigits)
-			_ = m.Stop(context.Background(), phoneDigits, types.JID{}, true)
+			_, _ = m.Stop(context.Background(), phoneDigits, types.JID{}, true)
 		}
 	})
 
@@ -1510,7 +1514,8 @@ func messageTypeSubBot(msg *waE2E.Message) string {
 func (m *Manager) Delete(ctx context.Context, phone string) error {
 	phoneDigits := NormalizePhone(phone)
 	_ = store.Delete("jadibot_stats_" + phoneDigits)
-	return m.Stop(ctx, phone, types.JID{}, true)
+	_, err := m.Stop(ctx, phone, types.JID{}, true)
+	return err
 }
 
 

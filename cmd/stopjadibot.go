@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"rbot/brain/command"
@@ -42,13 +43,18 @@ func init() {
 				cands = append(cands, phone)
 			}
 
-			err := jadibot.Stop(ctx, target, c.Sender(), isOwner, cands...)
+			stoppedPhone, err := jadibot.Stop(ctx, target, c.Sender(), isOwner, cands...)
 			if err != nil {
 				_, replyErr := c.Reply(ctx, "❌ "+err.Error())
 				return replyErr
 			}
 
-			_, err = c.Reply(ctx, "✅ Sesi jadibot berhasil dihentikan dan dihapus.")
+			msg := fmt.Sprintf("✅ *JADIBOT BERHASIL DIHENTIKAN*\n\n"+
+				"📱 *Nomor Sub-Bot:* +%s\n"+
+				"🔌 *Status:* Sesi dimatikan & database sesi dibersihkan\n\n"+
+				"💡 _Ketik *.jadibot* kapan saja jika ingin menghubungkan kembali._", stoppedPhone)
+
+			_, err = c.Reply(ctx, msg)
 			return err
 		},
 	})

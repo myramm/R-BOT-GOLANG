@@ -1034,7 +1034,7 @@ func handleJadibotStop(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := jadibot.Stop(r.Context(), req.Phone, types.JID{}, true); err != nil {
+	if _, err := jadibot.Stop(r.Context(), req.Phone, types.JID{}, true); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})

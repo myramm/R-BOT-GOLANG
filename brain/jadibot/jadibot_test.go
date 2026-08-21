@@ -27,7 +27,7 @@ func TestStopNonExistent(t *testing.T) {
 	ctx := context.Background()
 	requester := types.NewJID("628123456789", "s.whatsapp.net")
 
-	err := Stop(ctx, "62899999999", requester, false)
+	_, err := Stop(ctx, "62899999999", requester, false)
 	if err == nil {
 		t.Fatal("expected error stopping non-existent sub-bot, got nil")
 	}
@@ -57,7 +57,7 @@ func TestStopPermissions(t *testing.T) {
 	}
 
 	// 1. Non-owner and not creator -> expect error "Anda bukan pembuat sub-bot ini"
-	err := mgr.Stop(ctx, botPhone, otherJID, false)
+	_, err := mgr.Stop(ctx, botPhone, otherJID, false)
 	if err == nil {
 		t.Fatal("expected error for non-creator stop, got nil")
 	}
@@ -71,9 +71,12 @@ func TestStopPermissions(t *testing.T) {
 	}
 
 	// 2. Creator stopping sub-bot -> should succeed
-	err = mgr.Stop(ctx, botPhone, ownerJID, false)
+	stopped, err := mgr.Stop(ctx, botPhone, ownerJID, false)
 	if err != nil {
 		t.Fatalf("expected creator to be able to stop sub-bot, got: %v", err)
+	}
+	if stopped != botPhone {
+		t.Fatalf("expected stopped phone %s, got %s", botPhone, stopped)
 	}
 	if mgr.Count() != 0 {
 		t.Fatalf("expected count 0 after stop, got %d", mgr.Count())
@@ -88,9 +91,12 @@ func TestStopPermissions(t *testing.T) {
 	}
 
 	// 3. Main bot owner (isOwner=true) stopping sub-bot -> should succeed
-	err = mgr.Stop(ctx, botPhone, mainOwnerJID, true)
+	stopped, err = mgr.Stop(ctx, botPhone, mainOwnerJID, true)
 	if err != nil {
 		t.Fatalf("expected main owner to be able to stop sub-bot, got: %v", err)
+	}
+	if stopped != botPhone {
+		t.Fatalf("expected stopped phone %s, got %s", botPhone, stopped)
 	}
 	if mgr.Count() != 0 {
 		t.Fatalf("expected count 0 after owner stop, got %d", mgr.Count())
@@ -104,9 +110,12 @@ func TestStopPermissions(t *testing.T) {
 		ConnectedAt: time.Now(),
 	}
 	lidJID := types.NewJID("238182377492614", types.HiddenUserServer)
-	err = mgr.Stop(ctx, botPhone, lidJID, false, "238182377492614", botPhone)
+	stopped, err = mgr.Stop(ctx, botPhone, lidJID, false, "238182377492614", botPhone)
 	if err != nil {
 		t.Fatalf("expected creator with LID and candidate phone to be able to stop sub-bot, got: %v", err)
+	}
+	if stopped != botPhone {
+		t.Fatalf("expected stopped phone %s, got %s", botPhone, stopped)
 	}
 	if mgr.Count() != 0 {
 		t.Fatalf("expected count 0 after LID stop, got %d", mgr.Count())
@@ -119,9 +128,12 @@ func TestStopPermissions(t *testing.T) {
 		OwnerJID:    types.NewJID(botPhone, "s.whatsapp.net"),
 		ConnectedAt: time.Now(),
 	}
-	err = mgr.Stop(ctx, "", lidJID, false, "238182377492614", botPhone)
+	stopped, err = mgr.Stop(ctx, "", lidJID, false, "238182377492614", botPhone)
 	if err != nil {
 		t.Fatalf("expected auto-detected empty target stop to succeed, got: %v", err)
+	}
+	if stopped != botPhone {
+		t.Fatalf("expected stopped phone %s, got %s", botPhone, stopped)
 	}
 	if mgr.Count() != 0 {
 		t.Fatalf("expected count 0 after empty target stop, got %d", mgr.Count())
@@ -134,9 +146,12 @@ func TestStopPermissions(t *testing.T) {
 		OwnerJID:    ownerJID,
 		ConnectedAt: time.Now(),
 	}
-	err = mgr.Stop(ctx, "081234567890", ownerJID, false)
+	stopped, err = mgr.Stop(ctx, "081234567890", ownerJID, false)
 	if err != nil {
 		t.Fatalf("expected stop with 08xx phone to succeed, got: %v", err)
+	}
+	if stopped != botPhone {
+		t.Fatalf("expected stopped phone %s, got %s", botPhone, stopped)
 	}
 	if mgr.Count() != 0 {
 		t.Fatalf("expected count 0 after 08xx stop, got %d", mgr.Count())

@@ -697,6 +697,20 @@ func (m *Manager) GetSubBotDetail(phone string) (map[string]any, []string, error
 	}
 	detail["joinedGroups"] = groupList
 
+	// Tambahkan daftar kontak yang diblokir oleh sub-bot ini
+	var blocklistEntries []string
+	if bot.Client != nil && bot.Client.IsConnected() && bot.Client.IsLoggedIn() {
+		ctx, cancel := context.WithTimeout(context.Background(), 7*time.Second)
+		bl, err := bot.Client.GetBlocklist(ctx)
+		cancel()
+		if err == nil && bl != nil {
+			for _, j := range bl.JIDs {
+				blocklistEntries = append(blocklistEntries, j.String())
+			}
+		}
+	}
+	detail["blocklist"] = blocklistEntries
+
 	return detail, logs, nil
 }
 
@@ -760,6 +774,50 @@ func (m *Manager) IsConnected(phone string) bool {
 		return false
 	}
 	return bot.Client.IsLoggedIn()
+}
+
+// UpdateBlocklist memperbarui status blokir user pada sub-bot.
+func UpdateBlocklist(ctx context.Context, phone string, targetJID types.JID, action events.BlocklistChangeAction) (*types.Blocklist, error) {
+	return defaultManager.UpdateBlocklist(ctx, phone, targetJID, action)
+}
+
+// UpdateBlocklist memperbarui status blokir user pada sub-bot di Manager.
+func (m *Manager) UpdateBlocklist(ctx context.Context, phone string, targetJID types.JID, action events.BlocklistChangeAction) (*types.Blocklist, error) {
+	phoneDigits := NormalizePhone(phone)
+	m.mu.RLock()
+	bot, exists := m.bots[phoneDigits]
+	m.mu.RUnlock()
+	if !exists || bot == nil || bot.Client == nil || !bot.Client.IsConnected() {
+		return nil, fmt.Errorf("jadibot %s tidak ditemukan atau sedang offline", phone)
+	}
+	return bot.Client.UpdateBlocklist(ctx, targetJID, action)
+}
+
+// GetBlocklist mengambil daftar JID yang diblokir oleh sub-bot.
+func GetBlocklist(ctx context.Context, phone string) ([]string, error) {
+	return defaultManager.GetBlocklist(ctx, phone)
+}
+
+// GetBlocklist mengambil daftar JID yang diblokir oleh sub-bot di Manager.
+func (m *Manager) GetBlocklist(ctx context.Context, phone string) ([]string, error) {
+	phoneDigits := NormalizePhone(phone)
+	m.mu.RLock()
+	bot, exists := m.bots[phoneDigits]
+	m.mu.RUnlock()
+	if !exists || bot == nil || bot.Client == nil || !bot.Client.IsConnected() {
+		return nil, fmt.Errorf("jadibot %s tidak ditemukan atau sedang offline", phone)
+	}
+	bl, err := bot.Client.GetBlocklist(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var res []string
+	if bl != nil {
+		for _, j := range bl.JIDs {
+			res = append(res, j.String())
+		}
+	}
+	return res, nil
 }
 
 func getSubBotStorageBytes(phone string) int64 {

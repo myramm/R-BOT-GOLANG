@@ -6643,19 +6643,26 @@
                         <th>User / Nama</th>
                         <th>Hit Cmd</th>
                         <th>Pesan</th>
+                        <th style="text-align: right;">Aksi</th>
                       </tr>
                     </thead>
                     <tbody>
-                      ${topUsers.map(u => `
-                        <tr>
-                          <td>
-                            <div style="font-weight: 600; color: var(--text-main);">${escapeHtml(u.name || 'User')}</div>
-                            <div style="font-family: var(--font-mono); color: var(--text-sub); font-size: 0.7rem;">+${u.phone || u.jid.split('@')[0]}</div>
-                          </td>
-                          <td><strong style="color: var(--accent);">⚡ ${u.cmds || 0}</strong></td>
-                          <td>${u.chats || 0}</td>
-                        </tr>
-                      `).join('')}
+                      ${topUsers.map(u => {
+                        const targetUserJid = u.jid || (u.phone ? u.phone + '@s.whatsapp.net' : '');
+                        return `
+                          <tr>
+                            <td>
+                              <div style="font-weight: 600; color: var(--text-main);">${escapeHtml(u.name || 'User')}</div>
+                              <div style="font-family: var(--font-mono); color: var(--text-sub); font-size: 0.7rem;">+${u.phone || (u.jid ? u.jid.split('@')[0] : '-')}</div>
+                            </td>
+                            <td><strong style="color: var(--accent);">⚡ ${u.cmds || 0}</strong></td>
+                            <td>${u.chats || 0}</td>
+                            <td style="text-align: right;">
+                              <button class="btn btn-danger btn-sm" onclick="jadibotUserAction('${escapeHtml(bot.phone)}', '${escapeHtml(targetUserJid)}', 'block')" title="Blokir user pada Jadibot ini">🚫 Block</button>
+                            </td>
+                          </tr>
+                        `;
+                      }).join('')}
                     </tbody>
                   </table>
                 </div>
@@ -6688,6 +6695,50 @@
                 </div>
               `}
             </div>
+          </div>
+        `;
+      } else if (currentDetailTab === 'blocklist') {
+        const blocklist = bot.blocklist || [];
+        tabContentHtml = `
+          <div>
+            <div style="font-size: 0.8rem; color: var(--text-sub); margin-bottom: 0.75rem;">
+              Kelola daftar user/nomor yang diblokir khusus pada instance sub-bot <strong>+${escapeHtml(bot.phone)}</strong>:
+            </div>
+            
+            <!-- Input Form Blokir Manual -->
+            <div style="display: flex; gap: 0.5rem; margin-bottom: 1.25rem; flex-wrap: wrap; background: #06090e; padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border-color);">
+              <input id="inputJadibotBlockJid" type="text" placeholder="Masukkan nomor / JID (contoh: 6281234567890)" style="flex: 1; min-width: 240px; background: #0c111c; border: 1px solid var(--border-color); border-radius: 6px; padding: 0.5rem 0.75rem; color: var(--text-main); font-size: 0.8rem; font-family: var(--font-mono);">
+              <button class="btn btn-danger btn-sm" onclick="submitJadibotManualBlock('${escapeHtml(bot.phone)}')">🚫 Blokir User</button>
+            </div>
+
+            <!-- Tabel Daftar Terblokir -->
+            <div style="font-weight: 700; font-size: 0.85rem; color: var(--text-main); margin-bottom: 0.5rem;">
+              📋 Daftar Kontak Terblokir (${blocklist.length})
+            </div>
+            ${blocklist.length === 0 ? `<div style="text-align: center; padding: 2rem; color: var(--text-muted); background: #06090e; border-radius: 8px; border: 1px solid var(--border-color);">Tidak ada kontak yang diblokir pada Jadibot ini.</div>` : `
+              <div class="table-responsive" style="max-height: 260px; overflow-y: auto;">
+                <table>
+                  <thead>
+                    <tr>
+                      <th style="width: 50px;">#</th>
+                      <th>Kontak / WhatsApp JID</th>
+                      <th style="text-align: right;">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${blocklist.map((bjid, idx) => `
+                      <tr>
+                        <td style="color: var(--text-muted); font-family: var(--font-mono);">${idx + 1}</td>
+                        <td style="font-family: var(--font-mono); color: var(--text-main); font-weight: 600;">${escapeHtml(bjid)}</td>
+                        <td style="text-align: right;">
+                          <button class="btn btn-secondary btn-sm" onclick="jadibotUserAction('${escapeHtml(bot.phone)}', '${escapeHtml(bjid)}', 'unblock')" title="Buka blokir user">🔓 Buka Blokir (Unblock)</button>
+                        </td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+              </div>
+            `}
           </div>
         `;
       } else if (currentDetailTab === 'activity') {
@@ -6826,7 +6877,8 @@
         <div style="display: flex; gap: 0.4rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap;">
           <button class="btn btn-sm ${currentDetailTab === 'commands' ? 'btn-primary' : 'btn-secondary'}" onclick="switchSubBotDetailTab('commands')">⚡ Command Breakdown (${topCmds.length})</button>
           <button class="btn btn-sm ${currentDetailTab === 'groups' ? 'btn-primary' : 'btn-secondary'}" onclick="switchSubBotDetailTab('groups')">👥 Grup WhatsApp (${joinedGroups.length})</button>
-          <button class="btn btn-sm ${currentDetailTab === 'users' ? 'btn-primary' : 'btn-secondary'}" onclick="switchSubBotDetailTab('users')">👤 Top Users</button>
+          <button class="btn btn-sm ${currentDetailTab === 'users' ? 'btn-primary' : 'btn-secondary'}" onclick="switchSubBotDetailTab('users')">👤 Top Users (${topUsers.length})</button>
+          <button class="btn btn-sm ${currentDetailTab === 'blocklist' ? 'btn-primary' : 'btn-secondary'}" onclick="switchSubBotDetailTab('blocklist')">🛡️ Blocklist (${(bot.blocklist || []).length})</button>
           <button class="btn btn-sm ${currentDetailTab === 'activity' ? 'btn-primary' : 'btn-secondary'}" onclick="switchSubBotDetailTab('activity')">🕒 Live Activity (${recentCmds.length})</button>
           <button class="btn btn-sm ${currentDetailTab === 'logs' ? 'btn-primary' : 'btn-secondary'}" onclick="switchSubBotDetailTab('logs')">📜 Console Logs</button>
         </div>
@@ -6846,6 +6898,46 @@
       }).catch(() => {
         showToast('Gagal menyalin log', 'error');
       });
+    }
+
+    async function jadibotUserAction(phone, jid, act) {
+      let targetJid = jid;
+      if (!targetJid.includes('@')) {
+        targetJid = targetJid.replace(/[^0-9]/g, '') + '@s.whatsapp.net';
+      }
+      openConfirmModal(`Konfirmasi ${act.toUpperCase()}`, `Apakah Anda yakin ingin ${act} kontak ${targetJid} pada Jadibot +${phone}?`, async () => {
+        try {
+          const res = await fetch('/api/action/user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+            body: JSON.stringify({ jid: targetJid, action: act, botPhone: phone })
+          });
+          const data = await res.json();
+          if (data.ok) {
+            showToast(data.message || `User berhasil di-${act}!`, 'success');
+            openJadibotDetail(phone);
+            fetchStatus();
+          } else {
+            showToast(data.error || `Gagal ${act} user`, 'error');
+          }
+        } catch (err) {
+          showToast('Gagal memproses aksi', 'error');
+        }
+      });
+    }
+
+    async function submitJadibotManualBlock(phone) {
+      const input = document.getElementById('inputJadibotBlockJid');
+      if (!input) return;
+      let val = input.value.trim();
+      if (!val) {
+        showToast('Harap masukkan nomor / JID user', 'warning');
+        return;
+      }
+      if (!val.includes('@')) {
+        val = val.replace(/[^0-9]/g, '') + '@s.whatsapp.net';
+      }
+      jadibotUserAction(phone, val, 'block');
     }
 
     /* ContextInfo Customization Logic */

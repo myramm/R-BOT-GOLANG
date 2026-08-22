@@ -496,6 +496,9 @@ func Start(ctx context.Context) {
 	mux.HandleFunc("/api/jadibot/restart", handleJadibotRestart)
 	mux.HandleFunc("/api/jadibot/delete", handleJadibotDelete)
 	mux.HandleFunc("/api/jadibot/detail", handleJadibotDetail)
+	mux.HandleFunc("/api/jadibot/block", handleJadibotBlock)
+	mux.HandleFunc("/api/jadibot/unblock", handleJadibotUnblock)
+	mux.HandleFunc("/api/jadibot/blocklist", handleJadibotBlocklist)
 	mux.HandleFunc("/api/kill", handleKill)
 	mux.HandleFunc("/api/reload", handleReload)
 	mux.HandleFunc("/api/broadcast", handleBroadcast)
@@ -878,38 +881,160 @@ func handleUserAction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		JID    string `json:"jid"`
-		Action string `json:"action"` // "block", "unblock"
+		JID      string `json:"jid"`
+		Action   string `json:"action"`   // "block", "unblock"
+		BotPhone string `json:"botPhone"` // optional: "" or "main" for main bot, or phone for jadibot
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.JID == "" || req.Action == "" {
 		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}
 
-	RecordAudit(r, "USER_ACTION", fmt.Sprintf("%s pada %s", strings.ToUpper(req.Action), req.JID))
+	targetJID, err := types.ParseJID(req.JID)
+	if err != nil {
+		http.Error(w, "JID tidak valid: "+err.Error(), http.StatusBadRequest)
+		return
+	}
 
-	stateMu.RLock()
-	cli := waClient
-	stateMu.RUnlock()
+	botLabel := "BOT UTAMA"
+	if req.BotPhone != "" && req.BotPhone != "main" {
+		botLabel = "JADIBOT +" + req.BotPhone
+	}
+	RecordAudit(r, "USER_ACTION", fmt.Sprintf("%s pada %s [%s]", strings.ToUpper(req.Action), req.JID, botLabel))
 
+	var actionErr error
 	if req.Action == "block" || req.Action == "unblock" {
-		if cli != nil && cli.IsConnected() {
-			targetJID, err := types.ParseJID(req.JID)
-			if err == nil {
-				if req.Action == "block" {
-					_, _ = cli.UpdateBlocklist(r.Context(), targetJID, events.BlocklistChangeActionBlock)
-				} else {
-					_, _ = cli.UpdateBlocklist(r.Context(), targetJID, events.BlocklistChangeActionUnblock)
-				}
+		act := events.BlocklistChangeActionBlock
+		if req.Action == "unblock" {
+			act = events.BlocklistChangeActionUnblock
+		}
+
+		if req.BotPhone != "" && req.BotPhone != "main" {
+			_, actionErr = jadibot.UpdateBlocklist(r.Context(), req.BotPhone, targetJID, act)
+		} else {
+			stateMu.RLock()
+			cli := waClient
+			stateMu.RUnlock()
+			if cli != nil && cli.IsConnected() {
+				_, actionErr = cli.UpdateBlocklist(r.Context(), targetJID, act)
+			} else {
+				actionErr = fmt.Errorf("bot utama tidak terhubung")
 			}
 		}
+	}
+
+	if actionErr != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":    false,
+			"error": fmt.Sprintf("Gagal memproses %s pada %s: %v", req.Action, req.JID, actionErr),
+		})
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"ok":      true,
-		"message": fmt.Sprintf("Aksi %s pada %s berhasil diproses.", req.Action, req.JID),
+		"message": fmt.Sprintf("Aksi %s pada %s (%s) berhasil diproses.", req.Action, req.JID, botLabel),
 	})
+}
+
+func handleJadibotBlock(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Phone string `json:"phone"`
+		JID   string `json:"jid"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Phone == "" || req.JID == "" {
+		http.Error(w, "Harap sertakan nomor telepon jadibot dan JID user", http.StatusBadRequest)
+		return
+	}
+
+	targetJID, err := types.ParseJID(req.JID)
+	if err != nil {
+		http.Error(w, "JID tidak valid: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	RecordAudit(r, "JADIBOT_BLOCK", fmt.Sprintf("Blokir user %s pada Jadibot +%s", req.JID, req.Phone))
+	_, err = jadibot.UpdateBlocklist(r.Context(), req.Phone, targetJID, events.BlocklistChangeActionBlock)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "message": fmt.Sprintf("User %s berhasil diblokir pada Jadibot +%s", req.JID, req.Phone)})
+}
+
+func handleJadibotUnblock(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Phone string `json:"phone"`
+		JID   string `json:"jid"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Phone == "" || req.JID == "" {
+		http.Error(w, "Harap sertakan nomor telepon jadibot dan JID user", http.StatusBadRequest)
+		return
+	}
+
+	targetJID, err := types.ParseJID(req.JID)
+	if err != nil {
+		http.Error(w, "JID tidak valid: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	RecordAudit(r, "JADIBOT_UNBLOCK", fmt.Sprintf("Buka blokir user %s pada Jadibot +%s", req.JID, req.Phone))
+	_, err = jadibot.UpdateBlocklist(r.Context(), req.Phone, targetJID, events.BlocklistChangeActionUnblock)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "message": fmt.Sprintf("User %s berhasil dibuka blokirnya pada Jadibot +%s", req.JID, req.Phone)})
+}
+
+func handleJadibotBlocklist(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	phone := r.URL.Query().Get("phone")
+	if phone == "" {
+		http.Error(w, "Parameter phone diperlukan", http.StatusBadRequest)
+		return
+	}
+
+	list, err := jadibot.GetBlocklist(r.Context(), phone)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "phone": phone, "blocklist": list})
 }
 
 func handleMetricsWS(w http.ResponseWriter, r *http.Request) {

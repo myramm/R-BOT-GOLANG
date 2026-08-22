@@ -804,6 +804,16 @@
     }
     .modal-backdrop.active { display: flex; opacity: 1; pointer-events: auto; }
 
+    #modalJadibotDetail {
+      z-index: 9200;
+    }
+    #messageModal {
+      z-index: 10000;
+    }
+    #confirmModal {
+      z-index: 10500;
+    }
+
     .modal-box {
       background: var(--bg-card);
       border: 1px solid var(--border-color-hover);
@@ -6099,17 +6109,29 @@
       document.getElementById('confirmModalTitle').textContent = title;
       document.getElementById('confirmModalText').textContent = text;
       pendingConfirmAction = actionFn;
-      document.getElementById('confirmModal').classList.add('active');
+      const m = document.getElementById('confirmModal');
+      if (m) {
+        m.style.zIndex = '10500';
+        m.classList.add('active');
+      }
     }
 
     function closeConfirmModal() {
-      document.getElementById('confirmModal').classList.remove('active');
+      const m = document.getElementById('confirmModal');
+      if (m) m.classList.remove('active');
       pendingConfirmAction = null;
     }
 
-    function executeConfirmModal() {
-      if (pendingConfirmAction) pendingConfirmAction();
+    async function executeConfirmModal() {
+      const fn = pendingConfirmAction;
       closeConfirmModal();
+      if (typeof fn === 'function') {
+        try {
+          await fn();
+        } catch (err) {
+          console.error('Error executing confirmation action:', err);
+        }
+      }
     }
 
     function askRestartBot() {
@@ -6658,7 +6680,7 @@
                             <td><strong style="color: var(--accent);">⚡ ${u.cmds || 0}</strong></td>
                             <td>${u.chats || 0}</td>
                             <td style="text-align: right;">
-                              <button class="btn btn-danger btn-sm" onclick="jadibotUserAction('${escapeHtml(bot.phone)}', '${escapeHtml(targetUserJid)}', 'block')" title="Blokir user pada Jadibot ini">🚫 Block</button>
+                              <button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); jadibotUserAction('${escapeHtml(bot.phone)}', '${escapeHtml(targetUserJid)}', 'block')" title="Blokir user pada Jadibot ini">🚫 Block</button>
                             </td>
                           </tr>
                         `;
@@ -6731,7 +6753,7 @@
                         <td style="color: var(--text-muted); font-family: var(--font-mono);">${idx + 1}</td>
                         <td style="font-family: var(--font-mono); color: var(--text-main); font-weight: 600;">${escapeHtml(bjid)}</td>
                         <td style="text-align: right;">
-                          <button class="btn btn-secondary btn-sm" onclick="jadibotUserAction('${escapeHtml(bot.phone)}', '${escapeHtml(bjid)}', 'unblock')" title="Buka blokir user">🔓 Buka Blokir (Unblock)</button>
+                          <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); jadibotUserAction('${escapeHtml(bot.phone)}', '${escapeHtml(bjid)}', 'unblock')" title="Buka blokir user">🔓 Buka Blokir (Unblock)</button>
                         </td>
                       </tr>
                     `).join('')}

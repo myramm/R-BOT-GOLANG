@@ -536,6 +536,15 @@ func Start(ctx context.Context) {
 	mux.HandleFunc("/api/errors/ai-fix", handleErrorsAiFix)
 	mux.HandleFunc("/api/errors/ai-config", handleErrorsAiConfig)
 
+	// AGY Sandbox Agent Endpoints
+	mux.HandleFunc("/api/agy/status", handleAgyStatus)
+	mux.HandleFunc("/api/agy/toggle", handleAgyToggle)
+	mux.HandleFunc("/api/agy/bugs", handleAgyBugsList)
+	mux.HandleFunc("/api/agy/bugs/approve", handleAgyBugApprove)
+	mux.HandleFunc("/api/agy/bugs/reject", handleAgyBugReject)
+	mux.HandleFunc("/api/logs", handleLogsApi)
+	mux.HandleFunc("/api/bugs", handleBugsApi)
+
 	// Bot Mode Endpoints (Self / Public)
 	mux.HandleFunc("/api/mode", handleBotMode)
 
@@ -3762,6 +3771,296 @@ func handleErrorsAiConfig(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"ok":      true,
 			"message": "Konfigurasi API AI Fixer berhasil disimpan!",
+		})
+		return
+	}
+
+	http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+}
+
+// ----------------------------------------------------
+// AGY Sandbox Bug Detection & Fix Agent Handlers
+// ----------------------------------------------------
+
+type AgyAgentConfig struct {
+	Enabled         bool   `json:"enabled"`
+	RequireApproval bool   `json:"requireApproval"`
+	PollIntervalSec int    `json:"pollIntervalSec"`
+	TargetRepo      string `json:"targetRepo"`
+	Status          string `json:"status"` // "ACTIVE" | "PAUSED"
+}
+
+func getAgyAgentConfig() AgyAgentConfig {
+	var cfg AgyAgentConfig
+	found, err := store.Get("agy_agent_config", &cfg)
+	if err != nil || !found {
+		return AgyAgentConfig{
+			Enabled:         true,
+			RequireApproval: true,
+			PollIntervalSec: 15,
+			TargetRepo:      "botgo",
+			Status:          "ACTIVE",
+		}
+	}
+	if cfg.Status == "" {
+		if cfg.Enabled {
+			cfg.Status = "ACTIVE"
+		} else {
+			cfg.Status = "PAUSED"
+		}
+	}
+	return cfg
+}
+
+func setAgyAgentConfig(cfg AgyAgentConfig) error {
+	if cfg.Enabled {
+		cfg.Status = "ACTIVE"
+	} else {
+		cfg.Status = "PAUSED"
+	}
+	return store.Set("agy_agent_config", cfg)
+}
+
+func handleAgyStatus(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	cfg := getAgyAgentConfig()
+	allBugs := errortracker.GetBugs("")
+
+	waitingCount := 0
+	approvedCount := 0
+	fixedCount := 0
+	for _, b := range allBugs {
+		if b.Status == "WAITING_FOR_OWNER_APPROVAL" {
+			waitingCount++
+		} else if b.Status == "APPROVED" {
+			approvedCount++
+		} else if b.Status == "FIXED" {
+			fixedCount++
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":              true,
+		"enabled":         cfg.Enabled,
+		"status":          cfg.Status,
+		"requireApproval": cfg.RequireApproval,
+		"pollIntervalSec": cfg.PollIntervalSec,
+		"targetRepo":      cfg.TargetRepo,
+		"waitingCount":    waitingCount,
+		"approvedCount":   approvedCount,
+		"fixedCount":      fixedCount,
+		"totalBugs":       len(allBugs),
+		"serv00Url":       "http://s11.serv00.com:7090",
+	})
+}
+
+func handleAgyToggle(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Enabled *bool `json:"enabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Enabled == nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	cfg := getAgyAgentConfig()
+	cfg.Enabled = *req.Enabled
+	if cfg.Enabled {
+		cfg.Status = "ACTIVE"
+	} else {
+		cfg.Status = "PAUSED"
+	}
+
+	_ = setAgyAgentConfig(cfg)
+	RecordAudit(r, "AGY_TOGGLE", fmt.Sprintf("Mengubah status AGY Agent menjadi: %s", cfg.Status))
+	BroadcastMetricsNow()
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":      true,
+		"enabled": cfg.Enabled,
+		"status":  cfg.Status,
+		"message": fmt.Sprintf("AGY Sandbox Agent berhasil disetel ke %s", cfg.Status),
+	})
+}
+
+func handleAgyBugsList(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	status := strings.TrimSpace(r.URL.Query().Get("status"))
+	bugs := errortracker.GetBugs(status)
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":    true,
+		"count": len(bugs),
+		"bugs":  bugs,
+	})
+}
+
+func handleAgyBugApprove(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		ID   string `json:"id"`
+		Note string `json:"note,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.ID == "" {
+		http.Error(w, "Bad request: missing bug id", http.StatusBadRequest)
+		return
+	}
+
+	bug, found := errortracker.SetOwnerDecision(req.ID, true, req.Note)
+	if !found {
+		http.Error(w, "Bug not found", http.StatusNotFound)
+		return
+	}
+
+	RecordAudit(r, "AGY_BUG_APPROVE", fmt.Sprintf("Owner menyetujui perbaikan untuk Bug: %s", req.ID))
+	BroadcastMetricsNow()
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":      true,
+		"message": fmt.Sprintf("Bug %s berhasil disetujui (APPROVED). AGY akan memproses di sandbox.", req.ID),
+		"bug":     bug,
+	})
+}
+
+func handleAgyBugReject(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		ID     string `json:"id"`
+		Reason string `json:"reason"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.ID == "" || req.Reason == "" {
+		http.Error(w, "Bad request: missing id or reason", http.StatusBadRequest)
+		return
+	}
+
+	bug, found := errortracker.SetOwnerDecision(req.ID, false, req.Reason)
+	if !found {
+		http.Error(w, "Bug not found", http.StatusNotFound)
+		return
+	}
+
+	RecordAudit(r, "AGY_BUG_REJECT", fmt.Sprintf("Owner menolak perbaikan untuk Bug: %s (Alasan: %s)", req.ID, req.Reason))
+	BroadcastMetricsNow()
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":      true,
+		"message": fmt.Sprintf("Bug %s telah ditolak (REJECTED). AGY tidak akan menyentuh kode.", req.ID),
+		"bug":     bug,
+	})
+}
+
+func handleLogsApi(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	if r.Method == http.MethodGet {
+		errorsList := errortracker.GetErrors()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":    true,
+			"count": len(errorsList),
+			"logs":  errorsList,
+		})
+		return
+	}
+
+	if r.Method == http.MethodPost {
+		var req struct {
+			Level   string         `json:"level"`
+			Service string         `json:"service"`
+			Message string         `json:"message"`
+			Stack   string         `json:"stack,omitempty"`
+			Meta    map[string]any `json:"metadata,omitempty"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Message == "" {
+			http.Error(w, "Bad request", http.StatusBadRequest)
+			return
+		}
+
+		errortracker.RecordError(req.Service, req.Message, req.Stack)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":      true,
+			"message": "Log processed successfully",
+		})
+		return
+	}
+
+	http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+}
+
+func handleBugsApi(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	if r.Method == http.MethodGet {
+		status := strings.TrimSpace(r.URL.Query().Get("status"))
+		bugs := errortracker.GetBugs(status)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":   true,
+			"bugs": bugs,
+		})
+		return
+	}
+
+	if r.Method == http.MethodPost {
+		var bug errortracker.BugReport
+		if err := json.NewDecoder(r.Body).Decode(&bug); err != nil {
+			http.Error(w, "Bad request", http.StatusBadRequest)
+			return
+		}
+
+		saved := errortracker.SaveOrUpdateBug(bug)
+		BroadcastMetricsNow()
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":  true,
+			"bug": saved,
 		})
 		return
 	}

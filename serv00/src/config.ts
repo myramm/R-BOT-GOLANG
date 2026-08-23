@@ -14,7 +14,7 @@ export interface Config {
 }
 
 export const config: Config = {
-  port: parseInt(process.env.PORT || '7095', 10),
+  port: parseInt(process.env.PORT || '7090', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
   dbPath: process.env.DB_PATH || path.join(process.cwd(), 'data', 'serv00_bug_tracker.db'),
   apiKey: process.env.API_KEY || 'serv00_sandbox_secure_token_change_in_production',

@@ -2987,6 +2987,66 @@
         </div>
       </div>
 
+      <!-- AGY Sandbox Agent Control & Approval Card -->
+      <div class="panel" style="padding: 1.25rem; margin-bottom: 1.25rem; border: 1px solid var(--border-color); background: linear-gradient(180deg, rgba(99, 102, 241, 0.05) 0%, rgba(15, 23, 42, 0.6) 100%);">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 0.75rem;">
+          <div style="display: flex; align-items: center; gap: 0.65rem;">
+            <div style="width: 38px; height: 38px; border-radius: 8px; background: rgba(99, 102, 241, 0.15); display: flex; align-items: center; justify-content: center; font-size: 1.35rem;">
+              🤖
+            </div>
+            <div>
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <h3 style="margin: 0; font-size: 1.05rem; font-weight: 700; color: var(--text-main);">AGY Sandbox Bug Detection & Fix Agent</h3>
+                <span id="agyStatusBadge" class="badge badge-success" style="font-size: 0.7rem;">🟢 AKTIF</span>
+              </div>
+              <p style="margin: 0.15rem 0 0 0; font-size: 0.775rem; color: var(--text-sub);">
+                Agent cerdas di Sandbox untuk mendeteksi error, menganalisis source code, dan melakukan perbaikan otomatis dengan persetujuan Owner.
+              </p>
+            </div>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <button id="agyToggleBtn" class="btn btn-secondary btn-sm" onclick="toggleAgyWeb()" style="display: flex; align-items: center; gap: 0.4rem;">
+              <span id="agyToggleIcon">⏸️</span>
+              <span id="agyToggleText">Matikan AGY</span>
+            </button>
+            <button class="btn btn-primary btn-sm" onclick="loadAgyStatusWeb()" style="display: flex; align-items: center; gap: 0.35rem;">
+              🔄 Refresh AGY
+            </button>
+          </div>
+        </div>
+
+        <!-- AGY Sub-Bar Info -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; background: rgba(0,0,0,0.25); border-radius: 8px; padding: 0.75rem; border: 1px solid rgba(255,255,255,0.05); margin-bottom: 0.75rem; font-size: 0.775rem;">
+          <div>
+            <span style="color: var(--text-muted);">Serv00 Endpoint:</span>
+            <div style="font-weight: 600; color: var(--accent); font-family: var(--font-mono);">s11.serv00.com:7090/api</div>
+          </div>
+          <div>
+            <span style="color: var(--text-muted);">Security Gate:</span>
+            <div style="font-weight: 600; color: #10b981;">🛡️ Owner Approval Mandatory</div>
+          </div>
+          <div>
+            <span style="color: var(--text-muted);">Proposal Menunggu Approval:</span>
+            <div id="agyWaitingCountBadge" style="font-weight: 700; color: var(--warning); font-size: 0.9rem;">0 Proposal</div>
+          </div>
+          <div>
+            <span style="color: var(--text-muted);">Total Bug Terselesaikan:</span>
+            <div id="agyFixedCountBadge" style="font-weight: 700; color: var(--success); font-size: 0.9rem;">0 Fixed</div>
+          </div>
+        </div>
+
+        <!-- Waiting for Owner Approval Section Container -->
+        <div id="agyWaitingBugsContainer" style="display: none;">
+          <div style="font-weight: 700; font-size: 0.85rem; color: var(--warning); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem;">
+            <span>⚠️</span> Proposal Perbaikan Bug dari AGY (Menunggu Persetujuan Owner):
+          </div>
+          <div id="agyBugsList" style="display: flex; flex-direction: column; gap: 0.65rem;">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+      </div>
+
       <!-- Main Panel with Filters & Actions -->
       <div class="panel" style="padding: 1.25rem;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.75rem;">
@@ -4402,6 +4462,196 @@
     }
 
     // -------------------------------------------------------------
+    // AGY SANDBOX BUG DETECTION & FIX AGENT JAVASCRIPT CONTROLLER
+    // -------------------------------------------------------------
+    let currentAgyEnabled = true;
+
+    async function loadAgyStatusWeb() {
+      try {
+        const [statusRes, bugsRes] = await Promise.all([
+          fetch('/api/agy/status', { headers: { 'Authorization': 'Bearer ' + authToken } }),
+          fetch('/api/agy/bugs?status=WAITING_FOR_OWNER_APPROVAL', { headers: { 'Authorization': 'Bearer ' + authToken } })
+        ]);
+
+        const statusJson = await statusRes.json();
+        const bugsJson = await bugsRes.json();
+
+        if (statusJson.ok) {
+          currentAgyEnabled = !!statusJson.enabled;
+          const statusBadge = document.getElementById('agyStatusBadge');
+          const toggleBtn = document.getElementById('agyToggleBtn');
+          const toggleIcon = document.getElementById('agyToggleIcon');
+          const toggleText = document.getElementById('agyToggleText');
+          const waitingBadge = document.getElementById('agyWaitingCountBadge');
+          const fixedBadge = document.getElementById('agyFixedCountBadge');
+
+          if (statusBadge) {
+            if (currentAgyEnabled) {
+              statusBadge.className = 'badge badge-success';
+              statusBadge.textContent = '🟢 AKTIF';
+            } else {
+              statusBadge.className = 'badge badge-secondary';
+              statusBadge.textContent = '⚪ NONAKTIF (Paused)';
+            }
+          }
+
+          if (toggleBtn && toggleText && toggleIcon) {
+            if (currentAgyEnabled) {
+              toggleIcon.textContent = '⏸️';
+              toggleText.textContent = 'Matikan AGY';
+              toggleBtn.className = 'btn btn-secondary btn-sm';
+            } else {
+              toggleIcon.textContent = '🚀';
+              toggleText.textContent = 'Aktifkan AGY';
+              toggleBtn.className = 'btn btn-success btn-sm';
+            }
+          }
+
+          if (waitingBadge) waitingBadge.textContent = `${statusJson.waitingCount || 0} Proposal`;
+          if (fixedBadge) fixedBadge.textContent = `${statusJson.fixedCount || 0} Fixed`;
+        }
+
+        if (bugsJson.ok) {
+          renderAgyWaitingBugs(bugsJson.bugs || []);
+        }
+      } catch (err) {
+        console.error('Error loading AGY status:', err);
+      }
+    }
+
+    async function toggleAgyWeb() {
+      const targetState = !currentAgyEnabled;
+      const confirmMsg = targetState
+        ? 'Aktifkan AGY Sandbox Agent untuk memantau dan menganalisis error?'
+        : 'Nonaktifkan AGY Sandbox Agent? AGY akan masuk ke mode standby.';
+
+      if (!confirm(confirmMsg)) return;
+
+      try {
+        const res = await fetch('/api/agy/toggle', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + authToken
+          },
+          body: JSON.stringify({ enabled: targetState })
+        });
+
+        const json = await res.json();
+        if (json.ok) {
+          showToast(json.message || 'Status AGY berhasil diperbarui', 'success');
+          loadAgyStatusWeb();
+        } else {
+          showToast('Gagal mengubah status AGY: ' + (json.error || 'Error server'), 'danger');
+        }
+      } catch (err) {
+        showToast('Error koneksi: ' + err.message, 'danger');
+      }
+    }
+
+    function renderAgyWaitingBugs(bugs) {
+      const container = document.getElementById('agyWaitingBugsContainer');
+      const listEl = document.getElementById('agyBugsList');
+      if (!container || !listEl) return;
+
+      if (!bugs || bugs.length === 0) {
+        container.style.display = 'none';
+        listEl.innerHTML = '';
+        return;
+      }
+
+      container.style.display = 'block';
+      let html = '';
+
+      bugs.forEach(b => {
+        const sevColor = b.severity === 'CRITICAL' ? 'var(--danger)' : b.severity === 'HIGH' ? '#f97316' : b.severity === 'MEDIUM' ? 'var(--warning)' : 'var(--accent)';
+        const files = (b.affectedFiles || []).join(', ') || 'Belum teridentifikasi';
+        const fixSummary = b.proposedFix?.summary || 'Rekomendasi perbaikan kode';
+
+        html += `
+          <div style="background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.08); border-left: 4px solid ${sevColor}; border-radius: 6px; padding: 0.75rem 0.85rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+            <div style="flex: 1; min-width: 250px;">
+              <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;">
+                <span class="badge" style="background: ${sevColor}; color: #fff; font-size: 0.65rem; font-weight: 700;">${escapeHtml(b.severity || 'MEDIUM')}</span>
+                <span style="font-family: var(--font-mono); font-weight: 700; color: var(--text-main); font-size: 0.8rem;">${escapeHtml(b.id)}</span>
+                <span style="font-size: 0.725rem; color: var(--text-muted); font-family: var(--font-mono);">(${escapeHtml(b.service || 'botgo')})</span>
+              </div>
+              <div style="font-weight: 600; color: var(--text-main); font-size: 0.85rem; margin-bottom: 0.2rem;">${escapeHtml(b.error || '-')}</div>
+              <div style="font-size: 0.75rem; color: var(--text-sub); line-height: 1.35;">
+                <strong style="color: var(--accent);">Root Cause:</strong> ${escapeHtml(b.rootCause || '-')}<br>
+                <strong style="color: var(--text-muted);">File:</strong> <code>${escapeHtml(files)}</code> | <strong style="color: var(--text-muted);">Rencana:</strong> ${escapeHtml(fixSummary)}
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 0.45rem; align-items: center;">
+              <button class="btn btn-success btn-sm" onclick="approveAgyBugWeb('${escapeHtml(b.id)}')" style="font-size: 0.75rem; padding: 0.35rem 0.65rem;">
+                ✅ Approve & Fix
+              </button>
+              <button class="btn btn-danger btn-sm" onclick="rejectAgyBugWeb('${escapeHtml(b.id)}')" style="font-size: 0.75rem; padding: 0.35rem 0.65rem;">
+                ❌ Reject
+              </button>
+            </div>
+          </div>
+        `;
+      });
+
+      listEl.innerHTML = html;
+    }
+
+    async function approveAgyBugWeb(id) {
+      if (!confirm(`Setujui perbaikan untuk Bug ${id}?\n\nAGY di Sandbox akan otomatis membuat branch agy/fix/${id.toLowerCase()}, menerapkan fix, dan memverifikasi dengan test suite.`)) {
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/agy/bugs/approve', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + authToken
+          },
+          body: JSON.stringify({ id: id, note: 'Disetujui melalui Web Dashboard' })
+        });
+
+        const json = await res.json();
+        if (json.ok) {
+          showToast(json.message || 'Bug berhasil di-approve!', 'success');
+          loadAgyStatusWeb();
+        } else {
+          showToast('Gagal approve: ' + (json.error || 'Error server'), 'danger');
+        }
+      } catch (err) {
+        showToast('Error: ' + err.message, 'danger');
+      }
+    }
+
+    async function rejectAgyBugWeb(id) {
+      const reason = prompt(`Masukkan alasan penolakan untuk Bug ${id}:`, 'Jangan ubah bagian ini');
+      if (!reason || !reason.trim()) return;
+
+      try {
+        const res = await fetch('/api/agy/bugs/reject', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + authToken
+          },
+          body: JSON.stringify({ id: id, reason: reason.trim() })
+        });
+
+        const json = await res.json();
+        if (json.ok) {
+          showToast(json.message || 'Bug berhasil ditolak.', 'info');
+          loadAgyStatusWeb();
+        } else {
+          showToast('Gagal reject: ' + (json.error || 'Error server'), 'danger');
+        }
+      } catch (err) {
+        showToast('Error: ' + err.message, 'danger');
+      }
+    }
+
+    // -------------------------------------------------------------
     // ERROR TRACKER & FIX WITH AI JAVASCRIPT CONTROLLER
     // -------------------------------------------------------------
     let allErrorsList = [];
@@ -4409,6 +4659,7 @@
     let currentAiFixAnalysisText = '';
 
     async function loadErrorsWeb() {
+      loadAgyStatusWeb();
       const tableBody = document.getElementById('errorsTableBody');
       const mobileList = document.getElementById('errorsMobileList');
       if (tableBody) tableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 2rem;">⏳ Memuat log error sistem...</td></tr>';

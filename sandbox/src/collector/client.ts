@@ -60,6 +60,14 @@ export class Serv00ApiClient {
     return this.request<{ ok: boolean; status: string; stats?: any }>('/health');
   }
 
+  async getAgyStatus(): Promise<{ ok: boolean; enabled: boolean; status: string; waitingCount?: number }> {
+    try {
+      return await this.request<{ ok: boolean; enabled: boolean; status: string; waitingCount?: number }>('/agy/status');
+    } catch {
+      return { ok: true, enabled: true, status: 'ACTIVE' };
+    }
+  }
+
   async getUnprocessedLogs(limit = 20): Promise<RemoteLogEntry[]> {
     const res = await this.request<{ ok: boolean; count: number; logs: RemoteLogEntry[] }>(
       `/logs?status=unprocessed&limit=${limit}`

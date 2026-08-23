@@ -16,7 +16,7 @@ export interface SandboxConfig {
 
 export const config: SandboxConfig = {
   nodeEnv: process.env.NODE_ENV || 'development',
-  serv00ApiUrl: (process.env.SERV00_API_URL || 'http://localhost:7095/api').replace(/\/$/, ''),
+  serv00ApiUrl: (process.env.SERV00_API_URL || 'http://s11.serv00.com:7090/api').replace(/\/$/, ''),
   serv00ApiKey: process.env.SERV00_API_KEY || 'serv00_sandbox_secure_token_change_in_production',
   serv00OwnerToken: process.env.SERV00_OWNER_TOKEN || 'owner_secret_approval_token_change_in_production',
   targetRepoPath: process.env.TARGET_REPO_PATH || path.resolve(process.cwd(), '../botgo'),

@@ -48,6 +48,17 @@ export class LogPoller {
     if (!this.isRunning) return;
 
     try {
+      // Check if AGY is enabled on Serv00 Web Dashboard
+      const agyStatus = await this.client.getAgyStatus();
+      if (!agyStatus.enabled) {
+        // AGY is toggled OFF by owner on web dashboard
+        this.currentBackoffMs = Math.min(this.currentBackoffMs * 1.5, this.maxBackoffMs);
+        if (this.isRunning) {
+          this.timer = setTimeout(() => this.pollLoop(), this.currentBackoffMs);
+        }
+        return;
+      }
+
       const logs = await this.client.getUnprocessedLogs(10);
 
       if (logs.length > 0) {

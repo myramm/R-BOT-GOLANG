@@ -80,7 +80,7 @@ func toimgHandler(ctx context.Context, c *command.Ctx) error {
 		return toimgError(ctx, c, "Gagal mengunduh media: "+errorText(err, "media kosong"))
 	}
 	if len(data) > toimgMaxBytes {
-		return toimgError(ctx, c, fmt.Sprintf("File terlalu besar. Maksimal %dMB.", toimgMaxBytes/(1024*1024)))
+		return toimgWarn(ctx, c, fmt.Sprintf("File terlalu besar. Maksimal %dMB.", toimgMaxBytes/(1024*1024)))
 	}
 	c.React(ctx, "⏳")
 	if source.pdf {
@@ -442,9 +442,15 @@ func isJPEGBytes(data []byte) bool {
 	return len(data) >= 3 && data[0] == 0xff && data[1] == 0xd8 && data[2] == 0xff
 }
 
-func toimgError(ctx context.Context, c *command.Ctx, message string) error {
-	c.ReportErrorMessage(ctx, message)
+func toimgWarn(ctx context.Context, c *command.Ctx, message string) error {
 	c.React(ctx, "❌")
-	_, err := c.Reply(ctx, "❌ "+message)
-	return err
+	_, _ = c.Reply(ctx, "❌ "+message)
+	return nil
+}
+
+func toimgError(ctx context.Context, c *command.Ctx, message string) error {
+	c.React(ctx, "❌")
+	_, _ = c.Reply(ctx, "❌ "+message)
+	c.ReportErrorMessage(ctx, message)
+	return nil
 }

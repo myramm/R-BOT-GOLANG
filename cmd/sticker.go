@@ -51,18 +51,18 @@ func stickerHandler(ctx context.Context, c *command.Ctx) error {
 	defer cancel()
 	data, err := c.Client.DownloadAny(processCtx, media.message)
 	if err != nil || len(data) == 0 {
-		return stickerError(ctx, c, "Gagal mengunduh media: "+errorText(err, "media kosong"))
+		return stickerWarn(ctx, c, "Gagal mengunduh media: "+errorText(err, "media kosong"))
 	}
 	if len(data) > stickerMaxBytes {
-		return stickerError(ctx, c, fmt.Sprintf("Media terlalu besar. Maksimal %dMB.", stickerMaxBytes/(1024*1024)))
+		return stickerWarn(ctx, c, fmt.Sprintf("Media terlalu besar. Maksimal %dMB.", stickerMaxBytes/(1024*1024)))
 	}
 	if media.video {
 		duration, ok := hdVideoDuration(processCtx, data)
 		if !ok {
-			return stickerError(ctx, c, "Tidak bisa membaca durasi video. Pastikan ffprobe terpasang di server.")
+			return stickerWarn(ctx, c, "Tidak bisa membaca durasi video. Pastikan format video valid.")
 		}
 		if duration > stickerMaxDuration {
-			return stickerError(ctx, c, fmt.Sprintf("Video terlalu panjang. Maksimal %d detik.", stickerMaxDuration))
+			return stickerWarn(ctx, c, fmt.Sprintf("Video terlalu panjang. Maksimal %d detik.", stickerMaxDuration))
 		}
 	}
 	webp, err := stickerEncode(processCtx, data, media.video)
@@ -78,7 +78,7 @@ func stickerHandler(ctx context.Context, c *command.Ctx) error {
 		return stickerError(ctx, c, "Gagal memasang metadata sticker: "+err.Error())
 	}
 	if len(webp) > stickerMaxOutput {
-		return stickerError(ctx, c, "Sticker lebih besar dari batas 1MB. Coba media yang lebih sederhana.")
+		return stickerWarn(ctx, c, "Ukuran stiker melebihi batas 1MB dari WhatsApp. Coba media yang lebih sederhana atau singkat.")
 	}
 	if err := c.SendStickerBytesWithThumbnail(ctx, webp, thumbnail); err != nil {
 		return stickerError(ctx, c, "Gagal mengirim sticker: "+err.Error())
@@ -465,11 +465,17 @@ func stickerEncode(ctx context.Context, data []byte, video bool) ([]byte, error)
 	return os.ReadFile(outputName)
 }
 
-func stickerError(ctx context.Context, c *command.Ctx, message string) error {
-	c.ReportErrorMessage(ctx, message)
+func stickerWarn(ctx context.Context, c *command.Ctx, message string) error {
 	c.React(ctx, "❌")
-	_, err := c.Reply(ctx, "❌ "+message)
-	return err
+	_, _ = c.Reply(ctx, "❌ "+message)
+	return nil
+}
+
+func stickerError(ctx context.Context, c *command.Ctx, message string) error {
+	c.React(ctx, "❌")
+	_, _ = c.Reply(ctx, "❌ "+message)
+	c.ReportErrorMessage(ctx, message)
+	return nil
 }
 
 func errorText(err error, fallback string) string {

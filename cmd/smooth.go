@@ -162,20 +162,17 @@ func smoothHandler(ctx context.Context, c *command.Ctx) error {
 
 	maxBytes := smoothMaxBytes(premiumUser)
 	if int64(len(data)) > maxBytes {
-		c.ReportErrorMessage(ctx, fmt.Sprintf("File terlalu besar. Maksimal %dMB.", maxBytes/(1024*1024)))
 		c.React(ctx, "❌")
 		_, replyErr := c.Reply(ctx, fmt.Sprintf("❌ File terlalu besar. Maksimal %dMB.", maxBytes/(1024*1024)))
 		return replyErr
 	}
 	duration, ok := hdVideoDuration(processCtx, data)
 	if !ok {
-		c.ReportErrorMessage(ctx, "Tidak bisa membaca durasi video. Pastikan ffprobe terpasang di server.")
 		c.React(ctx, "❌")
-		_, replyErr := c.Reply(ctx, "❌ Tidak bisa membaca durasi video. Pastikan ffprobe terpasang di server.")
+		_, replyErr := c.Reply(ctx, "❌ Tidak bisa membaca durasi video. Pastikan format video valid.")
 		return replyErr
 	}
 	if duration > float64(smoothMaxDuration(premiumUser)) {
-		c.ReportErrorMessage(ctx, fmt.Sprintf("Video terlalu panjang. Maksimal %d detik.", smoothMaxDuration(premiumUser)))
 		c.React(ctx, "❌")
 		_, replyErr := c.Reply(ctx, fmt.Sprintf("❌ Video terlalu panjang. Maksimal %d detik.", smoothMaxDuration(premiumUser)))
 		return replyErr

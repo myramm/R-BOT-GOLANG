@@ -243,6 +243,11 @@ func handleHentaiSessionReply(ctx context.Context, client *whatsmeow.Client, evt
 			info.URL = selected.URL
 			sess.Info = info
 			saveHentaiSession(key, sess)
+
+			// Kirim thumbnail sebagai foto asli (bukan URL) sebelum daftar episode
+			if info.Thumbnail != "" {
+				_ = c.SendMedia(ctx, info.Thumbnail, command.MediaImage, "", "", "", 10*1024*1024)
+			}
 		}
 
 		_, _ = c.Reply(ctx, formatHentaiEpisodeList(sess.Info, episodes))
@@ -345,7 +350,7 @@ func sendHentaiMedia(c *command.Ctx, title, videoURL, quality string) {
 	}
 
 	fileName := safeHentaiFileName(title, quality)
-	caption := fmt.Sprintf("🔞 *%s*\nKualitas: %s\nSumber: watchhentai.net", title, quality)
+	caption := fmt.Sprintf("🔞 *%s*\nKualitas: %s", title, quality)
 	sendErr := c.SendMediaBytesWithMetadata(bgCtx, fileData, command.MediaVideo, caption, fileName, "video/mp4", nil)
 	if sendErr != nil {
 		_, _ = c.Reply(bgCtx, fmt.Sprintf("⚠️ Gagal mengirim file (%s).\n\n🚀 *Link langsung:*\n%s", sendErr.Error(), videoURL))
@@ -366,7 +371,7 @@ func safeHentaiFileName(title, quality string) string {
 
 func formatHentaiChoices(query string, results []watchhentai.SearchResult) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "🔎 *Hasil Pencarian WatchHentai: '%s'*\n\n", query)
+	fmt.Fprintf(&b, "🔎 *Hasil Pencarian: '%s'*\n\n", query)
 
 	maxShow := 5
 	if len(results) < maxShow {

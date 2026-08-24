@@ -1,13 +1,14 @@
-// Package hentailimit mengelola kuota download harian fitur .hentai untuk
-// user free. Premium/owner tidak melewati paket ini (dicek di layer cmd).
+// Package hentailimit mengelola batas pemakaian fitur .hentai untuk user free.
+// Premium/owner tidak melewati paket ini (dicek di layer cmd).
 //
 // Aturan:
-//   - di luar grup official : 2 download/hari, hanya kualitas <= 480
-//   - di dalam grup official: 5 download/hari, 720p boleh 1x/hari
-//   - kualitas >= 1080      : tetap premium-only (dicek cmd/hentai.go)
+//   - user free hanya bisa kualitas <= 480p (720p ke atas premium-only)
+//   - di luar grup official : 2 download/hari
+//   - di dalam grup official: 5 download/hari
 package hentailimit
 
 import (
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -21,14 +22,13 @@ const storeKey = "hentailimit"
 const (
 	LimitLuarGrup = 2
 	LimitDiGrup   = 5
-	Kuota720      = 1
 )
 
 // Tier klasifikasi kualitas video.
 const (
-	TierLow  = "low"  // <= 480p
-	Tier720  = "720"  // 720p
-	TierHigh = "high" // >= 1080p
+	TierLow  = "low"  // <= 480p, satu-satunya yang boleh untuk user free
+	Tier720  = "720"  // 720p, premium-only
+	TierHigh = "high" // >= 1080p, premium-only
 )
 
 var mu sync.Mutex
@@ -36,7 +36,6 @@ var mu sync.Mutex
 type usage struct {
 	Date      string `json:"date"`
 	Downloads int    `json:"downloads"`
-	Q720      int    `json:"q720"`
 }
 
 func today() string { return time.Now().Format("2006-01-02") }
@@ -67,6 +66,9 @@ func Tier(quality string) string {
 	}
 }
 
+// IsFreeQuality true bila kualitas masih boleh dipakai user free (<= 480p).
+func IsFreeQuality(quality string) bool { return Tier(quality) == TierLow }
+
 func limitUntuk(dalamGrup bool) int {
 	if dalamGrup {
 		return LimitDiGrup
@@ -79,17 +81,18 @@ func syncHarian(rec *usage) {
 	if rec.Date != today() {
 		rec.Date = today()
 		rec.Downloads = 0
-		rec.Q720 = 0
 	}
 }
 
-// Check memeriksa apakah user free boleh download kualitas tertentu.
-// Return (boleh, pesanPenolakan); pesan kosong bila boleh.
+// Check memeriksa izin download user free: kualitas harus <= 480p dan kuota
+// harian belum habis. Return (boleh, pesanPenolakan); pesan kosong bila boleh.
 func Check(userKey, quality string, dalamGrup bool) (bool, string) {
 	if strings.TrimSpace(userKey) == "" {
 		return true, ""
 	}
-	tier := Tier(quality)
+	if !IsFreeQuality(quality) {
+		return false, PesanPremium(quality)
+	}
 
 	mu.Lock()
 	defer mu.Unlock()
@@ -98,34 +101,16 @@ func Check(userKey, quality string, dalamGrup bool) (bool, string) {
 	if rec != nil {
 		syncHarian(rec)
 	}
-
-	switch tier {
-	case TierHigh:
-		// Premium-only; tidak diblok di sini (cmd layer yang menolak).
-		return true, ""
-	case Tier720:
-		if !dalamGrup {
-			return false, pesan720LuarGrup()
-		}
-		if rec != nil && rec.Q720 >= Kuota720 {
-			return false, pesan720Habis()
-		}
-		if rec != nil && rec.Downloads >= limitUntuk(true) {
-			return false, pesanLimit(true)
-		}
-		return true, ""
-	default: // TierLow
-		if rec != nil && rec.Downloads >= limitUntuk(dalamGrup) {
-			return false, pesanLimit(dalamGrup)
-		}
-		return true, ""
+	if rec != nil && rec.Downloads >= limitUntuk(dalamGrup) {
+		return false, pesanLimit(dalamGrup)
 	}
+	return true, ""
 }
 
 // Record mencatat satu download yang benar-benar dimulai.
-// Panggil hanya setelah Check mengizinkan.
-func Record(userKey, quality string, dalamGrup bool) {
-	if strings.TrimSpace(userKey) == "" {
+// Panggil hanya setelah Check mengizinkan; kualitas premium diabaikan.
+func Record(userKey, quality string) {
+	if strings.TrimSpace(userKey) == "" || !IsFreeQuality(quality) {
 		return
 	}
 
@@ -139,9 +124,6 @@ func Record(userKey, quality string, dalamGrup bool) {
 	}
 	syncHarian(rec)
 	rec.Downloads++
-	if Tier(quality) == Tier720 {
-		rec.Q720++
-	}
 	writeAll(data)
 }
 
@@ -157,15 +139,12 @@ func ResetAll() int {
 
 func pesanLimit(dalamGrup bool) string {
 	if dalamGrup {
-		return "🚫 *Limit download hentai harian habis* (5x/hari di grup).\n\nKuota reset besok. 💎 Premium bebas limit: ketik *.premium*"
+		return "🚫 *Limit download harian habis* (5x/hari di grup official).\n\nKuota reset besok. 💎 Premium bebas limit & semua kualitas: ketik *.premium*"
 	}
-	return "🚫 *Limit download hentai habis* (2x/hari di luar grup).\n\nMasuk grup official dapat 5x/hari + 720p 1x. 💎 Premium bebas limit: ketik *.premium*"
+	return "🚫 *Limit download habis* (2x/hari di luar grup).\n\nMasuk grup official dapat 5x/hari. 💎 Premium bebas limit & semua kualitas: ketik *.premium*"
 }
 
-func pesan720LuarGrup() string {
-	return "🚫 *Kualitas 720p hanya bisa dipakai di grup official* (1x/hari).\n\nMasuk grup official untuk membuka kuota 720p."
-}
-
-func pesan720Habis() string {
-	return "🚫 *Kuota 720p harian habis* (1x/hari di grup).\n\nKuota reset besok. 💎 Premium bebas semua kualitas: ketik *.premium*"
+// PesanPremium penolakan untuk kualitas di atas 480p pada user free.
+func PesanPremium(quality string) string {
+	return fmt.Sprintf("💎 *Kualitas %s Khusus User Premium!*\n\nUser Free hanya dapat mengunduh kualitas *480p*.\n\nUpgrade ke Premium untuk membuka semua kualitas & bebas limit:\nKetik *.premium*", quality)
 }

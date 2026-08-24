@@ -81,28 +81,20 @@ func TestHentaiIzin480LuarGrupMaksDua(t *testing.T) {
 		if !ok {
 			t.Fatalf("download ke-%d (480p luar grup) harus boleh: %q", i+1, msg)
 		}
-		hentailimit.Record("62803", "480p", false)
+		hentailimit.Record("62803", "480p")
 	}
 	if ok, _ := hentaiIzin("62803", "480p", false, false); ok {
 		t.Fatal("download ke-3 (480p luar grup) harus ditolak")
 	}
 }
 
-func TestHentaiIzin720LuarGrupDitolak(t *testing.T) {
+func TestHentaiIzin720FreeDitolakDiManaPun(t *testing.T) {
 	openHentaiStore(t)
-	if ok, _ := hentaiIzin("62804", "720p", false, false); ok {
-		t.Fatal("720p luar grup untuk free user harus ditolak")
+	if ok, msg := hentaiIzin("62804", "720p", false, false); ok || msg == "" {
+		t.Fatal("720p luar grup untuk free user harus ditolak dengan pesan")
 	}
-}
-
-func TestHentaiIzin720DiGrupSekali(t *testing.T) {
-	openHentaiStore(t)
-	if ok, _ := hentaiIzin("62805", "720p", true, false); !ok {
-		t.Fatal("720p pertama di grup harus boleh")
-	}
-	hentailimit.Record("62805", "720p", true)
 	if ok, _ := hentaiIzin("62805", "720p", true, false); ok {
-		t.Fatal("720p kedua di grup harus ditolak")
+		t.Fatal("720p di grup official pun harus ditolak untuk free user")
 	}
 }
 

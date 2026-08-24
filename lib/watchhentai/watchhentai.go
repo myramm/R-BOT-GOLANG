@@ -260,7 +260,7 @@ func GetDownloadOptions(ctx context.Context, urlOrSlug string) ([]DownloadOption
 	}
 	opts := extractDownloadOptions(body)
 	if len(opts) == 0 {
-		return nil, fmt.Errorf("tidak ada pilihan kualitas di %s", pageURL)
+		return nil, fmt.Errorf("tidak ada pilihan kualitas tersedia")
 	}
 	return opts, nil
 }

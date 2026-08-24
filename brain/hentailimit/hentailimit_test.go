@@ -40,7 +40,7 @@ func TestFreeUserLuarGrupDuaKali(t *testing.T) {
 		if !ok {
 			t.Fatalf("download ke-%d harus boleh, dapat tolak: %q", i+1, msg)
 		}
-		Record("62801", "480p", false)
+		Record("62801", "480p")
 	}
 
 	ok, msg := Check("62801", "480p", false)
@@ -60,7 +60,7 @@ func TestFreeUserDiGrupLimaKali(t *testing.T) {
 		if !ok {
 			t.Fatalf("download ke-%d di grup harus boleh, dapat tolak: %q", i+1, msg)
 		}
-		Record("62802", "480p", true)
+		Record("62802", "480p")
 	}
 
 	ok, msg := Check("62802", "480p", true)
@@ -72,70 +72,30 @@ func TestFreeUserDiGrupLimaKali(t *testing.T) {
 	}
 }
 
-func Test720LuarGrupDitolak(t *testing.T) {
+func TestKualitasDiAtas480PremiumOnly(t *testing.T) {
 	openStore(t)
 
-	ok, msg := Check("62803", "720p", false)
-	if ok {
-		t.Fatal("720p di luar grup harus ditolak untuk free user")
-	}
-	if msg == "" {
-		t.Error("pesan tolak tidak boleh kosong")
-	}
-}
+	for _, q := range []string{"720p", "1080p", "4K"} {
+		ok, msg := Check("62803", q, false)
+		if ok {
+			t.Errorf("%s di luar grup harus ditolak untuk free user", q)
+		}
+		if !strings.Contains(msg, "480") {
+			t.Errorf("pesan tolak %s harus menyebut batas 480p, dapat: %q", q, msg)
+		}
 
-func Test720DiGrupHanyaSekali(t *testing.T) {
-	openStore(t)
-
-	ok, _ := Check("62804", "720p", true)
-	if !ok {
-		t.Fatal("720p pertama di grup harus boleh")
-	}
-	Record("62804", "720p", true)
-
-	ok, msg := Check("62804", "720p", true)
-	if ok {
-		t.Fatal("720p kedua di grup harus ditolak (kuota 1x)")
-	}
-	if msg == "" {
-		t.Error("pesan tolak 720 tidak boleh kosong")
-	}
-}
-
-func Test720TetapMemakaiSlotDownload(t *testing.T) {
-	openStore(t)
-
-	// 4 download 480p + 1 download 720p = 5 slot habis.
-	for i := 0; i < LimitDiGrup-1; i++ {
-		Record("62805", "480p", true)
-	}
-	if ok, _ := Check("62805", "720p", true); !ok {
-		t.Fatal("720p sebagai download ke-5 di grup harus boleh")
-	}
-	Record("62805", "720p", true)
-
-	if ok, _ := Check("62805", "360p", true); ok {
-		t.Fatal("download ke-6 harus ditolak meski 720 sudah habis")
-	}
-}
-
-func Test720TanpaSlotTersisaDitolak(t *testing.T) {
-	openStore(t)
-
-	// Slot habis dulu tanpa memakai 720.
-	for i := 0; i < LimitDiGrup; i++ {
-		Record("62806", "480p", true)
-	}
-	if ok, _ := Check("62806", "720p", true); ok {
-		t.Fatal("720p harus ditolak bila slot download harian sudah habis")
+		ok, _ = Check("62803", q, true)
+		if ok {
+			t.Errorf("%s di dalam grup juga harus ditolak untuk free user", q)
+		}
 	}
 }
 
 func TestResetHarian(t *testing.T) {
 	openStore(t)
 
-	Record("62807", "480p", false)
-	Record("62807", "480p", false)
+	Record("62807", "480p")
+	Record("62807", "480p")
 
 	// Backdate record ke kemarin → hari baru, kuota kembali penuh.
 	mu.Lock()
@@ -154,10 +114,22 @@ func TestResetHarian(t *testing.T) {
 func TestUserBerbedaIndependen(t *testing.T) {
 	openStore(t)
 
-	Record("62808", "480p", false)
-	Record("62808", "480p", false)
+	Record("62808", "480p")
+	Record("62808", "480p")
 
 	if ok, _ := Check("62809", "480p", false); !ok {
 		t.Fatal("user lain tidak boleh terpengaruh kuota user pertama")
+	}
+}
+
+func TestRecordAbaikanKualitasPremium(t *testing.T) {
+	openStore(t)
+
+	Record("62810", "720p")
+	Record("62810", "4K")
+
+	data := readAll()
+	if rec := data["62810"]; rec != nil {
+		t.Fatal("kualitas premium tidak boleh tercatat di kuota free")
 	}
 }

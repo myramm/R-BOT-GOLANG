@@ -54,7 +54,7 @@ func init() {
 		Name:        "hentai",
 		Category:    "Downloader",
 		Alias:       []string{"watchhentai"},
-		Description: "Cari & download hentai dari WatchHentai.net per episode & kualitas. Contoh: .hentai kotowarenai | .hentai <link episode>",
+		Description: "Cari & download video per episode & kualitas. Contoh: .hentai kotowarenai | .hentai <link episode>",
 		Handler:     hentaiHandler,
 	})
 
@@ -128,15 +128,11 @@ func isGrupOfficialChat(evt *events.Message) bool {
 }
 
 // hentaiIzin memeriksa izin download .hentai: premium/owner bebas semua,
-// kualitas >= 1080p tetap premium-only, sisanya lewat kuota harian free.
+// user free hanya kualitas <= 480p dengan kuota harian.
 // Return (boleh, pesanPenolakan); pesan kosong bila boleh.
 func hentaiIzin(userKey, quality string, dalamGrup, isPrem bool) (bool, string) {
 	if isPrem {
 		return true, ""
-	}
-	if hentailimit.Tier(quality) == hentailimit.TierHigh {
-		mp := config.MainPrefix()
-		return false, fmt.Sprintf("💎 *Kualitas %s Khusus User Premium!*\n\nUser Free hanya dapat mengunduh kualitas *di bawah 1080p*.\n\nUpgrade ke Premium untuk membuka semua kualitas:\nKetik *%spremium*", quality, mp)
 	}
 	return hentailimit.Check(userKey, quality, dalamGrup)
 }
@@ -153,7 +149,7 @@ func hentaiIzinFallback(evt *events.Message) string {
 		return tolak
 	}
 	if !isPrem {
-		hentailimit.Record(userKey, "MP4", dalamGrup)
+		hentailimit.Record(userKey, "MP4")
 	}
 	return ""
 }
@@ -162,7 +158,7 @@ func hentaiHandler(ctx context.Context, c *command.Ctx) error {
 	argStr := strings.TrimSpace(c.ArgStr())
 	if argStr == "" {
 		mp := config.MainPrefix()
-		_, err := c.Reply(ctx, fmt.Sprintf("Masukkan judul atau link episode WatchHentai.net.\n\n*Contoh:*\n• `%shentai kotowarenai` (Cari → pilih series → episode → kualitas)\n• `%shentai <link episode watchhentai.net>`\n• `%shentai kotowarenai-haha-episode-1-id-01` (slug)\n\n⚠️ _Konten 18+. Disarankan di chat pribadi._", mp, mp, mp))
+		_, err := c.Reply(ctx, fmt.Sprintf("Masukkan judul atau link episode.\n\n*Contoh:*\n• `%shentai kotowarenai` (Cari → pilih series → episode → kualitas)\n• `%shentai <link episode>`\n• `%shentai kotowarenai-haha-episode-1-id-01` (slug)\n\n⚠️ _Konten 18+. Disarankan di chat pribadi._", mp, mp, mp))
 		return err
 	}
 
@@ -215,7 +211,7 @@ func hentaiHandler(ctx context.Context, c *command.Ctx) error {
 	}
 	if len(results) == 0 {
 		c.React(ctx, "❌")
-		_, e := c.Reply(ctx, fmt.Sprintf("'%s' tidak ditemukan di WatchHentai.net.", argStr))
+		_, e := c.Reply(ctx, fmt.Sprintf("'%s' tidak ditemukan.", argStr))
 		return e
 	}
 
@@ -385,7 +381,7 @@ func handleHentaiSessionReply(ctx context.Context, client *whatsmeow.Client, evt
 		clearHentaiSession(key)
 
 		if !isPrem {
-			hentailimit.Record(userKey, selectedOpt.Quality, dalamGrup)
+			hentailimit.Record(userKey, selectedOpt.Quality)
 		}
 
 		_, _ = c.Reply(ctx, fmt.Sprintf("⏳ *Memproses %s (%s)...*\nProses download berjalan di background agar bot tetap responsif menerima pesan lain.", sess.Title, selectedOpt.Quality))
@@ -504,7 +500,7 @@ func formatHentaiQualityChoices(title string, opts []watchhentai.DownloadOption,
 
 	for i, o := range opts {
 		badge := ""
-		if isPremiumQuality(o.Quality) {
+		if !hentailimit.IsFreeQuality(o.Quality) {
 			if isPremUser {
 				badge = " ✨ [PREMIUM]"
 			} else {

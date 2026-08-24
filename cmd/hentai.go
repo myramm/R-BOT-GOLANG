@@ -15,6 +15,8 @@ import (
 
 	"rbot/brain/command"
 	"rbot/brain/config"
+	"rbot/brain/hentailimit"
+	"rbot/brain/identity"
 	"rbot/brain/premium"
 	"rbot/lib/watchhentai"
 )
@@ -112,6 +114,50 @@ func isWatchHentaiInput(s string) bool {
 	return strings.Contains(s, "watchhentai.net/") || isHentaiSlug(s)
 }
 
+// isGrupOfficialChat true bila pesan berasal dari grup official (dicocokkan
+// dengan grupOfficial.jid pada bagian nomor saja, tanpa peduli server).
+func isGrupOfficialChat(evt *events.Message) bool {
+	if evt == nil || !evt.Info.IsGroup || evt.Info.Chat.IsEmpty() {
+		return false
+	}
+	official := strings.TrimSpace(config.C.GrupOfficial.JID)
+	if official == "" {
+		return false
+	}
+	return config.BareNumber(official) == evt.Info.Chat.User
+}
+
+// hentaiIzin memeriksa izin download .hentai: premium/owner bebas semua,
+// kualitas >= 1080p tetap premium-only, sisanya lewat kuota harian free.
+// Return (boleh, pesanPenolakan); pesan kosong bila boleh.
+func hentaiIzin(userKey, quality string, dalamGrup, isPrem bool) (bool, string) {
+	if isPrem {
+		return true, ""
+	}
+	if hentailimit.Tier(quality) == hentailimit.TierHigh {
+		mp := config.MainPrefix()
+		return false, fmt.Sprintf("💎 *Kualitas %s Khusus User Premium!*\n\nUser Free hanya dapat mengunduh kualitas *di bawah 1080p*.\n\nUpgrade ke Premium untuk membuka semua kualitas:\nKetik *%spremium*", quality, mp)
+	}
+	return hentailimit.Check(userKey, quality, dalamGrup)
+}
+
+// hentaiIzinFallback memeriksa kuota free untuk fallback direct-MP4 (tanpa
+// pilihan kualitas) lalu mencatat pemakaian bila diizinkan.
+// Return pesan penolakan; kosong bila boleh.
+func hentaiIzinFallback(evt *events.Message) string {
+	userKey := identity.SenderPhone(evt)
+	dalamGrup := isGrupOfficialChat(evt)
+	isPrem := premium.IsPremium(evt)
+	ok, tolak := hentaiIzin(userKey, "MP4", dalamGrup, isPrem)
+	if !ok {
+		return tolak
+	}
+	if !isPrem {
+		hentailimit.Record(userKey, "MP4", dalamGrup)
+	}
+	return ""
+}
+
 func hentaiHandler(ctx context.Context, c *command.Ctx) error {
 	argStr := strings.TrimSpace(c.ArgStr())
 	if argStr == "" {
@@ -136,6 +182,11 @@ func hentaiHandler(ctx context.Context, c *command.Ctx) error {
 					msg = fmt.Sprintf("Gagal mengambil detail episode: %s", epErr.Error())
 				}
 				_, e := c.Reply(ctx, msg)
+				return e
+			}
+			if tolak := hentaiIzinFallback(c.Evt); tolak != "" {
+				c.React(ctx, "🚫")
+				_, e := c.Reply(ctx, tolak)
 				return e
 			}
 			c.React(ctx, "✅")
@@ -218,6 +269,11 @@ func handleHentaiSessionReply(ctx context.Context, client *whatsmeow.Client, evt
 					_, _ = c.Reply(ctx, "Tidak ada episode maupun pilihan download di halaman ini.")
 					return true
 				}
+				if tolak := hentaiIzinFallback(evt); tolak != "" {
+					c.React(ctx, "🚫")
+					_, _ = c.Reply(ctx, tolak)
+					return true
+				}
 				c.React(ctx, "✅")
 				go sendHentaiMedia(c, ep.Title, ep.VideoURL, "MP4")
 				return true
@@ -276,6 +332,12 @@ func handleHentaiSessionReply(ctx context.Context, client *whatsmeow.Client, evt
 				clearHentaiSession(key)
 				return true
 			}
+			if tolak := hentaiIzinFallback(evt); tolak != "" {
+				c.React(ctx, "🚫")
+				_, _ = c.Reply(ctx, tolak)
+				clearHentaiSession(key)
+				return true
+			}
 			c.React(ctx, "✅")
 			go sendHentaiMedia(c, ep.Title, ep.VideoURL, "MP4")
 			clearHentaiSession(key)
@@ -308,16 +370,23 @@ func handleHentaiSessionReply(ctx context.Context, client *whatsmeow.Client, evt
 
 		selectedOpt := sess.Options[choiceNum-1]
 
-		// Batasan Premium: 1080p hanya untuk user premium (mirip .anime)
-		if isPremiumQuality(selectedOpt.Quality) && !premium.IsPremium(evt) {
-			mp := config.MainPrefix()
-			c.React(ctx, "💎")
-			_, _ = c.Reply(ctx, fmt.Sprintf("💎 *Kualitas %s Khusus User Premium!*\n\nUser Free hanya dapat mengunduh kualitas *di bawah 1080p*.\n\nUpgrade ke Premium untuk membuka semua kualitas:\nKetik *%spremium*", selectedOpt.Quality, mp))
+		dalamGrup := isGrupOfficialChat(evt)
+		isPrem := premium.IsPremium(evt)
+		userKey := identity.SenderPhone(evt)
+
+		// Izin download: premium bebas; >=1080p premium-only; free pakai kuota harian.
+		if ok, tolak := hentaiIzin(userKey, selectedOpt.Quality, dalamGrup, isPrem); !ok {
+			c.React(ctx, "🚫")
+			_, _ = c.Reply(ctx, tolak)
 			return true
 		}
 
 		c.React(ctx, "⏳")
 		clearHentaiSession(key)
+
+		if !isPrem {
+			hentailimit.Record(userKey, selectedOpt.Quality, dalamGrup)
+		}
 
 		_, _ = c.Reply(ctx, fmt.Sprintf("⏳ *Memproses %s (%s)...*\nProses download berjalan di background agar bot tetap responsif menerima pesan lain.", sess.Title, selectedOpt.Quality))
 

@@ -45,12 +45,21 @@ type EpisodeLink struct {
 	URL    string `json:"url"`
 }
 
+// DownloadOption adalah satu pilihan kualitas pada halaman /download/.
+type DownloadOption struct {
+	Quality string `json:"quality"`
+	URL     string `json:"url"`
+}
+
 var (
 	reJWPlayerSrc = regexp.MustCompile(`(?i)(?:data-litespeed-src|src)=['"]([^'"]*jwplayer[^'"]*)['"]`)
 	reSourceParam = regexp.MustCompile(`(?i)source=([^&]+)`)
 	reDirectMP4   = regexp.MustCompile(`https?://[^"'\s<>]+\.mp4`)
 	reEpNumber    = regexp.MustCompile(`-episode-(\d+)`)
 	reTitleNum    = regexp.MustCompile(`(?i)episode\s*(\d+)`)
+	reDlButton    = regexp.MustCompile(`(?is)<button[^>]*onclick="window\.location\.href\s*=\s*'([^']+)'">(.+?)</button>`)
+	reHTMLTag     = regexp.MustCompile(`<[^>]*>`)
+	reIDSuffix    = regexp.MustCompile(`(?i)-id-\d+$`)
 )
 
 func fetchHTML(ctx context.Context, targetURL string) (string, error) {
@@ -230,6 +239,69 @@ func GetEpisodeList(ctx context.Context, seriesURL string) ([]EpisodeLink, error
 	})
 
 	return episodes, nil
+}
+
+// GetDownloadOptions mengambil pilihan kualitas dari halaman /download/<slug>/.
+// Input boleh URL videos/, URL download/, atau slug episode.
+func GetDownloadOptions(ctx context.Context, urlOrSlug string) ([]DownloadOption, error) {
+	pageURL := DownloadPageURL(urlOrSlug)
+	body, err := fetchHTML(ctx, pageURL)
+	if err != nil {
+		return nil, err
+	}
+	opts := extractDownloadOptions(body)
+	if len(opts) == 0 {
+		return nil, fmt.Errorf("tidak ada pilihan kualitas di %s", pageURL)
+	}
+	return opts, nil
+}
+
+// DownloadPageURL menormalkan URL videos/, URL download/, atau slug menjadi
+// URL halaman download. Contoh: https://watchhentai.net/videos/x/ -> .../download/x/
+func DownloadPageURL(urlOrSlug string) string {
+	s := strings.TrimSpace(urlOrSlug)
+	if !strings.HasPrefix(s, "http") {
+		return fmt.Sprintf("%s/download/%s/", BaseURL, strings.Trim(s, "/"))
+	}
+	if i := strings.Index(s, "/videos/"); i >= 0 {
+		return fmt.Sprintf("%s/download/%s", strings.TrimRight(s[:i], "/"), s[i+len("/videos/"):])
+	}
+	return s
+}
+
+// extractDownloadOptions mem-parse tombol kualitas pada halaman download.
+// Tombol WATCH ONLINE (link internal) diabaikan.
+func extractDownloadOptions(pageHTML string) []DownloadOption {
+	var opts []DownloadOption
+	seen := make(map[string]bool)
+	for _, m := range reDlButton.FindAllStringSubmatch(pageHTML, -1) {
+		target := strings.TrimSpace(m[1])
+		label := cleanText(reHTMLTag.ReplaceAllString(m[2], ""))
+		if target == "" || label == "" || seen[target] {
+			continue
+		}
+		if !strings.HasPrefix(target, "http") || strings.HasPrefix(target, BaseURL) {
+			continue
+		}
+		if strings.Contains(strings.ToLower(label), "watch") {
+			continue
+		}
+		seen[target] = true
+		opts = append(opts, DownloadOption{Quality: label, URL: target})
+	}
+	return opts
+}
+
+// TitleFromEpisodeURL menghasilkan judul kasar dari URL/slug episode,
+// tanpa sufks -id-01. Contoh: ".../kotowarenai-haha-episode-1-id-01/" ->
+// "Kotowarenai Haha Episode 1"
+func TitleFromEpisodeURL(urlOrSlug string) string {
+	slug := strings.TrimSpace(urlOrSlug)
+	if strings.HasPrefix(slug, "http") {
+		slug = slugFromURL(slug)
+	}
+	slug = reIDSuffix.ReplaceAllString(strings.Trim(slug, "/"), "")
+	return slugToTitle(slug)
 }
 
 // extractVideoURL mengambil direct MP4 dari player jwplayer (param source=)

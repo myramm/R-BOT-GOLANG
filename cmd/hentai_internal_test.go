@@ -30,8 +30,8 @@ func TestIsWatchHentaiInput(t *testing.T) {
 }
 
 func TestSafeHentaiFileName(t *testing.T) {
-	got := safeHentaiFileName(`Furachi Episode 1: "Sub Indo"?`)
-	want := "Furachi_Episode_1_Sub_Indo.mp4"
+	got := safeHentaiFileName(`Furachi Episode 1: "Sub Indo"?`, "1080p")
+	want := "Furachi_Episode_1_Sub_Indo_1080p.mp4"
 	if got != want {
 		t.Errorf("safeHentaiFileName() = %q, want %q", got, want)
 	}

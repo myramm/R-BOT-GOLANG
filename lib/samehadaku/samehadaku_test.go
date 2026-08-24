@@ -81,15 +81,33 @@ func TestResolveDirectLinkAcefileLive(t *testing.T) {
 	}
 }
 
+func TestResolveDirectLinkAcefileMirrorsLive(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	// File direct-hosted (resource_check kosong): harus resolve via get_mirrors
+	// ke URL download GDrive. Ini file asli dari laporan user.
+	pageURL := "https://acefile.co/f/98050782/tnk-s2-01-720psamehadaku-care-mkv"
+	direct := samehadaku.ResolveDirectLink(ctx, "Acefile", pageURL)
+
+	t.Logf("Resolved: %s", direct)
+	if !strings.Contains(direct, "drive.usercontent.google.com/download") {
+		t.Skipf("File acefile kemungkinan sudah tidak aktif: %s", direct)
+	}
+}
+
 func TestResolveDirectLinkAcefileDead(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	// File mati (resource_check data kosong) harus fallback ke URL asli.
+	// File mati: resource_check kosong; get_mirrors bisa mengembalikan mirror
+	// usang (GDrive sudah dihapus) -> hasil boleh URL asli atau URL GDrive,
+	// yang penting tetap terdefinisi dan bot punya fallback daftar link manual.
 	pageURL := "https://acefile.co/f/33722679/360p-mkv-tonikawa-1-12end-batch-samehadaku-vip-rar"
 	direct := samehadaku.ResolveDirectLink(ctx, "Acefile", pageURL)
 
-	if direct != pageURL {
-		t.Errorf("Dead acefile link should fall back to original URL, got %s", direct)
+	t.Logf("Dead link resolved to: %s", direct)
+	if direct == "" {
+		t.Fatal("Expected non-empty result for dead acefile link")
 	}
 }

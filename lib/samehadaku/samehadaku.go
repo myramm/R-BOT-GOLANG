@@ -2,6 +2,7 @@ package samehadaku
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -514,38 +515,99 @@ func ResolveDirectLink(ctx context.Context, server, pageURL string) string {
 		}
 	}
 
-	// 5. Acefile: endpoint service/resource_check mengembalikan ID Google Drive asli.
-	//    File mati / dihapus akan mengembalikan data kosong.
+	// 5. Acefile: file di acefile.co adalah mirror Google Drive.
+	//    - resource_check: file dengan backup GDrive primer -> data = ID GDrive.
+	//    - get_mirrors: file direct-hosted -> code = base64 dari ID GDrive mirror.
+	//    File mati tetap bisa mengembalikan mirror usang; download-nya akan gagal
+	//    dan bot jatuh kembali ke daftar link manual.
 	if strings.Contains(srvLower, "acefile") || strings.Contains(pageURL, "acefile.co") {
 		if id := acefileID(pageURL); id != "" {
-			checkURL := fmt.Sprintf("https://acefile.co/service/resource_check/%s/", id)
-
-			req, err := http.NewRequestWithContext(ctx, http.MethodGet, checkURL, nil)
-			if err == nil {
-				req.Header.Set("User-Agent", UserAgent)
-				req.Header.Set("Referer", "https://acefile.co/")
-				req.Header.Set("X-Requested-With", "XMLHttpRequest")
-
-				client := &http.Client{Timeout: 10 * time.Second}
-				resp, err := client.Do(req)
-				if err == nil {
-					defer resp.Body.Close()
-					var aceRes struct {
-						Code int    `json:"code"`
-						Data string `json:"data"`
-					}
-					if json.NewDecoder(resp.Body).Decode(&aceRes) == nil && aceRes.Data != "" {
-						return fmt.Sprintf(
-							"https://drive.usercontent.google.com/download?id=%s&export=download&confirm=t",
-							aceRes.Data,
-						)
-					}
-				}
+			if gid := acefileResourceCheck(ctx, id); gid != "" {
+				return acefileGDriveURL(gid)
+			}
+			if gid := acefileMirrorCode(ctx, id); gid != "" {
+				return acefileGDriveURL(gid)
 			}
 		}
 	}
 
 	return pageURL
+}
+
+var reGDriveID = regexp.MustCompile(`^[A-Za-z0-9_-]{20,}$`)
+
+// acefileGetJSON melakukan GET JSON ke endpoint internal acefile.co.
+func acefileGetJSON(ctx context.Context, targetURL string, out interface{}) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, targetURL, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("User-Agent", UserAgent)
+	req.Header.Set("Referer", "https://acefile.co/")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("X-Requested-With", "XMLHttpRequest")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("acefile status HTTP %d", resp.StatusCode)
+	}
+	return json.NewDecoder(resp.Body).Decode(out)
+}
+
+// acefileResourceCheck memanggil service/resource_check; return ID GDrive jika file ber-backup GDrive primer.
+func acefileResourceCheck(ctx context.Context, id string) string {
+	var res struct {
+		Code int    `json:"code"`
+		Data string `json:"data"`
+	}
+	checkURL := fmt.Sprintf("https://acefile.co/service/resource_check/%s/", id)
+	if err := acefileGetJSON(ctx, checkURL, &res); err != nil || res.Data == "" {
+		return ""
+	}
+	if reGDriveID.MatchString(res.Data) {
+		return res.Data
+	}
+	return ""
+}
+
+// acefileMirrorCode memanggil service/get_mirrors; decode base64 code menjadi ID GDrive mirror.
+func acefileMirrorCode(ctx context.Context, id string) string {
+	var res map[string][]struct {
+		Code string `json:"code"`
+	}
+	mirrorURL := fmt.Sprintf("https://acefile.co/service/get_mirrors/%s", id)
+	if err := acefileGetJSON(ctx, mirrorURL, &res); err != nil {
+		return ""
+	}
+	for _, mirrors := range res {
+		for _, m := range mirrors {
+			if m.Code == "" {
+				continue
+			}
+			dec, err := base64.StdEncoding.DecodeString(m.Code)
+			if err != nil {
+				if dec, err = base64.RawStdEncoding.DecodeString(m.Code); err != nil {
+					continue
+				}
+			}
+			gid := strings.TrimSpace(string(dec))
+			if reGDriveID.MatchString(gid) {
+				return gid
+			}
+		}
+	}
+	return ""
+}
+
+// acefileGDriveURL membangun URL unduhan langsung Google Drive dari ID file.
+func acefileGDriveURL(gdriveID string) string {
+	return fmt.Sprintf("https://drive.usercontent.google.com/download?id=%s&export=download&confirm=t", gdriveID)
 }
 
 func cleanText(s string) string {

@@ -31,6 +31,7 @@ type hentaiSession struct {
 	Step      hentaiSessionStep
 	Results   []watchhentai.SearchResult
 	Series    *watchhentai.SearchResult
+	Info      *watchhentai.SeriesInfo
 	Episodes  []watchhentai.EpisodeLink
 	Title     string
 	Options   []watchhentai.DownloadOption
@@ -237,7 +238,14 @@ func handleHentaiSessionReply(ctx context.Context, client *whatsmeow.Client, evt
 		sess.Episodes = episodes
 		saveHentaiSession(key, sess)
 
-		_, _ = c.Reply(ctx, formatHentaiEpisodeList(selected.Title, episodes))
+		// Ambil sinopsis & genre series (best-effort, gagal = tampil tanpa sinopsis)
+		if info, infoErr := watchhentai.GetSeriesInfo(ctx, selected.URL); infoErr == nil {
+			info.URL = selected.URL
+			sess.Info = info
+			saveHentaiSession(key, sess)
+		}
+
+		_, _ = c.Reply(ctx, formatHentaiEpisodeList(sess.Info, episodes))
 		return true
 
 	case stepSelectHentaiEpisode:
@@ -372,10 +380,27 @@ func formatHentaiChoices(query string, results []watchhentai.SearchResult) strin
 	return b.String()
 }
 
-func formatHentaiEpisodeList(seriesTitle string, episodes []watchhentai.EpisodeLink) string {
+func formatHentaiEpisodeList(info *watchhentai.SeriesInfo, episodes []watchhentai.EpisodeLink) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "📌 *%s*\n", seriesTitle)
-	fmt.Fprintf(&b, "📜 *Daftar Episode (%d):*\n\n", len(episodes))
+	if info != nil {
+		title := info.Title
+		if title == "" {
+			title = "Series"
+		}
+		fmt.Fprintf(&b, "📌 *%s*\n", title)
+		if len(info.Genres) > 0 {
+			fmt.Fprintf(&b, "Genre: %s\n", strings.Join(info.Genres, ", "))
+		}
+		if info.Synopsis != "" {
+			synopsis := info.Synopsis
+			if runes := []rune(synopsis); len(runes) > 400 {
+				synopsis = string(runes[:400]) + "…"
+			}
+			fmt.Fprintf(&b, "\n📖 *Sinopsis:*\n%s\n", synopsis)
+		}
+	}
+
+	fmt.Fprintf(&b, "\n📜 *Daftar Episode (%d):*\n\n", len(episodes))
 
 	maxShow := 10
 	if len(episodes) < maxShow {

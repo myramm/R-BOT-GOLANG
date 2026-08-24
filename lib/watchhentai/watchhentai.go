@@ -51,6 +51,15 @@ type DownloadOption struct {
 	URL     string `json:"url"`
 }
 
+// SeriesInfo adalah metadata halaman series: judul, sinopsis, dan genre.
+type SeriesInfo struct {
+	Title     string   `json:"title"`
+	URL       string   `json:"url"`
+	Thumbnail string   `json:"thumbnail,omitempty"`
+	Synopsis  string   `json:"synopsis,omitempty"`
+	Genres    []string `json:"genres,omitempty"`
+}
+
 var (
 	reJWPlayerSrc = regexp.MustCompile(`(?i)(?:data-litespeed-src|src)=['"]([^'"]*jwplayer[^'"]*)['"]`)
 	reSourceParam = regexp.MustCompile(`(?i)source=([^&]+)`)
@@ -302,6 +311,52 @@ func TitleFromEpisodeURL(urlOrSlug string) string {
 	}
 	slug = reIDSuffix.ReplaceAllString(strings.Trim(slug, "/"), "")
 	return slugToTitle(slug)
+}
+
+// GetSeriesInfo mengambil metadata series (judul, sinopsis, genre, thumbnail).
+func GetSeriesInfo(ctx context.Context, seriesURL string) (*SeriesInfo, error) {
+	body, err := fetchHTML(ctx, seriesURL)
+	if err != nil {
+		return nil, err
+	}
+	info := parseSeriesInfo(body)
+	if info.Title == "" {
+		return nil, fmt.Errorf("tidak dapat mem-parse halaman series %s", seriesURL)
+	}
+	return info, nil
+}
+
+// parseSeriesInfo mem-parse HTML halaman series menjadi SeriesInfo.
+func parseSeriesInfo(pageHTML string) *SeriesInfo {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(pageHTML))
+	if err != nil {
+		return &SeriesInfo{}
+	}
+
+	title := cleanText(doc.Find("h1").First().Text())
+	thumbnail := doc.Find(`meta[property="og:image"]`).First().AttrOr("content", "")
+
+	content := doc.Find(".wp-content").First()
+	content.Find("h2").Remove() // buang heading "Synopsis..." agar sisa paragraf saja
+	synopsis := strings.Join(strings.Fields(content.Text()), " ")
+
+	var genres []string
+	genreSeen := make(map[string]bool)
+	doc.Find(`a[href*="/genre/"]`).Each(func(i int, a *goquery.Selection) {
+		g := cleanText(a.Text())
+		if g != "" && !genreSeen[g] && len(genres) < 8 {
+			genreSeen[g] = true
+			genres = append(genres, g)
+		}
+	})
+
+	return &SeriesInfo{
+		Title:     title,
+		URL:       "",
+		Thumbnail: thumbnail,
+		Synopsis:  synopsis,
+		Genres:    genres,
+	}
 }
 
 // extractVideoURL mengambil direct MP4 dari player jwplayer (param source=)

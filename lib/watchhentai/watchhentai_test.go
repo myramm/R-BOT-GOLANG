@@ -88,6 +88,30 @@ func TestTitleFromEpisodeURL(t *testing.T) {
 	}
 }
 
+const sampleSeriesHTML = `<html><head><title>Watch Kotowarenai Haha &#8211; WatchHentai</title>
+<meta property="og:image" content="https://watchhentai.net/uploads/2024/kotowarenai-haha/1.jpg"></head><body>
+<h1>Kotowarenai Haha</h1>
+<div class="wp-content"><h2>Synopsis...</h2><p>Yuta is at his friend Kosuke&#8217;s house to watch porn movies.</p></div>
+<a href="https://watchhentai.net/genre/ahegao/" title="Ahegao Hentai">Ahegao</a>
+<a href="https://watchhentai.net/genre/anal/" title="Anal Hentai">Anal</a>
+</body></html>`
+
+func TestParseSeriesInfo(t *testing.T) {
+	info := parseSeriesInfo(sampleSeriesHTML)
+	if info.Title != "Kotowarenai Haha" {
+		t.Errorf("Title = %q", info.Title)
+	}
+	if info.Synopsis != "Yuta is at his friend Kosuke’s house to watch porn movies." {
+		t.Errorf("Synopsis = %q", info.Synopsis)
+	}
+	if len(info.Genres) != 2 || info.Genres[0] != "Ahegao" || info.Genres[1] != "Anal" {
+		t.Errorf("Genres = %v", info.Genres)
+	}
+	if info.Thumbnail == "" {
+		t.Error("Thumbnail kosong")
+	}
+}
+
 func TestCleanText(t *testing.T) {
 	got := cleanText("Watch Hentai Furachi Episode 1 &#8211; Sub Indo")
 	want := "Furachi Episode 1 – Sub Indo"

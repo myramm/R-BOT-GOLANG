@@ -2,6 +2,7 @@ package samehadaku_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -59,5 +60,36 @@ func TestGetDetailAndDownloads(t *testing.T) {
 	t.Logf("Episode Title: %s (Qualities: %d)", downloads.Title, len(downloads.Qualities))
 	if len(downloads.Qualities) == 0 {
 		t.Errorf("Expected quality groups in downloads, got 0")
+	}
+}
+
+func TestResolveDirectLinkAcefileLive(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	// File acefile aktif: resource_check harus mengembalikan ID GDrive.
+	// Jika file sudah dihapus pihak acefile, skip test (jangan gagal permanen).
+	pageURL := "https://acefile.co/f/112136784/alqanime_synrlara_08_360p-mp4"
+	direct := samehadaku.ResolveDirectLink(ctx, "Acefile", pageURL)
+
+	t.Logf("Resolved: %s", direct)
+	if !strings.Contains(direct, "drive.usercontent.google.com/download") {
+		t.Skipf("File acefile kemungkinan sudah tidak aktif (resolve fallback ke URL asli): %s", direct)
+	}
+	if !strings.Contains(direct, "id=") {
+		t.Errorf("Expected GDrive id param in resolved URL, got %s", direct)
+	}
+}
+
+func TestResolveDirectLinkAcefileDead(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	// File mati (resource_check data kosong) harus fallback ke URL asli.
+	pageURL := "https://acefile.co/f/33722679/360p-mkv-tonikawa-1-12end-batch-samehadaku-vip-rar"
+	direct := samehadaku.ResolveDirectLink(ctx, "Acefile", pageURL)
+
+	if direct != pageURL {
+		t.Errorf("Dead acefile link should fall back to original URL, got %s", direct)
 	}
 }

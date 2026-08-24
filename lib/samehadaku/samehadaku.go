@@ -347,7 +347,17 @@ func GetEpisodeDownloads(ctx context.Context, epURL string) (*EpisodeDownload, e
 	}, nil
 }
 
-// ResolveDirectLink mencoba mengekstrak link unduhan langsung dari provider (Pixeldrain, Mediafire, Krakenfiles, Filedon, dll).
+var reAcefileID = regexp.MustCompile(`acefile\.co/(?:f|d|file|download|player)/(\d+)`)
+
+// acefileID mengekstrak ID numerik file dari URL acefile.co.
+func acefileID(pageURL string) string {
+	if m := reAcefileID.FindStringSubmatch(pageURL); len(m) > 1 {
+		return m[1]
+	}
+	return ""
+}
+
+// ResolveDirectLink mencoba mengekstrak link unduhan langsung dari provider (Pixeldrain, Mediafire, Krakenfiles, Filedon, Acefile, dll).
 func ResolveDirectLink(ctx context.Context, server, pageURL string) string {
 	srvLower := strings.ToLower(server)
 
@@ -498,6 +508,37 @@ func ResolveDirectLink(ctx context.Context, server, pageURL string) string {
 								}
 							}
 						}
+					}
+				}
+			}
+		}
+	}
+
+	// 5. Acefile: endpoint service/resource_check mengembalikan ID Google Drive asli.
+	//    File mati / dihapus akan mengembalikan data kosong.
+	if strings.Contains(srvLower, "acefile") || strings.Contains(pageURL, "acefile.co") {
+		if id := acefileID(pageURL); id != "" {
+			checkURL := fmt.Sprintf("https://acefile.co/service/resource_check/%s/", id)
+
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, checkURL, nil)
+			if err == nil {
+				req.Header.Set("User-Agent", UserAgent)
+				req.Header.Set("Referer", "https://acefile.co/")
+				req.Header.Set("X-Requested-With", "XMLHttpRequest")
+
+				client := &http.Client{Timeout: 10 * time.Second}
+				resp, err := client.Do(req)
+				if err == nil {
+					defer resp.Body.Close()
+					var aceRes struct {
+						Code int    `json:"code"`
+						Data string `json:"data"`
+					}
+					if json.NewDecoder(resp.Body).Decode(&aceRes) == nil && aceRes.Data != "" {
+						return fmt.Sprintf(
+							"https://drive.usercontent.google.com/download?id=%s&export=download&confirm=t",
+							aceRes.Data,
+						)
 					}
 				}
 			}

@@ -448,14 +448,22 @@ func handleAnimeSessionReply(ctx context.Context, client *whatsmeow.Client, evt 
 						defer os.Remove(tmpPath)
 						fileData, readErr := os.ReadFile(tmpPath)
 						if readErr == nil && len(fileData) > 0 {
-							fileName := safeAnimeFileName(epData.Title, selectedQual.Quality, selectedQual.Format)
-							caption := fmt.Sprintf("🎥 *%s*\nKualitas: %s (%s)", epData.Title, selectedQual.Quality, selectedQual.Format)
-							mimeType := "video/x-matroska"
-							if strings.ToUpper(selectedQual.Format) == "MP4" {
-								mimeType = "video/mp4"
-							} else if strings.Contains(strings.ToLower(l.Server), "rar") {
-								mimeType = "application/x-rar-compressed"
-							}
+						fileName := safeAnimeFileName(epData.Title, selectedQual.Quality, selectedQual.Format)
+						caption := fmt.Sprintf("🎥 *%s*\nKualitas: %s (%s)", epData.Title, selectedQual.Quality, selectedQual.Format)
+						mimeType := "video/x-matroska"
+
+						// Deteksi arsip RAR batch (dari nama server atau slug URL provider)
+						linkHint := strings.ToLower(l.Server + " " + l.URL + " " + directURL)
+						isRar := strings.Contains(linkHint, ".rar") || strings.Contains(linkHint, "-rar")
+
+						if strings.ToUpper(selectedQual.Format) == "MP4" {
+							mimeType = "video/mp4"
+						}
+						if isRar {
+							mimeType = "application/x-rar-compressed"
+							fileName = regexp.MustCompile(`\.(mkv|mp4)$`).ReplaceAllString(fileName, ".rar")
+							caption = fmt.Sprintf("📦 *%s*\nKualitas: %s (%s) [Batch RAR]", epData.Title, selectedQual.Quality, selectedQual.Format)
+						}
 
 							sendErr := c.SendMediaBytesWithMetadata(bgCtx, fileData, command.MediaDocument, caption, fileName, mimeType, nil)
 							if sendErr == nil {

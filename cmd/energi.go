@@ -9,11 +9,32 @@ import (
 	"rbot/brain/command"
 	"rbot/brain/config"
 	"rbot/brain/energy"
+	"rbot/brain/hentailimit"
 	"rbot/brain/premium"
 )
 
 // energi.go: cek sisa energi + cara mengisinya.
 var heavyEnergi = []string{"hd", "smooth", "ai", "play", "download", "sticker"}
+
+// Kuota harian fitur .hentai untuk user premium (info di pesan .energi).
+const (
+	premHentaiLuarGrup = 100
+	premHentaiDiGrup   = 300
+)
+
+// infoHentai menyusun blok info kuota fitur .hentai (free vs premium).
+func infoHentai() string {
+	mp := config.MainPrefix()
+	return fmt.Sprintf(
+		"━━━━━━━━━━━━━━━━━━\n"+
+			"🎬 *INFO FITUR HENTAI* 🎬\n"+
+			"━━━━━━━━━━━━━━━━━━\n"+
+			"🆓 Free: %dx/hari luar grup • %dx/hari grup official (max 480p)\n"+
+			"💎 Premium: %dx/hari luar grup • %dx/hari grup official + semua kualitas!\n\n"+
+			"_Biarkan nonton tanpa henti! Gabung_ *Prem* _sekarang →_ *%spremium* 🚀",
+		hentailimit.LimitLuarGrup, hentailimit.LimitDiGrup,
+		premHentaiLuarGrup, premHentaiDiGrup, mp)
+}
 
 func init() {
 	command.Register(&command.Command{
@@ -92,6 +113,8 @@ func energiHandler(ctx context.Context, c *command.Ctx) error {
 	if url := config.C.GrupOfficial.Invite; !member && url != "" {
 		baris = append(baris, "", fmt.Sprintf("🎁 Join grup official buat hemat energi:\n%s", url))
 	}
+
+	baris = append(baris, "", infoHentai())
 
 	_, err := c.Reply(ctx, strings.Join(baris, "\n"))
 	return err

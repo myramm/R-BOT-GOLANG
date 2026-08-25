@@ -38,16 +38,17 @@ func simiHandler(ctx context.Context, c *command.Ctx) error {
 		}
 	}
 
+	senderID := c.Sender().User
 	switch arg {
 	case "on", "enable", "1", "aktif":
-		if err := simi.SetEnabled(chatID, true); err != nil {
+		if err := simi.SetEnabledIn(chatID, c.IsGroup(), senderID, true); err != nil {
 			return replySimiError(ctx, c, "Gagal mengaktifkan Simi-Simi: "+err.Error())
 		}
 		_, err := c.Reply(ctx, "✅ *Simi-Simi AI Diaktifkan*\n\nBot akan otomatis membalas ketika ada yang me-reply pesan bot dengan gaya sarkas & gaul.")
 		return err
 
 	case "off", "disable", "0", "mati", "nonaktif":
-		if err := simi.SetEnabled(chatID, false); err != nil {
+		if err := simi.SetEnabledIn(chatID, c.IsGroup(), senderID, false); err != nil {
 			return replySimiError(ctx, c, "Gagal menonaktifkan Simi-Simi: "+err.Error())
 		}
 		_, err := c.Reply(ctx, "🛑 *Simi-Simi AI Dinonaktifkan*\n\nBot tidak akan merespon kutipan pesan santai.")
@@ -55,7 +56,7 @@ func simiHandler(ctx context.Context, c *command.Ctx) error {
 
 	case "status":
 		status := "🟢 AKTIF"
-		if !simi.IsEnabled(chatID) {
+		if !simi.IsEnabledIn(chatID, c.IsGroup(), senderID) {
 			status = "🔴 NONAKTIF"
 		}
 		msg := fmt.Sprintf("🤖 *Status Simi-Simi AI*\n\nStatus di chat ini: *%s*\n\nUbah status:\n• `%ssimi on` (Aktifkan)\n• `%ssimi off` (Matikan)", status, mp, mp)
@@ -70,7 +71,7 @@ func simiHandler(ctx context.Context, c *command.Ctx) error {
 
 	default:
 		status := "🟢 AKTIF"
-		if !simi.IsEnabled(chatID) {
+		if !simi.IsEnabledIn(chatID, c.IsGroup(), senderID) {
 			status = "🔴 NONAKTIF"
 		}
 		help := fmt.Sprintf("🤖 *PENGATURAN SIMI-SIMI AI*\n\n"+

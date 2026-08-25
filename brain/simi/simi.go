@@ -453,13 +453,14 @@ func HandleQuotedMessage(ctx context.Context, client *whatsmeow.Client, evt *eve
 	}
 
 	chatID := evt.Info.Chat.String()
-	if !IsEnabled(chatID) {
-		return false
-	}
 
 	senderID := identity.SenderPhone(evt)
 	if senderID == "" {
 		senderID = config.BareNumber(evt.Info.Sender.String())
+	}
+
+	if !IsEnabledIn(chatID, evt.Info.IsGroup, senderID) {
+		return false
 	}
 
 	sessionKey := GetSessionKey(chatID, senderID, evt.Info.IsGroup)
@@ -701,19 +702,94 @@ func CheckCooldown(senderID string) bool {
 	return true
 }
 
-// IsEnabled mengecek apakah fitur Simi aktif untuk chat tertentu.
-func IsEnabled(chatID string) bool {
-	var enabled bool
-	found, err := store.Get(chatSettingKeyPrefix+chatID, &enabled)
-	if err == nil && found {
-		return enabled
+// enabledKeys mengembalikan daftar kandidat key LMDB untuk status Simi sebuah chat,
+// diurutkan dari yang paling kanonik. Key kanonik bertahan lintas bentuk JID karena
+// WhatsApp dapat mengirim chat sebagai @g.us/@s.whatsapp.net maupun @lid (migrasi LID).
+func enabledKeys(chatID string, isGroup bool, senderPhone string) []string {
+	keys := make([]string, 0, 4)
+	add := func(k string) {
+		if k == "" {
+			return
+		}
+		for _, existing := range keys {
+			if existing == k {
+				return
+			}
+		}
+		keys = append(keys, k)
+	}
+
+	num := config.BareNumber(chatID)
+	domain := ""
+	if i := strings.Index(chatID, "@"); i >= 0 {
+		domain = chatID[i+1:]
+	}
+
+	switch {
+	case isGroup:
+		// Grup: ID numerik grup sama antara @g.us dan @lid.
+		add(chatSettingKeyPrefix + "grp:" + num)
+	case senderPhone != "":
+		// DM: ID numerik @lid BERBEDA dari nomor HP, jadi kanonikkan via nomor pengirim.
+		add(chatSettingKeyPrefix + "dm:" + senderPhone)
+	case domain == "s.whatsapp.net" || domain == "":
+		add(chatSettingKeyPrefix + "dm:" + num)
+	}
+
+	// Key eksak bentuk saat ini (kompatibilitas versi lama).
+	add(chatSettingKeyPrefix + chatID)
+
+	if num != "" && domain != "" {
+		// Varian lintas-domain yang mungkin ditulis versi lama.
+		if isGroup || domain == "g.us" || domain == "lid" {
+			for _, d := range []string{"g.us", "lid"} {
+				if d != domain {
+					add(chatSettingKeyPrefix + num + "@" + d)
+				}
+			}
+		}
+		// Legacy DM: versi lama menulis key eksak bentuk PN.
+		if !isGroup && senderPhone != "" && domain == "lid" {
+			add(chatSettingKeyPrefix + senderPhone + "@s.whatsapp.net")
+		}
+	}
+
+	return keys
+}
+
+// IsEnabledIn mengecek apakah fitur Simi aktif untuk chat tertentu,
+// toleran terhadap perubahan bentuk JID (migrasi LID WhatsApp).
+func IsEnabledIn(chatID string, isGroup bool, senderPhone string) bool {
+	for _, key := range enabledKeys(chatID, isGroup, senderPhone) {
+		var enabled bool
+		found, err := store.Get(key, &enabled)
+		if err == nil && found {
+			return enabled
+		}
 	}
 	return config.C.Simi.EnabledByDefault
 }
 
+// SetEnabledIn mengubah status Simi (ON/OFF) untuk chat tertentu di LMDB.
+// Nilai ditulis ke semua varian key agar status konsisten walau bentuk JID chat berubah.
+func SetEnabledIn(chatID string, isGroup bool, senderPhone string, enabled bool) error {
+	var firstErr error
+	for _, key := range enabledKeys(chatID, isGroup, senderPhone) {
+		if err := store.Set(key, enabled); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
+// IsEnabled mengecek apakah fitur Simi aktif untuk chat tertentu.
+func IsEnabled(chatID string) bool {
+	return IsEnabledIn(chatID, strings.HasSuffix(chatID, "@g.us"), "")
+}
+
 // SetEnabled mengubah status Simi (ON/OFF) untuk chat tertentu di LMDB.
 func SetEnabled(chatID string, enabled bool) error {
-	return store.Set(chatSettingKeyPrefix+chatID, enabled)
+	return SetEnabledIn(chatID, strings.HasSuffix(chatID, "@g.us"), "", enabled)
 }
 
 // SaveGroupSticker menyimpan byte WebP sticker yang dibuat di grup ke database LMDB.

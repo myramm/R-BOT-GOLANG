@@ -14,6 +14,10 @@ import (
 // markerPath adalah penanda restart: menyimpan chat tujuan notif "sudah online".
 var markerPath = filepath.Join("data", "restart.json")
 
+// resetMarkerPath adalah penanda reset sesi: DB sesi WhatsApp bot utama
+// dihapus saat restart agar proses baru otomatis meminta kode pairing baru.
+var resetMarkerPath = filepath.Join("data", "reset_session.json")
+
 var (
 	restartCh = make(chan struct{})
 	once      sync.Once
@@ -47,6 +51,25 @@ func Requested() bool {
 	default:
 		return false
 	}
+}
+
+// RequestSessionReset menandai permintaan restart dengan penghapusan sesi
+// WhatsApp bot utama (fitur pairing ulang dari Web Dashboard). Idempoten.
+func RequestSessionReset() {
+	_ = os.WriteFile(resetMarkerPath, []byte("{}"), 0o600)
+	Request("")
+}
+
+// TakePendingSessionReset membaca & menghapus penanda reset sesi. True bila
+// restart terakhir diminta bersama reset sesi; main menghapus DB sesi WhatsApp
+// sebelum re-exec agar pairing baru otomatis diminta saat boot.
+func TakePendingSessionReset() bool {
+	b, err := os.ReadFile(resetMarkerPath)
+	if err != nil {
+		return false
+	}
+	_ = os.Remove(resetMarkerPath)
+	return len(b) > 0
 }
 
 // TakePendingNotify membaca & menghapus penanda restart. Mengembalikan chat JID

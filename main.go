@@ -56,6 +56,11 @@ func main() {
 		// menandai /proc/self/exe lama sebagai "<path> (deleted)". Pangkas suffix
 		// itu agar syscall.Exec menuju biner yang baru, bukan path tak valid.
 		exe = strings.TrimSuffix(exe, " (deleted)")
+		// Reset sesi dari Web Dashboard: hapus DB sesi WhatsApp sebelum re-exec
+		// agar proses baru otomatis meminta kode pairing baru (tanpa SSH ke VPS).
+		if lifecycle.TakePendingSessionReset() {
+			removeWhatsAppSessionFiles()
+		}
 		log.Printf("[rbot] restart: re-exec %s", exe)
 		if err := syscall.Exec(exe, os.Args, os.Environ()); err != nil {
 			log.Fatalf("[rbot] restart: exec gagal: %v", err)
@@ -228,6 +233,18 @@ func run(ctx context.Context) error {
 		log.Printf("[rbot] restart diminta; menutup dengan rapi")
 	}
 	return nil
+}
+
+// removeWhatsAppSessionFiles menghapus database sesi WhatsApp bot utama agar
+// boot berikutnya memulai pairing baru; kode pairing tampil otomatis di Web.
+func removeWhatsAppSessionFiles() {
+	for _, name := range []string{"store.db", "store.db-shm", "store.db-wal"} {
+		path := filepath.Join("session", name)
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			log.Printf("[rbot] reset sesi: gagal menghapus %s: %v", path, err)
+		}
+	}
+	log.Printf("[rbot] reset sesi: session/store.db dihapus; kode pairing baru akan diminta otomatis")
 }
 
 func forwardCommandError(ctx context.Context, c *command.Ctx, commandErr error) {

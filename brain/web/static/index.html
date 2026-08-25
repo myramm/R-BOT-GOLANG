@@ -1737,6 +1737,16 @@
             <button class="btn btn-primary btn-sm" onclick="copyPairingCode()">📋 Salin</button>
           </div>
         </div>
+        <div id="pairingActions" style="display: none; margin-top: 0.9rem; padding-top: 0.9rem; border-top: 1px dashed rgba(99,102,241,0.3);">
+          <div style="font-size: 0.78rem; color: var(--text-sub); margin-bottom: 0.55rem;">
+            Bot belum login. Minta kode pairing baru untuk <strong id="pairingPhoneNumberLabel">-</strong> tanpa masuk VPS:
+          </div>
+          <div style="display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center;">
+            <button class="btn btn-primary btn-sm" id="btnRequestPairing" onclick="requestMainPairing()">🔑 Minta Kode Pairing</button>
+            <button class="btn btn-danger btn-sm" onclick="askResetSession()">♻️ Reset Sesi</button>
+            <span id="pairingActionStatus" style="font-size: 0.75rem; color: var(--text-sub);"></span>
+          </div>
+        </div>
       </div>
 
       <!-- 5 Core Metrics Grid (2 Columns on Mobile Android!) -->
@@ -3715,8 +3725,15 @@
       const pairingBanner = document.getElementById('pairingBanner');
       const pairingCodeDisplay = document.getElementById('pairingCodeDisplay');
       if (pairingBanner && pairingCodeDisplay) {
-        if (d.bot && !d.bot.loggedIn && d.bot.pairingCode) {
-          pairingCodeDisplay.textContent = d.bot.pairingCode;
+        if (d.bot && !d.bot.loggedIn) {
+          if (d.bot.pairingCode) pairingCodeDisplay.textContent = d.bot.pairingCode;
+          const acts = document.getElementById('pairingActions');
+          if (acts) acts.style.display = 'block';
+          const phoneEl = document.getElementById('pairingPhoneNumberLabel');
+          if (phoneEl && d.config && d.config.botNumber) {
+            const bn = String(d.config.botNumber).replace(/[^0-9]/g, '');
+            if (bn) phoneEl.textContent = '+' + (bn.startsWith('0') ? '62' + bn.slice(1) : bn);
+          }
           pairingBanner.style.display = 'block';
         } else {
           pairingBanner.style.display = 'none';
@@ -3741,6 +3758,48 @@
         });
       } else {
         fallbackCopyText(code);
+      }
+    }
+
+    async function requestMainPairing() {
+      const statusEl = document.getElementById('pairingActionStatus');
+      const btn = document.getElementById('btnRequestPairing');
+      if (btn) { btn.disabled = true; btn.textContent = '⚡ Meminta...'; }
+      try {
+        const res = await fetch('/api/bot/pairing', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}'
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.ok) {
+          if (statusEl) statusEl.textContent = '';
+          const codeEl = document.getElementById('pairingCodeDisplay');
+          if (codeEl) codeEl.textContent = data.code;
+          showToast('Kode pairing: ' + data.code + ' — masukkan di HP dalam <2 menit!', 'success');
+        } else {
+          if (statusEl) statusEl.textContent = data.error || ('Gagal (HTTP ' + res.status + ')');
+          showToast(data.error || 'Gagal meminta kode pairing.', 'error');
+        }
+      } catch (e) {
+        showToast('Gagal meminta kode pairing: ' + e.message, 'error');
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '🔑 Minta Kode Pairing'; }
+      }
+    }
+
+    async function askResetSession() {
+      if (!confirm('Reset sesi WhatsApp bot utama?\n\nBot akan restart dengan sesi bersih lalu otomatis meminta kode pairing baru yang tampil di halaman ini.')) return;
+      try {
+        const res = await fetch('/api/bot/pairing/reset', { method: 'POST' });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.ok) {
+          showToast(data.message || 'Reset sesi dikirim, bot akan restart.', 'success');
+        } else {
+          showToast(data.error || 'Gagal mereset sesi.', 'error');
+        }
+      } catch (e) {
+        showToast('Gagal mereset sesi: ' + e.message, 'error');
       }
     }
 

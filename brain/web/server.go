@@ -511,6 +511,8 @@ func Start(ctx context.Context) {
 	mux.HandleFunc("/api/blacklist", handleBlacklistList)
 	mux.HandleFunc("/api/blacklist/toggle", handleBlacklistToggle)
 	mux.HandleFunc("/api/bot/setpp", handleSetPPBotWeb)
+	mux.HandleFunc("/api/bot/pairing", handleBotPairing)
+	mux.HandleFunc("/api/bot/pairing/reset", handleBotPairingReset)
 	mux.HandleFunc("/api/update/check", handleUpdateCheck)
 	mux.HandleFunc("/api/update/apply", handleUpdateApply)
 
@@ -721,6 +723,140 @@ func handleAuditLogs(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "logs": logs})
+}
+
+// FormatPairingCode merapikan kode pairing 8 digit menjadi XXXX-XXXX.
+func FormatPairingCode(code string) string {
+	if len(code) == 8 {
+		return code[:4] + "-" + code[4:]
+	}
+	return code
+}
+
+// handleBotPairing meminta kode pairing on-demand untuk bot utama langsung dari
+// Web Dashboard, tanpa perlu masuk VPS untuk melihat terminal.
+func handleBotPairing(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Phone string `json:"phone"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+
+	stateMu.RLock()
+	cli := waClient
+	stateMu.RUnlock()
+	if cli == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Client WhatsApp belum siap, coba beberapa saat lagi."})
+		return
+	}
+	if cli.IsLoggedIn() {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Bot utama sudah login, tidak perlu pairing baru."})
+		return
+	}
+
+	phone := config.Digits(req.Phone)
+	if phone == "" {
+		phone = config.Digits(config.C.BotNumber)
+	}
+	if phone == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Nomor bot kosong: isi botNumber di config.json atau sertakan field phone."})
+		return
+	}
+	if strings.HasPrefix(phone, "0") {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Gunakan format internasional tanpa tanda + (contoh: 62812xxxx)."})
+		return
+	}
+
+	if !cli.IsConnected() {
+		if err := cli.Connect(); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": fmt.Sprintf("Gagal menghubungkan ke WhatsApp: %v", err)})
+			return
+		}
+		// Sama seperti alur startup: beri jeda sebelum PairPhone setelah Connect.
+		time.Sleep(time.Second)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	code, err := cli.PairPhone(ctx, phone, true, whatsmeow.PairClientChrome, "Chrome (Linux)")
+	if err != nil {
+		msg := fmt.Sprintf("Gagal meminta kode pairing: %v", err)
+		if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "rate-overlimit") {
+			msg = "Terlalu banyak permintaan kode pairing (rate-limit WhatsApp). Tunggu 5-10 menit lalu coba lagi."
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": msg})
+		return
+	}
+
+	pretty := FormatPairingCode(code)
+	SetPairingCode(pretty)
+	RecordAudit(r, "BOT_PAIRING", fmt.Sprintf("Kode pairing bot utama diminta via Web untuk +%s", phone))
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":      true,
+		"code":    pretty,
+		"phone":   phone,
+		"message": fmt.Sprintf("Masukkan kode di WhatsApp HP +%s: Perangkat Tertaut > Tautkan dengan nomor telepon (<2 menit).", phone),
+	})
+}
+
+// handleBotPairingReset mereset sesi WhatsApp bot utama yang basi (mis. remote
+// logout): bot restart dengan sesi bersih lalu otomatis meminta kode pairing
+// baru yang tampil di Web Dashboard. Menggantikan hapus manual session/store.db
+// via SSH di VPS.
+func handleBotPairingReset(w http.ResponseWriter, r *http.Request) {
+	if !IsAuthenticated(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	stateMu.RLock()
+	cli := waClient
+	stateMu.RUnlock()
+	if cli != nil && cli.IsLoggedIn() {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "Bot masih login. Untuk ganti akun, logout dulu dari WhatsApp di HP (Perangkat Tertaut)."})
+		return
+	}
+
+	RecordAudit(r, "BOT_PAIRING_RESET", "Reset sesi WhatsApp bot utama untuk pairing ulang dari Web")
+	SetPairingCode("")
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		lifecycle.RequestSessionReset()
+	}()
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":      true,
+		"message": "Sesi direset & bot akan restart. Kode pairing baru akan muncul otomatis di halaman ini.",
+	})
 }
 
 func handleRestart(w http.ResponseWriter, r *http.Request) {

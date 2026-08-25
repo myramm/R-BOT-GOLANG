@@ -14,6 +14,7 @@ import (
 
 	"rbot/brain/command"
 	"rbot/lib/komik"
+	"rbot/lib/nhentai"
 )
 
 type komikSessionStep int
@@ -40,8 +41,8 @@ func init() {
 	command.Register(&command.Command{
 		Name:        "komik",
 		Category:    "Downloader",
-		Alias:       []string{"manga", "comic"},
-		Description: "Cari & download komik jadi PDF (sumber: KomikTap & Komiku). Contoh: .komik solo leveling | .komik solo leveling 5",
+		Alias:       []string{"manga", "comic", "nhentai", "doujin", "manhwa", "manhua"},
+		Description: "Cari & download komik jadi PDF (KomikTap & Komiku), atau kode nhentai jadi PDF doujin. Contoh: .komik solo leveling | .komik solo leveling 5 | .komik 177013",
 		Handler:     komikHandler,
 	})
 
@@ -106,6 +107,12 @@ func komikHandler(ctx context.Context, c *command.Ctx) error {
 
 	key := getKomikSessionKey(c.Evt)
 	args := strings.Fields(argStr)
+
+	// Kasus: kode nhentai (angka murni) -> PDF doujin (contoh: .komik 177013)
+	if isNhentaiCode(argStr) {
+		go processNhentaiPDF(ctx, c, argStr)
+		return nil
+	}
 
 	// Kasus: Judul + Nomor Chapter (contoh: .komik solo leveling 5)
 	if len(args) >= 2 {
@@ -288,6 +295,63 @@ func handleKomikSessionReply(ctx context.Context, client *whatsmeow.Client, evt 
 	}
 
 	return false
+}
+
+func isNhentaiCode(s string) bool {
+	if s == "" || len(s) > 7 {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func processNhentaiPDF(ctx context.Context, c *command.Ctx, code string) {
+	bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	c.React(bgCtx, "🔎")
+
+	g, err := nhentai.Fetch(bgCtx, code)
+	if err != nil {
+		c.React(bgCtx, "❌")
+		c.ReportError(bgCtx, err)
+		_, _ = c.Reply(bgCtx, fmt.Sprintf("Doujin dengan kode *%s* tidak ditemukan.", code))
+		return
+	}
+
+	urls := g.ImageURLs()
+	c.React(bgCtx, "⏳")
+	_, _ = c.Reply(bgCtx, fmt.Sprintf("📥 Mengunduh *%s* (%d halaman) & merakit PDF...\nHarap tunggu sebentar.", g.Title, len(urls)))
+
+	pdfBytes, valid, total, err := komik.ImagesToPDF(bgCtx, urls, "https://nhentai.net/")
+	if err != nil || len(pdfBytes) == 0 {
+		c.React(bgCtx, "❌")
+		errMsg := fmt.Sprintf("❌ Gagal membuat PDF: %v", err)
+		c.ReportErrorMessage(bgCtx, errMsg)
+		_, _ = c.Reply(bgCtx, errMsg)
+		return
+	}
+
+	fileSizeMB := float64(len(pdfBytes)) / 1024 / 1024
+	warn := ""
+	if valid < total {
+		warn = fmt.Sprintf("\n⚠️ %d/%d halaman gagal diunduh.", total-valid, total)
+	}
+	caption := fmt.Sprintf("📕 *%s*\n%d/%d halaman • %.1f MB%s", g.Title, valid, total, fileSizeMB, warn)
+
+	if err := c.SendMediaBytes(bgCtx, pdfBytes, command.MediaDocument, caption, nhentai.FileName(g.Title), "application/pdf"); err != nil {
+		c.React(bgCtx, "❌")
+		errMsg := fmt.Sprintf("PDF berhasil dirakit (%.1f MB) tetapi gagal dikirim ke WhatsApp: %v", fileSizeMB, err)
+		c.ReportErrorMessage(bgCtx, errMsg)
+		_, _ = c.Reply(bgCtx, errMsg)
+		return
+	}
+
+	c.React(bgCtx, "✅")
 }
 
 func processAndSendPDF(ctx context.Context, c *command.Ctx, comic komik.Comic, ch komik.Chapter) {

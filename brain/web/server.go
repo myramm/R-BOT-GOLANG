@@ -794,13 +794,18 @@ func handleBotPairing(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(time.Second)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 	code, err := cli.PairPhone(ctx, phone, true, whatsmeow.PairClientChrome, "Chrome (Linux)")
 	if err != nil {
 		msg := fmt.Sprintf("Gagal meminta kode pairing: %v", err)
-		if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "rate-overlimit") {
+		errStr := err.Error()
+		if strings.Contains(errStr, "429") || strings.Contains(errStr, "rate-overlimit") {
 			msg = "Terlalu banyak permintaan kode pairing (rate-limit WhatsApp). Tunggu 5-10 menit lalu coba lagi."
+		} else if strings.Contains(errStr, "link_code_pairing_wrapped_primary_ephemeral_pub") || strings.Contains(errStr, "passkey") {
+			msg = "WhatsApp memerlukan verifikasi passkey/biometrik. Pastikan kamu menyelesaikan verifikasi di HP setelah memasukkan kode. Coba lagi jika gagal."
+		} else if strings.Contains(errStr, "websocket") || strings.Contains(errStr, "connect") {
+			msg = "Gagal terhubung ke server WhatsApp. Periksa koneksi internet dan coba lagi."
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)

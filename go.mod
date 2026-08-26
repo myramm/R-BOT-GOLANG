@@ -4,38 +4,36 @@ go 1.26.5
 
 require (
 	github.com/PowerDNS/lmdb-go v1.9.3
+	github.com/PuerkitoBio/goquery v1.12.0
+	github.com/coder/websocket v1.8.15
+	github.com/creack/pty v1.1.24
 	github.com/mattn/go-sqlite3 v1.14.49
-	go.mau.fi/whatsmeow v0.0.0-20260806224404-e277b766ab33
-	google.golang.org/protobuf v1.36.11
+	github.com/signintech/gopdf v0.38.0
+	github.com/traefik/yaegi v0.16.1
+	go.mau.fi/whatsmeow v0.0.0-20260821141805-33cfac511629
+	golang.org/x/image v0.45.0
+	google.golang.org/protobuf v1.36.12
 )
 
 require (
 	filippo.io/edwards25519 v1.2.0 // indirect
-	github.com/PuerkitoBio/goquery v1.12.0 // indirect
 	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/beeper/argo-go v1.1.2 // indirect
-	github.com/coder/websocket v1.8.15 // indirect
-	github.com/creack/pty v1.1.24 // indirect
 	github.com/elliotchance/orderedmap/v3 v3.1.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/petermattis/goid v0.0.0-20260713124913-97594f28f5ca // indirect
+	github.com/petermattis/goid v0.0.0-20260816044145-ed329add6b1b // indirect
 	github.com/phpdave11/gofpdi v1.0.14-0.20211212211723-1f10f9844311 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/robertkrimen/otto v0.5.1 // indirect
 	github.com/rs/zerolog v1.35.1 // indirect
-	github.com/signintech/gopdf v0.38.0 // indirect
-	github.com/traefik/yaegi v0.16.1 // indirect
 	github.com/vektah/gqlparser/v2 v2.5.27 // indirect
 	go.mau.fi/libsignal v0.2.2 // indirect
-	go.mau.fi/util v0.9.12-0.20260717235539-f9ffa7eca58d // indirect
-	golang.org/x/crypto v0.54.0 // indirect
-	golang.org/x/exp v0.0.0-20260709172345-9ea1abe57597 // indirect
-	golang.org/x/image v0.45.0 // indirect
-	golang.org/x/net v0.57.0 // indirect
+	go.mau.fi/util v0.10.1-0.20260820140024-eb612d936fde // indirect
+	golang.org/x/crypto v0.55.0 // indirect
+	golang.org/x/exp v0.0.0-20260813180055-c1d0aacb2297 // indirect
+	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
-	gopkg.in/sourcemap.v1 v1.0.5 // indirect
 )

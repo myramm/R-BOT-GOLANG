@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -119,6 +120,15 @@ func run(ctx context.Context) error {
 	}
 	clientLog := waLog.Stdout("Client", level, true)
 	client := whatsmeow.NewClient(device, clientLog)
+	client.UserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+	client.WebSocketHeaders = http.Header{
+		"Sec-Fetch-Dest":  {"websocket"},
+		"Sec-Fetch-Mode":  {"websocket"},
+		"Sec-Fetch-Site":  {"same-origin"},
+		"Accept":          {"*/*"},
+		"Accept-Encoding": {"gzip, deflate, br, zstd"},
+		"Priority":        {"u=3, i"},
+	}
 	web.SetWhatsAppClient(client)
 	command.ErrorHook = forwardCommandError
 	var notifyOnce sync.Once
@@ -205,7 +215,9 @@ func run(ctx context.Context) error {
 		}
 		// PairPhone harus dipanggil setelah websocket tersambung.
 		time.Sleep(time.Second)
-		code, err := client.PairPhone(ctx, phone, true, whatsmeow.PairClientChrome, "Chrome (Linux)")
+		pairCtx, pairCancel := context.WithTimeout(ctx, 45*time.Second)
+		code, err := client.PairPhone(pairCtx, phone, true, whatsmeow.PairClientChrome, "Chrome (Linux)")
+		pairCancel()
 		if err != nil {
 			return fmt.Errorf("minta kode pairing: %w", err)
 		}

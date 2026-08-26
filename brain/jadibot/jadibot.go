@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -1008,6 +1009,15 @@ func (m *Manager) StartPairing(ctx context.Context, phone string, senderJID type
 
 	clientLog := waLog.Stdout("JadibotClient-"+phoneDigits, level, true)
 	client := whatsmeow.NewClient(device, clientLog)
+	client.UserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+	client.WebSocketHeaders = http.Header{
+		"Sec-Fetch-Dest":  {"websocket"},
+		"Sec-Fetch-Mode":  {"websocket"},
+		"Sec-Fetch-Site":  {"same-origin"},
+		"Accept":          {"*/*"},
+		"Accept-Encoding": {"gzip, deflate, br, zstd"},
+		"Priority":        {"u=3, i"},
+	}
 
 	sb := newSubBot(client, container, phoneDigits, senderJID)
 
@@ -1064,8 +1074,12 @@ func (m *Manager) StartPairing(ctx context.Context, phone string, senderJID type
 		client.Disconnect()
 		_ = container.Close()
 		_ = os.Remove(dbPath)
-		if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "rate-overlimit") {
+		errStr := err.Error()
+		if strings.Contains(errStr, "429") || strings.Contains(errStr, "rate-overlimit") {
 			return "", errors.New("terlalu banyak permintaan kode pairing dalam waktu singkat (rate-limit WhatsApp). Silakan tunggu 5 - 10 menit sebelum meminta kode baru")
+		}
+		if strings.Contains(errStr, "link_code_pairing_wrapped_primary_ephemeral_pub") || strings.Contains(errStr, "passkey") {
+			return "", errors.New("WhatsApp memerlukan verifikasi passkey/biometrik. Pastikan kamu menyelesaikan verifikasi di HP setelah memasukkan kode. Coba lagi jika gagal.")
 		}
 		return "", fmt.Errorf("gagal mendapatkan kode pairing: %w", err)
 	}

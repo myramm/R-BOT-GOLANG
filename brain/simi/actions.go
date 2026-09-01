@@ -28,19 +28,15 @@ import (
 
 const postMethod = http.MethodPost
 
-// actionableCommand mendeskripsikan command yang bisa dipanggil Simi via intent detection.
-// Kita whitelist manual + validasi permission saat runtime.
 type actionableCommand struct {
-	Name        string   // nama command di registry
-	Aliases     []string // alias resmi yang dikenali LLM
-	Description string   // deskripsi singkat untuk prompt LLM
-	ArgsHint    string   // contoh argumen
-	OwnerOnly   bool     // hanya owner bot
-	AdminOnly   bool     // hanya admin grup (di grup) / owner
+	Name        string
+	Aliases     []string
+	Description string
+	ArgsHint    string
+	OwnerOnly   bool
+	AdminOnly   bool
 }
 
-// Commands yang bisa di-trigger Simi. TIDAK termasuk command OwnerOnly & admin-only berbahaya.
-// Dibatasi sesuai prinsip least-privilege.
 var simiActionableCommands = []actionableCommand{
 	{
 		Name:        "play",
@@ -128,7 +124,6 @@ var simiActionableCommands = []actionableCommand{
 	},
 }
 
-// commandAliasMap memetakan alias → command name untuk lookup cepat.
 var commandAliasMap = map[string]string{}
 
 func init() {
@@ -140,75 +135,73 @@ func init() {
 	}
 }
 
-// actionPlan adalah JSON yang dikembalikan LLM untuk mendeskripsikan intent user.
 type actionPlan struct {
-	Action   string                 `json:"action"`           // nama command atau "none"
-	Args     map[string]interface{} `json:"args,omitempty"`   // argumen untuk command
-	Reply    string                 `json:"reply,omitempty"`  // pesan singkat untuk user (sarkas netizen)
-	Reason   string                 `json:"reason,omitempty"` // internal reasoning
-	Confidence float64              `json:"confidence,omitempty"`
+	Action     string                 `json:"action"`
+	Args       map[string]interface{} `json:"args,omitempty"`
+	Reply      string                 `json:"reply,omitempty"`
+	Reason     string                 `json:"reason,omitempty"`
+	Confidence float64                `json:"confidence,omitempty"`
 }
 
-// buildActionPrompt menyusun prompt untuk minta LLM mendeteksi intent & menentukan action.
-// Output diharapkan JSON terstruktur.
 func buildActionPrompt(userText, currentAction string) string {
 	var sb strings.Builder
 	sb.WriteString("[TUGAS: Deteksi Intent User untuk Simi Action System]\n\n")
-	sb.WriteString("Kamu adalah router intent untuk bot WhatsApp. ")
-	sb.WriteString("Diberikan pesan user dalam bahasa Indonesia/gaul/netizen, ")
+	sb.WriteString("Kamu router intent untuk bot WhatsApp. Diberikan pesan user dalam bahasa Indonesia/gaul/netizen, ")
 	sb.WriteString("tentukan apakah user ingin memicu AKSI dari daftar command di bawah, ")
-	sb.WriteString("atau hanya ngobrol biasa / minta Simi-Simi menjawab pakai persona sarkasnya.\n\n")
+	sb.WriteString("atau hanya ngobrol biasa.\n\n")
 
 	sb.WriteString("ATURAN KERAS:\n")
-	sb.WriteString("1. Jika pesan adalah pertanyaan/curhat/ngobrol biasa, balas dengan action=\"none\" dan isi field reply dengan jawaban sarkas singkat ala netizen.\n")
-	sb.WriteString("2. Jika user EKSPLISIT minta sesuatu yang COCOK dengan salah satu command di bawah (misal: 'putar lagu X', 'stikerin', 'download tiktok ini'), ")
-	sb.WriteString("maka set action=nama_command, isi args sesuai ArgsHint, dan reply boleh kosong atau singkat.\n")
-	sb.WriteString("3. Field reply SELALU dalam bahasa gaul netizen Indonesia yang sarkas & pedas (1 kalimat pendek).\n")
-	sb.WriteString("4. Output HARUS JSON valid, tanpa markdown, tanpa teks lain. Hanya JSON.\n")
-	sb.WriteString("5. Field confidence: 0.0–1.0. Set rendah (<0.6) kalau ragu, set tinggi (>0.85) kalau sangat yakin.\n\n")
+	sb.WriteString("1. Jika pesan pertanyaan/curhat/ngobrol biasa → action=\"none\", reply = jawaban sarkas singkat ala netizen.\n")
+	sb.WriteString("2. Jika user EKSPLISIT minta sesuatu yang COCOK dengan salah satu command → action=nama_command, isi args.\n")
+	sb.WriteString("3. PENTING: field query/url/text HARUS berisi KATA KUNCI/URL/TEXT INTI, BUKAN kata perintah seperti 'Carikan', 'Cari', 'Putar', 'Stikerin', 'Bikin', 'Buatkan'.\n")
+	sb.WriteString("   Contoh BENAR: user='Carikan foto megumi' → args.query='megumi' (BUKAN 'Carikan').\n")
+	sb.WriteString("   Contoh BENAR: user='Putar in musik bye' → args.query='bye'.\n")
+	sb.WriteString("   Contoh BENAR: user='Stikerin ini' (reply gambar) → action=sticker, args={} (kosong, pakai yang di-reply).\n")
+	sb.WriteString("4. Untuk sticker/toimg/hd/smooth/meme: jika user reply pesan berisi media, args={} (kosong). Jika user kasih URL, args.url=URL.\n")
+	sb.WriteString("5. Untuk play/pixiv/anime/hentai: SELALU isi args.query dengan KATA KUNCI INTI saja.\n")
+	sb.WriteString("6. Untuk download/tiktok/ytmp3/ytmp4/pin: SELALU isi args.url dengan URL lengkap.\n")
+	sb.WriteString("7. Field reply: bahasa gaul netizen Indonesia sarkas (1 kalimat pendek). Boleh kosong untuk action nyata.\n")
+	sb.WriteString("8. Output HARUS JSON valid, tanpa markdown.\n\n")
 
-	sb.WriteString("DAFTAR ACTION YANG TERSEDIA:\n")
+	sb.WriteString("DAFTAR ACTION:\n")
 	for _, ac := range simiActionableCommands {
 		fmt.Fprintf(&sb, "- %s: %s\n  ArgsHint: %s\n", ac.Name, ac.Description, ac.ArgsHint)
 	}
 	sb.WriteString("\n")
 
 	if currentAction != "" {
-		fmt.Fprintf(&sb, "[INFO: Action terakhir user = %s — boleh lanjutkan dengan action sama jika masih relevan.]\n\n", currentAction)
+		fmt.Fprintf(&sb, "[INFO: Action terakhir = %s]\n\n", currentAction)
 	}
 
 	sb.WriteString("USER MESSAGE:\n")
 	sb.WriteString(userText)
-	sb.WriteString("\n\n")
-	sb.WriteString("OUTPUT JSON (tanpa markdown, tanpa teks lain):\n")
+	sb.WriteString("\n\nOUTPUT JSON:\n")
 	return sb.String()
 }
 
-// jsonExtract mencari blok JSON dalam string (kalau LLM bungkus dengan ```json ... ```).
 var jsonBlockRe = regexp.MustCompile(`(?s)\{.*\}`)
 
 func parseActionPlan(raw string) (*actionPlan, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return nil, fmt.Errorf("respon LLM kosong")
+		return nil, fmt.Errorf("respon kosong")
 	}
 	match := jsonBlockRe.FindString(raw)
 	if match == "" {
-		return nil, fmt.Errorf("tidak ada JSON dalam respon LLM")
+		return nil, fmt.Errorf("tidak ada JSON")
 	}
 	var p actionPlan
 	if err := json.Unmarshal([]byte(match), &p); err != nil {
-		return nil, fmt.Errorf("JSON parse gagal: %w", err)
+		return nil, fmt.Errorf("parse gagal: %w", err)
 	}
 	p.Action = strings.ToLower(strings.TrimSpace(p.Action))
 	return &p, nil
 }
 
-// detectIntent memanggil LLM untuk menentukan intent & action plan.
 func detectIntent(ctx context.Context, userText, lastAction string) (*actionPlan, error) {
 	apiKey := strings.TrimSpace(config.C.Simi.APIKey)
 	if apiKey == "" {
-		return nil, fmt.Errorf("simi.apiKey kosong")
+		return nil, fmt.Errorf("apiKey kosong")
 	}
 	model := strings.TrimSpace(config.C.Simi.Model)
 	if model == "" {
@@ -222,7 +215,7 @@ func detectIntent(ctx context.Context, userText, lastAction string) (*actionPlan
 		"messages": []map[string]string{
 			{
 				"role":    "system",
-				"content": "Kamu adalah router intent JSON. Selalu balas dengan JSON valid saja, tanpa markdown, tanpa penjelasan tambahan.",
+				"content": "Kamu router intent JSON. Selalu balas JSON valid saja, tanpa markdown.",
 			},
 			{"role": "user", "content": prompt},
 		},
@@ -263,19 +256,18 @@ func detectIntent(ctx context.Context, userText, lastAction string) (*actionPlan
 		} `json:"error"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&chat); err != nil {
-		return nil, fmt.Errorf("decode respon: %w", err)
+		return nil, fmt.Errorf("decode: %w", err)
 	}
 	if chat.Error != nil {
 		return nil, fmt.Errorf("API: %s", chat.Error.Message)
 	}
 	if len(chat.Choices) == 0 {
-		return nil, fmt.Errorf("tidak ada pilihan dalam respon")
+		return nil, fmt.Errorf("tidak ada pilihan")
 	}
 
 	return parseActionPlan(chat.Choices[0].Message.Content)
 }
 
-// resolveCommandName mengubah alias / nama command ke nama command yang valid di registry.
 func resolveCommandName(nameOrAlias string) (string, bool) {
 	k := strings.ToLower(strings.TrimSpace(nameOrAlias))
 	if k == "" {
@@ -287,74 +279,20 @@ func resolveCommandName(nameOrAlias string) (string, bool) {
 	return "", false
 }
 
-// executeAction memanggil command handler dengan Ctx yang dibuat sedekat mungkin dengan aslinya.
-// Menggunakan event tiruan. Validasi permission dilakukan manual (owner/admin).
-func executeAction(ctx context.Context, client *whatsmeow.Client, evt *events.Message, plan *actionPlan) error {
-	canonical, ok := resolveCommandName(plan.Action)
-	if !ok {
-		return fmt.Errorf("action %q tidak dikenali atau tidak termasuk daftar Simi", plan.Action)
+func mustParseJID(jidStr string) types.JID {
+	jid, err := types.ParseJID(jidStr)
+	if err != nil {
+		return types.JID{User: jidStr}
 	}
-	cmd := command.Resolve(canonical)
-	if cmd == nil || cmd.Handler == nil {
-		return fmt.Errorf("command %q tidak ditemukan di registry", canonical)
-	}
-
-	// Validasi permission: kalau OwnerOnly, tolak (kecuali caller adalah owner).
-	ac, _ := findActionable(canonical)
-	if ac != nil {
-		if ac.OwnerOnly && !command.IsOwner(evt) {
-			return fmt.Errorf("command %q hanya untuk owner", canonical)
-		}
-		if ac.AdminOnly {
-			isAdmin := false
-			if evt.Info.IsGroup && command.IsGroupAdminHook != nil {
-				isAdmin = command.IsGroupAdminHook(ctx, client, evt)
-			}
-			if !isAdmin && !command.IsOwner(evt) {
-				return fmt.Errorf("command %q butuh admin grup", canonical)
-			}
-		}
-	}
-
-	// Bangun slice Args dari plan.Args.
-	// Konvensi: simpan JSON asli sebagai argumen pertama (supaya handler yang butuh bisa parse),
-	// plus kalau ada field "query" / "url" / "text", tambahkan sebagai argumen tail.
-	args := buildArgsFromPlan(plan.Args, evt)
-	invokedText := "." + canonical + " " + strings.Join(args, " ")
-
-	fakeEvt := cloneEventForSimi(evt)
-	c := &command.Ctx{
-		Client:    client,
-		Evt:       fakeEvt,
-		Args:      args,
-		Text:      invokedText,
-		InvokedAs: canonical,
-		SubBot:    false,
-	}
-
-	// Jalankan handler. Error ditahan agar caller bisa reply.
-	return cmd.Handler(ctx, c)
+	return jid
 }
 
-func findActionable(name string) (*actionableCommand, bool) {
-	for i, ac := range simiActionableCommands {
-		if ac.Name == name {
-			return &simiActionableCommands[i], true
-		}
-	}
-	return nil, false
-}
-
-func buildArgsFromPlan(args map[string]interface{}, evt *events.Message) []string {
+func buildSimiArgs(args map[string]interface{}) []string {
 	if len(args) == 0 {
 		return nil
 	}
-	// Simpan JSON sebagai elemen pertama untuk handler yang mau parse sendiri.
 	raw, _ := json.Marshal(args)
-
 	out := []string{string(raw)}
-
-	// Tambahkan field umum yang sering dipakai command.
 	if v, ok := args["query"].(string); ok && strings.TrimSpace(v) != "" {
 		out = append(out, v)
 	}
@@ -370,24 +308,55 @@ func buildArgsFromPlan(args map[string]interface{}, evt *events.Message) []strin
 	if v, ok := args["bottom"].(string); ok && strings.TrimSpace(v) != "" {
 		out = append(out, v)
 	}
-	_ = evt
 	return out
 }
 
-// cloneEventForSimi membuat salinan events.Message yang aman dipakai handler lain
-// tanpa mengubah event asli. Aspek yang penting: Info & pengirim tetap asli.
-func cloneEventForSimi(evt *events.Message) *events.Message {
-	cp := *evt
-	// Message tidak perlu dimutasi; beberapa handler memang clone sendiri kalau butuh.
-	// Tapi amankan dari double-send dengan menyalin Message pointer.
-	if evt.Message != nil {
-		m := *evt.Message
-		cp.Message = &m
+func executeActionCore(ctx context.Context, client *whatsmeow.Client, canonical string, args []string, chatID, senderID string, quotedMsg *waE2E.Message) error {
+	cmd := command.Resolve(canonical)
+	if cmd == nil || cmd.Handler == nil {
+		return fmt.Errorf("command %q tidak ditemukan", canonical)
 	}
-	return &cp
+
+	fakeEvt := &events.Message{
+		Info: types.MessageInfo{
+			MessageSource: types.MessageSource{
+				Chat:    mustParseJID(chatID),
+				Sender:  mustParseJID(senderID),
+				IsGroup: strings.Contains(chatID, "@g.us"),
+			},
+			PushName:  "",
+			Timestamp: time.Now(),
+		},
+		Message: quotedMsg,
+	}
+
+	c := &command.Ctx{
+		Client:    client,
+		Evt:       fakeEvt,
+		Args:      args,
+		Text:      "." + canonical + " " + strings.Join(args, " "),
+		InvokedAs: canonical,
+		SubBot:    false,
+	}
+
+	return cmd.Handler(ctx, c)
 }
 
-// extractURLFromText mengambil URL pertama yang muncul di teks (untuk fallback).
+var lastActionStore sync.Map
+
+func lastSimiAction(sessionKey string) string {
+	if v, ok := lastActionStore.Load(sessionKey); ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+func setLastSimiAction(sessionKey, action string) {
+	lastActionStore.Store(sessionKey, action)
+}
+
 var urlRe = regexp.MustCompile(`https?://[^\s]+`)
 
 func extractURLFromText(s string) string {
@@ -395,17 +364,30 @@ func extractURLFromText(s string) string {
 	return strings.TrimRight(m, ",.;)]}>\"'")
 }
 
-// handleWithActions adalah entry point baru yang menggantikan HandleQuotedMessage
-// ketika mode "actions" aktif. Mempertahankan perilaku Simi-Simi biasa (sarkas chat),
-// TETAPI mencoba mendeteksi intent & menjalankan command yang relevan.
-//
-// Flow:
-//  1. Panggil LLM untuk deteksi intent (action + args + reply).
-//  2. Kalau action valid → kirim ack → eksekusi command handler.
-//  3. Kalau action "none" / gagal → fallback ke persona sarkas biasa.
-//
-// Catatan: real-time snippet (Wikipedia) tidak dipakai di sini karena prompt Simi action
-// sudah mandiri dan biaya token harus dijaga.
+func sendSimiTextReply(ctx context.Context, client *whatsmeow.Client, evt *events.Message, reply string) {
+	msg := &waE2E.Message{
+		ExtendedTextMessage: &waE2E.ExtendedTextMessage{
+			Text: proto.String(reply),
+			ContextInfo: &waE2E.ContextInfo{
+				StanzaID:      proto.String(evt.Info.ID),
+				Participant:   proto.String(evt.Info.Sender.String()),
+				QuotedMessage: evt.Message,
+			},
+		},
+	}
+	_, _ = client.SendMessage(ctx, evt.Info.Chat, msg)
+}
+
+func isOwnerOrAdminAction(evt *events.Message) bool {
+	if command.IsOwner(evt) {
+		return true
+	}
+	if evt.Info.IsGroup && command.IsGroupAdminHook != nil {
+		return command.IsGroupAdminHook(context.Background(), nil, evt)
+	}
+	return false
+}
+
 func handleWithActions(ctx context.Context, client *whatsmeow.Client, evt *events.Message) bool {
 	if evt == nil || evt.Message == nil || evt.Info.IsFromMe || client == nil {
 		return false
@@ -437,9 +419,7 @@ func handleWithActions(ctx context.Context, client *whatsmeow.Client, evt *event
 		return false
 	}
 
-	// Sticker reply: pertahankan perilaku lama (balas stiker acak / fallback sarkas)
 	if rawMsg.GetStickerMessage() != nil {
-		// Unduh sticker user yang baru masuk dan simpan ke koleksi LMDB
 		downloadCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 		if downloaded, err := client.DownloadAny(downloadCtx, rawMsg); err == nil && len(downloaded) > 0 {
 			_ = SaveGroupSticker(downloaded)
@@ -481,7 +461,6 @@ func handleWithActions(ctx context.Context, client *whatsmeow.Client, evt *event
 				}
 			}
 		}
-		// Fallback teks
 		reply, err := AskSimi(ctx, "User barusan reply kamu pake stiker lucu/kocak, balas singkat dan sarkas ala netizen")
 		if err == nil && reply != "" {
 			sendSimiTextReply(ctx, client, evt, reply)
@@ -490,22 +469,15 @@ func handleWithActions(ctx context.Context, client *whatsmeow.Client, evt *event
 		return true
 	}
 
-	// Text reply: deteksi intent & eksekusi
 	text := command.ExtractText(rawMsg)
 	if text == "" {
 		return false
 	}
 
-	_ = client.SendChatPresence(ctx, evt.Info.Chat, types.ChatPresenceComposing, types.ChatPresenceMediaText)
-	defer func() {
-		_ = client.SendChatPresence(context.Background(), evt.Info.Chat, types.ChatPresencePaused, types.ChatPresenceMediaText)
-	}()
-
 	lastAction := lastSimiAction(sessionKey)
 	plan, err := detectIntent(ctx, text, lastAction)
 	if err != nil {
 		log.Printf("[rbot] [simi] detectIntent gagal: %v — fallback ke persona biasa", err)
-		// Fallback ke persona sarkas biasa
 		reply, askErr := AskSimiWithSession(ctx, sessionKey, text)
 		if askErr != nil || strings.TrimSpace(reply) == "" {
 			return false
@@ -514,14 +486,11 @@ func handleWithActions(ctx context.Context, client *whatsmeow.Client, evt *event
 		return true
 	}
 
-	// Update history sesi (seperti biasa) untuk konteks percakapan
 	AddMessageToSession(sessionKey, "User", text)
 
-	// Path 1: LLM bilang ini action nyata → eksekusi command
 	if plan.Action != "" && plan.Action != "none" {
 		canonical, ok := resolveCommandName(plan.Action)
 		if !ok {
-			// Action tak dikenal → fallback ke reply sarkas dari LLM
 			if plan.Reply != "" {
 				AddMessageToSession(sessionKey, "Simi", plan.Reply)
 				sendSimiTextReply(ctx, client, evt, plan.Reply)
@@ -529,27 +498,42 @@ func handleWithActions(ctx context.Context, client *whatsmeow.Client, evt *event
 			}
 			return false
 		}
-		setLastSimiAction(sessionKey, canonical)
 
-		// Eksekusi command handler di background supaya tidak block event loop
+		ac, _ := findActionable(canonical)
+		if ac != nil && ac.OwnerOnly && !command.IsOwner(evt) {
+			if plan.Reply != "" {
+				sendSimiTextReply(ctx, client, evt, plan.Reply)
+			}
+			return true
+		}
+		if ac != nil && ac.AdminOnly && !isOwnerOrAdminAction(evt) {
+			if plan.Reply != "" {
+				sendSimiTextReply(ctx, client, evt, plan.Reply)
+			}
+			return true
+		}
+
+		setLastSimiAction(sessionKey, canonical)
+		args := buildSimiArgs(plan.Args)
+		chatID := evt.Info.Chat.String()
+		senderID := evt.Info.Sender.String()
+		var quotedMsg *waE2E.Message = evt.Message
+
 		go func() {
-			bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("[rbot] [simi] executeAction %s panic: %v", canonical, r)
+				}
+			}()
+			bgCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 			defer cancel()
-			if execErr := executeAction(bgCtx, client, evt, plan); execErr != nil {
+			if execErr := executeActionCore(bgCtx, client, canonical, args, chatID, senderID, quotedMsg); execErr != nil {
 				log.Printf("[rbot] [simi] executeAction %s gagal: %v", canonical, execErr)
-				errReply := fmt.Sprintf("⚠️ Gagal eksekusi %s: %s", canonical, execErr.Error())
-				// Pakai SendMessage langsung (evt lama tidak valid di goroutine lain)
-				_, _ = client.SendMessage(context.Background(), evt.Info.Chat, &waE2E.Message{
-					ExtendedTextMessage: &waE2E.ExtendedTextMessage{
-						Text: proto.String(errReply),
-					},
-				})
 			}
 		}()
 		return true
 	}
 
-	// Path 2: Ngobrol biasa / sarkas chat (mode Simi-Simi original)
 	if plan.Reply != "" {
 		AddMessageToSession(sessionKey, "Simi", plan.Reply)
 		sendSimiTextReply(ctx, client, evt, plan.Reply)
@@ -558,34 +542,11 @@ func handleWithActions(ctx context.Context, client *whatsmeow.Client, evt *event
 	return false
 }
 
-func sendSimiTextReply(ctx context.Context, client *whatsmeow.Client, evt *events.Message, reply string) {
-	msg := &waE2E.Message{
-		ExtendedTextMessage: &waE2E.ExtendedTextMessage{
-			Text: proto.String(reply),
-			ContextInfo: &waE2E.ContextInfo{
-				StanzaID:      proto.String(evt.Info.ID),
-				Participant:   proto.String(evt.Info.Sender.String()),
-				QuotedMessage: evt.Message,
-			},
-		},
-	}
-	_, _ = client.SendMessage(ctx, evt.Info.Chat, msg)
-}
-
-// lastSimiAction & setLastSimiAction menyimpan action terakhir per sesi
-// supaya LLM bisa melanjutkan multi-turn task (misal: pilih hasil play).
-func lastSimiAction(sessionKey string) string {
-	if v, ok := lastActionStore.Load(sessionKey); ok {
-		if s, ok := v.(string); ok {
-			return s
+func findActionable(name string) (*actionableCommand, bool) {
+	for i, ac := range simiActionableCommands {
+		if ac.Name == name {
+			return &simiActionableCommands[i], true
 		}
 	}
-	return ""
+	return nil, false
 }
-
-func setLastSimiAction(sessionKey, action string) {
-	lastActionStore.Store(sessionKey, action)
-}
-
-// lastActionStore adalah sync.Map untuk tracking action terakhir per sesi.
-var lastActionStore sync.Map

@@ -37,6 +37,7 @@ var (
 	reIframeSrc     = regexp.MustCompile(`(?i)<iframe[^>]*src="([^"]+)"`)
 	reQuality       = regexp.MustCompile(`(?i)(\d{3,4}p|\bmp4\b)`)
 	reDirectMP4     = regexp.MustCompile(`(?i)https?://[^"'\s<>]+\.mp4`)
+	reSkipLinkText  = regexp.MustCompile(`(?i)(watch\s*now|hentai\s*episodes|bukan\s*episode|next|prev|previous|back|home|menu)`)
 )
 
 // GetSeriesInfo mengambil metadata series (judul, genre, sinopsis, thumbnail)
@@ -96,6 +97,10 @@ func GetEpisodeList(ctx context.Context, seriesURL string) ([]watchhentai.Episod
 	seen := make(map[string]bool)
 	doc.Find(`a[href]`).Each(func(i int, a *goquery.Selection) {
 		href := a.AttrOr("href", "")
+		linkText := strings.TrimSpace(a.Text())
+		if reSkipLinkText.MatchString(linkText) {
+			return
+		}
 		if !strings.HasPrefix(href, BaseURL+"/") || strings.Contains(href, "/anime/") || seen[href] {
 			return
 		}
@@ -105,7 +110,7 @@ func GetEpisodeList(ctx context.Context, seriesURL string) ([]watchhentai.Episod
 		seen[href] = true
 		number := extractEpisodeNumber(slugFromURL(href))
 		if number == "" {
-			number = extractEpisodeNumber(strings.TrimSpace(a.Text()))
+			number = extractEpisodeNumber(linkText)
 		}
 		if number == "" {
 			return

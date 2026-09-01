@@ -383,33 +383,6 @@ func extractURLFromText(s string) string {
 	return strings.TrimRight(m, ",.;)]}>\"'")
 }
 
-// actionAckText adalah pesan singkat yang dikirim SEBELUM eksekusi command
-// agar user tahu bot lagi kerja (menghindari silent failure).
-func actionAckText(action string) string {
-	switch action {
-	case "play":
-		return "🎵 Lagi cari lagunya, tunggu bentar..."
-	case "sticker":
-		return "🪄 Lagi bikin stiker, sabar..."
-	case "toimg":
-		return "🖼️ Lagi convert ke gambar..."
-	case "hd":
-		return "✨ Lagi upscale HD..."
-	case "smooth":
-		return "🎬 Lagi smooth-in video..."
-	case "download", "tiktok", "ytmp3", "ytmp4":
-		return "⬇️ Lagi download, tunggu..."
-	case "qc":
-		return "💬 Lagi bikin quote..."
-	case "meme":
-		return "🧂 Lagi racik meme..."
-	case "pixiv":
-		return "🎨 Lagi cari artwork..."
-	default:
-		return "⚙️ Lagi proses..."
-	}
-}
-
 // handleWithActions adalah entry point baru yang menggantikan HandleQuotedMessage
 // ketika mode "actions" aktif. Mempertahankan perilaku Simi-Simi biasa (sarkas chat),
 // TETAPI mencoba mendeteksi intent & menjalankan command yang relevan.
@@ -546,13 +519,6 @@ func handleWithActions(ctx context.Context, client *whatsmeow.Client, evt *event
 		}
 		setLastSimiAction(sessionKey, canonical)
 
-		// Acknowledge dulu sebelum eksekusi
-		if ack := strings.TrimSpace(plan.Reply); ack != "" && !isPureActionAck(plan.Reply) {
-			sendSimiTextReply(ctx, client, evt, ack)
-		} else {
-			sendSimiTextReply(ctx, client, evt, actionAckText(canonical))
-		}
-
 		// Eksekusi command handler di background supaya tidak block event loop
 		go func() {
 			bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
@@ -576,20 +542,6 @@ func handleWithActions(ctx context.Context, client *whatsmeow.Client, evt *event
 		AddMessageToSession(sessionKey, "Simi", plan.Reply)
 		sendSimiTextReply(ctx, client, evt, plan.Reply)
 		return true
-	}
-	return false
-}
-
-func isPureActionAck(reply string) bool {
-	r := strings.ToLower(strings.TrimSpace(reply))
-	if r == "" {
-		return true
-	}
-	acks := []string{"lagi", "tunggu", "sabar", "proses", "bentar", "loading", "download", "convert", "racik", "cari", "upscale", "smooth"}
-	for _, a := range acks {
-		if strings.Contains(r, a) {
-			return true
-		}
 	}
 	return false
 }

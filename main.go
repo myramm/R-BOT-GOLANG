@@ -268,19 +268,26 @@ func run(ctx context.Context) error {
 		code, err := client.PairPhone(pairCtx, phone, true, whatsmeow.PairClientChrome, "Chrome (Linux)")
 		pairCancel()
 		if err != nil {
-			return fmt.Errorf("minta kode pairing: %w", err)
+			errStr := err.Error()
+			if strings.Contains(errStr, "429") || strings.Contains(errStr, "rate-overlimit") {
+				// Rate-limit WhatsApp: jangan fatal. Biarkan bot jalan pasif.
+				// User bisa minta pairing baru dari Web Dashboard setelah WA reset.
+				log.Printf("[rbot] pairing di-rate-limit WA (%v); bot berjalan pasif. Tunggu 10-15 menit lalu minta pairing dari web.", err)
+			} else {
+				return fmt.Errorf("minta kode pairing: %w", err)
+			}
+		} else {
+			pretty := code
+			if len(code) == 8 {
+				pretty = code[:4] + "-" + code[4:]
+			}
+			web.SetPairingCode(pretty)
+			fmt.Println("==============================")
+			fmt.Println(" Kode Pairing WhatsApp:", pretty)
+			fmt.Println(" Buka WhatsApp di HP > Perangkat Tertaut > Tautkan dengan nomor telepon")
+			fmt.Println(" PENTING: masukkan kode dalam < 2 menit, jangan sampai kadaluarsa.")
+			fmt.Println("==============================")
 		}
-		pretty := code
-		if len(code) == 8 {
-			pretty = code[:4] + "-" + code[4:]
-		}
-		web.SetPairingCode(pretty)
-		fmt.Println("==============================")
-		fmt.Println(" Kode Pairing WhatsApp:", pretty)
-		fmt.Println(" Buka WhatsApp di HP > Perangkat Tertaut > Tautkan dengan nomor telepon")
-		fmt.Println(" PENTING: masukkan kode dalam < 2 menit, jangan sampai kadaluarsa.")
-		fmt.Println("==============================")
-	}
 
 	log.Printf("[rbot] %d command terdaftar", command.Count())
 	jadibot.Init(ctx)

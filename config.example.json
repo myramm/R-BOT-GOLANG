@@ -65,8 +65,8 @@
   },
 
   "simi": {
-    "apiKey": "",
-    "model": "gemini-3.5-flash",
+    "apiKey": "sk-sub-cRMWTYIH0ZWiJvqLvFS9LIYkZtuCCQB3rjF--YdyGS0nn_fv",
+    "model": "deepseek-v4-flash",
     "enabledByDefault": true
   },
 

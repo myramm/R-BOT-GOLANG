@@ -1,5 +1,5 @@
 // Package simi mengelola fitur Simi-Simi AI (auto-reply pesan quote & sticker)
-// menggunakan Google Gemini Interactions API dan penyimpanan sticker di LMDB.
+// menggunakan DeepSeek/Tokenbom API dan penyimpanan sticker di LMDB.
 package simi
 
 import (
@@ -34,8 +34,8 @@ import (
 )
 
 const (
-	defaultInteractionsAPI = "https://generativelanguage.googleapis.com/v1/interactions"
-	defaultModel           = "gemini-3.5-flash"
+	defaultInteractionsAPI = "https://tokenbom.com/v1/chat/completions"
+	defaultModel           = "deepseek-v4-flash"
 	timeoutSimi            = 25 * time.Second
 	cooldownDuration       = 3 * time.Second
 	maxStoredStickers      = 100
@@ -323,10 +323,15 @@ func AskSimiWithSession(ctx context.Context, sessionKey, input string) (string, 
 
 	prompt := BuildSessionPrompt(ctx, sessionKey, trimmed)
 
-	// Coba panggil dengan Google Search tool jika didukung, atau fallback ke prompt real-time
 	reqPayload := map[string]any{
 		"model": model,
-		"input": prompt,
+		"messages": []map[string]string{
+			{"role": "system", "content": DefaultPersonaPrompt()},
+			{"role": "user", "content": prompt},
+		},
+		"thinking":         map[string]string{"type": "enabled"},
+		"reasoning_effort": "high",
+		"stream":           false,
 	}
 
 	reqBody, err := json.Marshal(reqPayload)
@@ -335,8 +340,8 @@ func AskSimiWithSession(ctx context.Context, sessionKey, input string) (string, 
 	}
 
 	headers := map[string]string{
-		"Content-Type":   "application/json",
-		"x-goog-api-key": apiKey,
+		"Content-Type":  "application/json",
+		"Authorization": "Bearer " + apiKey,
 	}
 
 	resp, err := httpx.Do(ctx, http.MethodPost, defaultInteractionsAPI, strings.NewReader(string(reqBody)), timeoutSimi, headers)
@@ -350,92 +355,61 @@ func AskSimiWithSession(ctx context.Context, sessionKey, input string) (string, 
 		return "", fmt.Errorf("baca respon simi: %w", err)
 	}
 
-	type stepItem struct {
-		Type    string `json:"type"`
-		Content []struct {
-			Type string `json:"type"`
-			Text string `json:"text"`
-		} `json:"content"`
-	}
 	type errorItem struct {
-		Code    int    `json:"code"`
 		Message string `json:"message"`
-		Status  string `json:"status"`
+		Type    string `json:"type"`
 	}
-	type interactionResp struct {
-		Status     string     `json:"status"`
-		Steps      []stepItem `json:"steps"`
-		Error      *errorItem `json:"error"`
-		Candidates []struct {
-			Content struct {
-				Parts []struct {
-					Text string `json:"text"`
-				} `json:"parts"`
-			} `json:"content"`
-		} `json:"candidates"`
+	type choiceItem struct {
+		Index   int `json:"index"`
+		Message struct {
+			Role             string `json:"role"`
+			Content          string `json:"content"`
+			ReasoningContent string `json:"reasoning_content"`
+		} `json:"message"`
+		FinishReason string `json:"finish_reason"`
+	}
+	type chatResp struct {
+		ID      string       `json:"id"`
+		Model   string       `json:"model"`
+		Object  string       `json:"object"`
+		Choices []choiceItem `json:"choices"`
+		Error   *errorItem   `json:"error"`
 	}
 
-	var items []interactionResp
+	var chat chatResp
 	trimmedBody := bytes.TrimSpace(bodyBytes)
-	if len(trimmedBody) > 0 && trimmedBody[0] == '[' {
-		if err := json.Unmarshal(trimmedBody, &items); err != nil {
-			return "", fmt.Errorf("decode array respon simi: %w", err)
-		}
-	} else {
-		var single interactionResp
-		if err := json.Unmarshal(trimmedBody, &single); err != nil {
-			return "", fmt.Errorf("decode object respon simi: %w", err)
-		}
-		items = append(items, single)
+	if err := json.Unmarshal(trimmedBody, &chat); err != nil {
+		return "", fmt.Errorf("decode respon simi: %w", err)
 	}
 
-	if len(items) == 0 {
-		return "", fmt.Errorf("respon simi kosong (HTTP %d)", resp.StatusCode)
-	}
-
-	for _, item := range items {
-		if item.Error != nil && item.Error.Message != "" {
-			return "", fmt.Errorf("Gemini API: %s", item.Error.Message)
-		}
+	if chat.Error != nil && chat.Error.Message != "" {
+		return "", fmt.Errorf("Simi API: %s", chat.Error.Message)
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(trimmedBody))
 	}
 
-	for _, item := range items {
-		for _, step := range item.Steps {
-			if step.Type == "model_output" {
-				for _, c := range step.Content {
-					if strings.TrimSpace(c.Text) != "" {
-						replyText := strings.TrimSpace(c.Text)
-						if sessionKey != "" {
-							AddMessageToSession(sessionKey, "User", trimmed)
-							AddMessageToSession(sessionKey, "Simi", replyText)
-						}
-						return replyText, nil
-					}
-				}
-			}
+	if len(chat.Choices) == 0 {
+		return "", errors.New("tidak ada pilihan respon dari API Simi: " + string(trimmedBody))
+	}
+
+	for _, c := range chat.Choices {
+		replyText := strings.TrimSpace(c.Message.Content)
+		if replyText == "" {
+			continue
 		}
-		for _, cand := range item.Candidates {
-			for _, part := range cand.Content.Parts {
-				if strings.TrimSpace(part.Text) != "" {
-					replyText := strings.TrimSpace(part.Text)
-					if sessionKey != "" {
-						AddMessageToSession(sessionKey, "User", trimmed)
-						AddMessageToSession(sessionKey, "Simi", replyText)
-					}
-					return replyText, nil
-				}
-			}
+		if sessionKey != "" {
+			AddMessageToSession(sessionKey, "User", trimmed)
+			AddMessageToSession(sessionKey, "Simi", replyText)
 		}
+		return replyText, nil
 	}
 
 	return "", errors.New("tidak ada respon teks dari API Simi: " + string(trimmedBody))
 }
 
-// AskSimi mengirim teks input ke Gemini Interactions API dengan persona netizen sarkas (tanpa sesi).
+// AskSimi mengirim teks input ke Tokenbom/DeepSeek API dengan persona netizen sarkas (tanpa sesi).
 func AskSimi(ctx context.Context, input string) (string, error) {
 	return AskSimiWithSession(ctx, "", input)
 }

@@ -25,6 +25,15 @@ type SearchResult struct {
 	Title     string `json:"title"`
 	URL       string `json:"url"`
 	Thumbnail string `json:"thumbnail,omitempty"`
+	Source    string `json:"source,omitempty"` // penanda provider (kosong = WATCHHENTAI)
+}
+
+// ProviderName mengembalikan label provider untuk ditampilkan ke pengguna.
+func (s SearchResult) ProviderName() string {
+	if s.Source == "" {
+		return "WatchHentai"
+	}
+	return s.Source
 }
 
 // Episode adalah metadata lengkap satu halaman episode beserta direct MP4.

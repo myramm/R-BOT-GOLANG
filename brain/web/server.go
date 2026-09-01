@@ -4087,7 +4087,7 @@ func handleAgyBugApprove(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"ok":      true,
-		"message": fmt.Sprintf("Bug %s berhasil disetujui (APPROVED). AGY akan memproses di sandbox.", req.ID),
+		"message": fmt.Sprintf("Bug %s berhasil disetujui (APPROVED). AGY akan memproses di rbot.", req.ID),
 		"bug":     bug,
 	})
 }

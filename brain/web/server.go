@@ -25,7 +25,9 @@ import (
 
 	"github.com/coder/websocket"
 	"go.mau.fi/whatsmeow"
-	"go.mau.fi/whatsmeow/proto/waE2E"
+	"go.mau.fi/whatsmeow/proto/waCompanionReg"
+	"go.mau.fi/whatsmeow/proto/waWa6"
+	wastore "go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 	"google.golang.org/protobuf/proto"
@@ -760,6 +762,27 @@ func FormatPairingCode(code string) string {
 	return code
 }
 
+// applyChromeFingerprint menyetel fingerprint DeviceProps + BaseClientPayload
+// agar konsisten dengan PairClientChrome (WhatsApp Web/Desktop). WA server
+// akan menolak pairing kalau device fingerprint tidak konsisten dengan
+// companion_platform_id yang diklaim (lihat whatsmeow issue #1191).
+// Fungsi ini idempotent dan cukup dipanggil sebelum PairPhone.
+func applyChromeFingerprint() {
+	wastore.DeviceProps.Os = proto.String("Chrome")
+	wastore.DeviceProps.Version = &waCompanionReg.DeviceProps_AppVersion{
+		Primary:   proto.Uint32(143),
+		Secondary: proto.Uint32(0),
+		Tertiary:  proto.Uint32(7499),
+	}
+	wastore.DeviceProps.PlatformType = waCompanionReg.DeviceProps_CHROME.Enum()
+
+	wastore.BaseClientPayload.UserAgent.Platform = waWa6.ClientPayload_UserAgent_WEB.Enum()
+	wastore.BaseClientPayload.UserAgent.OsVersion = proto.String("10.15.7")
+	wastore.BaseClientPayload.UserAgent.OsBuildNumber = proto.String("10.15.7")
+	wastore.BaseClientPayload.UserAgent.Manufacturer = proto.String("Apple Inc.")
+	wastore.BaseClientPayload.UserAgent.Device = proto.String("Mac OS X")
+}
+
 // handleBotPairing meminta kode pairing on-demand untuk bot utama langsung dari
 // Web Dashboard, tanpa perlu masuk VPS untuk melihat terminal.
 func handleBotPairing(w http.ResponseWriter, r *http.Request) {
@@ -820,6 +843,11 @@ func handleBotPairing(w http.ResponseWriter, r *http.Request) {
 		// Sama seperti alur startup: beri jeda sebelum PairPhone setelah Connect.
 		time.Sleep(time.Second)
 	}
+
+	// WA server reject pairing kalau DeviceProps fingerprint tidak konsisten
+	// dengan companion_platform_id (whatsmeow issue #1191). Override fingerprint
+	// ke Chrome macOS supaya cocok dengan PairClientChrome.
+	applyChromeFingerprint()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()

@@ -16,6 +16,9 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 	"go.mau.fi/whatsmeow"
 	waE2E "go.mau.fi/whatsmeow/proto/waE2E"
+	"go.mau.fi/whatsmeow/proto/waCompanionReg"
+	"go.mau.fi/whatsmeow/proto/waWa6"
+	wastore "go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
@@ -243,6 +246,22 @@ func run(ctx context.Context) error {
 		if phone == "" {
 			return fmt.Errorf("botNumber kosong di config.json")
 		}
+		// WA server reject pairing kalau DeviceProps fingerprint tidak konsisten
+		// dengan companion_platform_id (whatsmeow issue #1191). Override fingerprint
+		// ke Chrome macOS supaya cocok dengan PairClientChrome.
+		wastore.DeviceProps.Os = proto.String("Chrome")
+		wastore.DeviceProps.Version = &waCompanionReg.DeviceProps_AppVersion{
+			Primary:   proto.Uint32(143),
+			Secondary: proto.Uint32(0),
+			Tertiary:  proto.Uint32(7499),
+		}
+		wastore.DeviceProps.PlatformType = waCompanionReg.DeviceProps_CHROME.Enum()
+		wastore.BaseClientPayload.UserAgent.Platform = waWa6.ClientPayload_UserAgent_WEB.Enum()
+		wastore.BaseClientPayload.UserAgent.OsVersion = proto.String("10.15.7")
+		wastore.BaseClientPayload.UserAgent.OsBuildNumber = proto.String("10.15.7")
+		wastore.BaseClientPayload.UserAgent.Manufacturer = proto.String("Apple Inc.")
+		wastore.BaseClientPayload.UserAgent.Device = proto.String("Mac OS X")
+
 		// PairPhone harus dipanggil setelah websocket tersambung.
 		time.Sleep(time.Second)
 		pairCtx, pairCancel := context.WithTimeout(ctx, 45*time.Second)

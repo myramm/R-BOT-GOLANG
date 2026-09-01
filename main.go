@@ -200,6 +200,25 @@ func run(ctx context.Context) error {
 		case *events.LoggedOut:
 			log.Printf("[rbot] sesi WhatsApp logout; hapus session/store.db untuk pairing baru")
 			web.BroadcastMetricsNow()
+		case *events.PairPasskeyRequest:
+			// Flow passkey baru Meta (sejak akhir Juni 2026): setelah kode pairing
+			// dimasukkan, WhatsApp bisa minta verifikasi passkey/biometrik di HP.
+			// Fix handoff ini berasal dari PR tulir/whatsmeow#1234; tanpa itu
+			// pairing gagal dengan "missing link_code_pairing_wrapped_primary_ephemeral_pub".
+			log.Printf("[rbot] pairing butuh verifikasi passkey: selesaikan verifikasi biometrik/PIN di HP WhatsApp")
+			web.SetPasskeyRequired(true)
+		case *events.PairPasskeyError:
+			log.Printf("[rbot] error passkey pairing (continuation=%v): %v", evt.Continuation, evt.Error)
+			web.SetPasskeyRequired(false)
+		case *events.PairPasskeyConfirmation:
+			// Kode konfirmasi 8 karakter hasil flow passkey; tampilkan seperti kode pairing.
+			log.Printf("[rbot] kode konfirmasi passkey pairing: %s", evt.Code)
+			web.SetPairingCode(evt.Code)
+			if evt.SkipHandoffUX {
+				log.Printf("[rbot] handoff passkey otomatis; verifikasi ulang kode di HP tidak diperlukan")
+			} else {
+				log.Printf("[rbot] cocokkan kode di HP WhatsApp lalu konfirmasi untuk menyelesaikan pairing")
+			}
 		}
 	})
 

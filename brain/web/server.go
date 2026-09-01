@@ -79,10 +79,11 @@ var (
 	auditMu     sync.Mutex
 	auditLoaded bool
 
-	waClient    *whatsmeow.Client
-	pairingCode string
-	startTime   = time.Now()
-	stateMu     sync.RWMutex
+	waClient      *whatsmeow.Client
+	pairingCode   string
+	passkeyNeeded bool
+	startTime     = time.Now()
+	stateMu       sync.RWMutex
 
 	lastCPUTime int64
 	cpuMu       sync.Mutex
@@ -292,6 +293,16 @@ func SetPairingCode(code string) {
 	BroadcastMetricsNow()
 }
 
+// SetPasskeyRequired menandai bahwa pairing sedang menunggu verifikasi
+// passkey/biometrik di HP (flow baru Meta) supaya dashboard bisa menampilkan
+// statusnya secara real-time.
+func SetPasskeyRequired(needed bool) {
+	stateMu.Lock()
+	passkeyNeeded = needed
+	stateMu.Unlock()
+	BroadcastMetricsNow()
+}
+
 // System Metrics Helpers
 func getCPUUsage() float64 {
 	data, err := os.ReadFile("/proc/stat")
@@ -369,6 +380,7 @@ func BuildStatusPayload() map[string]any {
 	stateMu.RLock()
 	cli := waClient
 	pairCode := pairingCode
+	passkey := passkeyNeeded
 	stateMu.RUnlock()
 
 	var connected, loggedIn bool
@@ -410,7 +422,8 @@ func BuildStatusPayload() map[string]any {
 			"loggedIn":    loggedIn,
 			"jid":         jid,
 			"pushName":    pushName,
-			"pairingCode": pairCode,
+			"pairingCode":   pairCode,
+			"passkeyNeeded": passkey,
 		},
 		"system": map[string]any{
 			"goVersion":  runtime.Version(),
@@ -803,7 +816,7 @@ func handleBotPairing(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(errStr, "429") || strings.Contains(errStr, "rate-overlimit") {
 			msg = "Terlalu banyak permintaan kode pairing (rate-limit WhatsApp). Tunggu 5-10 menit lalu coba lagi."
 		} else if strings.Contains(errStr, "link_code_pairing_wrapped_primary_ephemeral_pub") || strings.Contains(errStr, "passkey") {
-			msg = "WhatsApp memerlukan verifikasi passkey/biometrik. Pastikan kamu menyelesaikan verifikasi di HP setelah memasukkan kode. Coba lagi jika gagal."
+			msg = "Pairing membutuhkan verifikasi passkey/biometrik. Masukkan kode di HP, selesaikan verifikasi passkey yang diminta, lalu tunggu proses selesai. Bila gagal, tunggu 1-2 menit lalu klik Minta Kode Pairing lagi."
 		} else if strings.Contains(errStr, "websocket") || strings.Contains(errStr, "connect") {
 			msg = "Gagal terhubung ke server WhatsApp. Periksa koneksi internet dan coba lagi."
 		}

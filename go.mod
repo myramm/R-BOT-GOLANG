@@ -2,6 +2,12 @@ module rbot
 
 go 1.26.5
 
+// Fork lokal whatsmeow: berisi fix passkey handoff pairing dari PR
+// tulir/whatsmeow#1234 (mengatasi error "missing
+// link_code_pairing_wrapped_primary_ephemeral_pub" saat pairing via web,
+// issue #1233/#1188). Hapus baris replace ini bila upstream sudah rilis.
+replace go.mau.fi/whatsmeow => ./third_party/whatsmeow
+
 require (
 	github.com/PowerDNS/lmdb-go v1.9.3
 	github.com/PuerkitoBio/goquery v1.12.0

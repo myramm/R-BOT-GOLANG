@@ -318,9 +318,18 @@ func sessSelectMiniOppaiSeries(ctx context.Context, c *command.Ctx, key string, 
 	}
 	c.React(ctx, "✅")
 
+	// Ambil episode ENG dari watchhentai berdasarkan judul yang sama.
+	var engEpisodes []watchhentai.EpisodeLink
+	whResults, whErr := watchhentai.Search(ctx, selected.Title)
+	if whErr == nil && len(whResults) > 0 {
+		engEpisodes, _ = watchhentai.GetEpisodeList(ctx, whResults[0].URL)
+	}
+
+	// Gabungkan untuk indexing (ID + ENG).
+	sess.Episodes = append(episodes, engEpisodes...)
+
 	sess.Step = stepSelectHentaiEpisode
 	sess.Series = &selected
-	sess.Episodes = episodes
 	saveHentaiSession(key, sess)
 
 	// Ambil sinopsis & genre series (best-effort).
@@ -334,7 +343,7 @@ func sessSelectMiniOppaiSeries(ctx context.Context, c *command.Ctx, key string, 
 		}
 	}
 
-	_, _ = c.Reply(ctx, formatHentaiEpisodeList(info, episodes))
+	_, _ = c.Reply(ctx, formatHentaiEpisodeList(info, episodes, engEpisodes))
 	return true
 }
 
@@ -451,7 +460,7 @@ func handleHentaiSessionReply(ctx context.Context, client *whatsmeow.Client, evt
 			}
 		}
 
-		_, _ = c.Reply(ctx, formatHentaiEpisodeList(sess.Info, episodes))
+		_, _ = c.Reply(ctx, formatHentaiEpisodeList(sess.Info, nil, episodes))
 		return true
 
 	case stepSelectHentaiEpisode:
@@ -617,7 +626,7 @@ func formatHentaiChoices(query string, results []watchhentai.SearchResult) strin
 	return b.String()
 }
 
-func formatHentaiEpisodeList(info *watchhentai.SeriesInfo, episodes []watchhentai.EpisodeLink) string {
+func formatHentaiEpisodeList(info *watchhentai.SeriesInfo, idEpisodes, engEpisodes []watchhentai.EpisodeLink) string {
 	var b strings.Builder
 	if info != nil {
 		title := info.Title
@@ -637,25 +646,28 @@ func formatHentaiEpisodeList(info *watchhentai.SeriesInfo, episodes []watchhenta
 		}
 	}
 
-	fmt.Fprintf(&b, "\n📜 *Daftar Episode (%d):*\n\n", len(episodes))
+	allCount := len(idEpisodes) + len(engEpisodes)
+	fmt.Fprintf(&b, "\n📜 *Daftar Episode (%d):*\n\n", allCount)
 
-	maxShow := 10
-	if len(episodes) < maxShow {
-		maxShow = len(episodes)
-	}
-	for i := 0; i < maxShow; i++ {
-		ep := episodes[i]
+	fmt.Fprintf(&b, "*ID minioppai:*\n")
+	for i, ep := range idEpisodes {
 		label := ep.Title
 		if label == "" {
 			label = "Episode " + ep.Number
 		}
 		fmt.Fprintf(&b, "%d. %s\n", i+1, label)
 	}
-	if len(episodes) > maxShow {
-		fmt.Fprintf(&b, " • ... s/d Episode %s\n", episodes[len(episodes)-1].Number)
+
+	fmt.Fprintf(&b, "*ENG watchhentai:*\n")
+	for i, ep := range engEpisodes {
+		label := ep.Title
+		if label == "" {
+			label = "Episode " + ep.Number
+		}
+		fmt.Fprintf(&b, "%d. %s\n", len(idEpisodes)+i+1, label)
 	}
 
-	fmt.Fprintf(&b, "\n⚠️ _Konten 18+_\n👉 *Ketik nomor episode (1 - %d) untuk memilih kualitas.*", len(episodes))
+	fmt.Fprintf(&b, "\n⚠️ _Konten 18+_\n👉 *Ketik nomor episode (1 - %d) untuk memilih kualitas.*", allCount)
 	return b.String()
 }
 

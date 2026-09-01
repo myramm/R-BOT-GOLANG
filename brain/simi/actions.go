@@ -114,6 +114,18 @@ var simiActionableCommands = []actionableCommand{
 		Description: "Cari & kirim ilustrasi dari Pixiv berdasarkan kata kunci atau URL.",
 		ArgsHint:    `{"query": "kata kunci atau URL pixiv"}`,
 	},
+	{
+		Name:        "anime",
+		Aliases:     []string{"samehadaku"},
+		Description: "Cari episode anime berdasarkan judul (mis. 'Naruto eps 12'). Download link video.",
+		ArgsHint:    `{"query": "judul anime + episode opsional"}`,
+	},
+	{
+		Name:        "hentai",
+		Aliases:     []string{"minioppai"},
+		Description: "Cari & download video hentai dari MiniOppai berdasarkan judul atau kode episode.",
+		ArgsHint:    `{"query": "judul atau kode episode hentai"}`,
+	},
 }
 
 // commandAliasMap memetakan alias → command name untuk lookup cepat.

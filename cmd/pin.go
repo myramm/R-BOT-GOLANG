@@ -34,7 +34,7 @@ type pinImageVariant struct {
 
 type pinRaw struct {
 	ID          string                     `json:"id"`
-	Title       string                     `json:"title"`
+	Title       any                        `json:"title"` // Pinterest kadang kirim object {content, urls}
 	GridTitle   string                     `json:"grid_title"`
 	Description string                     `json:"description"`
 	Images      map[string]pinImageVariant `json:"images"`
@@ -114,11 +114,34 @@ func normalizePin(raw pinRaw) *pinResult {
 	if image == "" || raw.ID == "" {
 		return nil
 	}
-	title := raw.Title
+	title := extractPinTitle(raw.Title)
 	if title == "" {
 		title = raw.GridTitle
 	}
 	return &pinResult{ID: raw.ID, Title: title, Description: raw.Description, Image: image, PinURL: pinterestBase + "/pin/" + raw.ID + "/", Uploader: raw.Pinner.Username, Saves: raw.RepinCount}
+}
+
+// extractPinTitle menormalkan field title Pinterest yang bisa berupa
+// string polos atau object {content, urls}. Tipe diturunkan dari any.
+func extractPinTitle(v any) string {
+	switch t := v.(type) {
+	case string:
+		return t
+	case map[string]any:
+		if s, ok := t["content"].(string); ok {
+			return s
+		}
+		if s, ok := t["title"].(string); ok {
+			return s
+		}
+	case []any:
+		for _, item := range t {
+			if s := extractPinTitle(item); s != "" {
+				return s
+			}
+		}
+	}
+	return ""
 }
 
 func searchPinterest(ctx context.Context, query string, limit int) ([]pinResult, error) {

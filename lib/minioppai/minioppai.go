@@ -32,10 +32,11 @@ const (
 const Provider = "MINIOPPAI"
 
 var (
-	reEpisodeNum = regexp.MustCompile(`(?i)(?:episode|ep)[-_\s]*(\d+)`)
-	reMirrorOpt  = regexp.MustCompile(`(?is)<option value="(.*?)">(.*?)</option>`)
-	reIframeSrc  = regexp.MustCompile(`(?i)<iframe[^>]*src="([^"]+)"`)
-	reQuality    = regexp.MustCompile(`(?i)(\d{3,4}p|\bmp4\b)`)
+	reEpisodeNum    = regexp.MustCompile(`(?i)(?:episode|ep)[-_\s]*(\d+)`)
+	reMirrorOpt     = regexp.MustCompile(`(?is)<option value="(.*?)">(.*?)</option>`)
+	reIframeSrc     = regexp.MustCompile(`(?i)<iframe[^>]*src="([^"]+)"`)
+	reQuality       = regexp.MustCompile(`(?i)(\d{3,4}p|\bmp4\b)`)
+	reDirectMP4     = regexp.MustCompile(`(?i)https?://[^"'\s<>]+\.mp4`)
 )
 
 // GetSeriesInfo mengambil metadata series (judul, genre, sinopsis, thumbnail)
@@ -381,6 +382,155 @@ func firstStreamURL(body string) string {
 		return src
 	}
 	return ""
+}
+
+// DownloadLink adalah tautan download dari satu provider/server.
+type DownloadLink struct {
+	Server    string `json:"server"`
+	URL       string `json:"url"`
+	DirectURL string `json:"direct_url,omitempty"`
+}
+
+// QualityGroup mengelompokkan link download berdasarkan kualitas dan format.
+type QualityGroup struct {
+	Quality string         `json:"quality"`
+	Format  string         `json:"format"`
+	Links   []DownloadLink `json:"links"`
+}
+
+// EpisodeDownload adalah hasil download per episode dengan daftar kualitas.
+type EpisodeDownload struct {
+	Title     string         `json:"title"`
+	URL       string         `json:"url"`
+	Qualities []QualityGroup `json:"qualities"`
+	IsBatch   bool           `json:"is_batch"`
+}
+
+// GetEpisodeDownloads mengambil link download per kualitas/format dari halaman episode minioppai.
+func GetEpisodeDownloads(ctx context.Context, epURL string) (*EpisodeDownload, error) {
+	body, err := fetchHTML(ctx, epURL)
+	if err != nil {
+		return nil, err
+	}
+	title := cleanText(parseTitle(body))
+	isBatch := strings.Contains(epURL, "/batch/") || strings.Contains(strings.ToLower(title), "batch")
+
+	opts := parseStreamOptions(body)
+	if len(opts) == 0 {
+		return nil, fmt.Errorf("tidak ada pilihan kualitas tersedia untuk episode ini")
+	}
+
+	// Kelompokkan berdasarkan kualitas dan format
+	groupMap := make(map[string]*QualityGroup)
+	var order []string
+	for _, o := range opts {
+		quality := normalizeQuality(o.Quality)
+		if quality == "" {
+			quality = "Stream"
+		}
+		format := detectFormat(o.URL, quality)
+
+		key := quality + "|" + format
+		if _, ok := groupMap[key]; !ok {
+			groupMap[key] = &QualityGroup{
+				Quality: quality,
+				Format:  format,
+				Links:   []DownloadLink{},
+			}
+			order = append(order, key)
+		}
+		groupMap[key].Links = append(groupMap[key].Links, DownloadLink{
+			Server:    detectServer(o.URL),
+			URL:       o.URL,
+			DirectURL: ResolveDirectLink(ctx, detectServer(o.URL), o.URL),
+		})
+	}
+
+	var qualities []QualityGroup
+	for _, key := range order {
+		qualities = append(qualities, *groupMap[key])
+	}
+
+	return &EpisodeDownload{
+		Title:     title,
+		URL:       epURL,
+		Qualities: qualities,
+		IsBatch:   isBatch,
+	}, nil
+}
+
+// ResolveDirectLink mencoba mengekstrak link unduhan langsung dari provider streaming.
+func ResolveDirectLink(ctx context.Context, server, pageURL string) string {
+	srvLower := strings.ToLower(server)
+
+	// 1) Streampai: coba ambil direct MP4 dari halaman stream
+	if strings.Contains(srvLower, "streampai") {
+		return resolveStreampai(ctx, pageURL)
+	}
+
+	// 2) Jika bukan halaman stream, kembalikan URL langsung
+	if strings.HasPrefix(pageURL, "http") && (strings.HasSuffix(pageURL, ".mp4") || strings.HasSuffix(pageURL, ".m3u8")) {
+		return pageURL
+	}
+
+	return pageURL
+}
+
+// resolveStreampai mencoba mengekstrak URL video langsung dari halaman streampai.
+func resolveStreampai(ctx context.Context, streamURL string) string {
+	body, err := fetchHTML(ctx, streamURL)
+	if err != nil {
+		return streamURL
+	}
+
+	// Cari source MP4 langsung di halaman
+	if m := regexp.MustCompile(`(?i)source\s*=\s*["']([^"']+\.mp4[^"']*)["']`).FindStringSubmatch(body); len(m) > 1 {
+		return m[1]
+	}
+	if m := reDirectMP4.FindStringSubmatch(body); len(m) > 1 {
+		return m[1]
+	}
+
+	// Cari di JavaScript variabel video source
+	if m := regexp.MustCompile(`(?i)(?:file|source|video|url)\s*[:=]\s*["']([^"']+(?:\.mp4|\.m3u8)[^"']*)["']`).FindStringSubmatch(body); len(m) > 1 {
+		return m[1]
+	}
+
+	return streamURL
+}
+
+func parseTitle(body string) string {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(body))
+	if err != nil {
+		return ""
+	}
+	return cleanText(doc.Find("h1").First().Text())
+}
+
+func detectFormat(url, quality string) string {
+	if strings.Contains(strings.ToLower(url), ".mp4") || strings.HasSuffix(strings.ToLower(quality), "mp4") {
+		return "MP4"
+	}
+	if strings.Contains(strings.ToLower(url), ".m3u8") || strings.Contains(strings.ToLower(quality), "x265") || strings.Contains(strings.ToLower(quality), "265") {
+		return "x265"
+	}
+	return "MP4"
+}
+
+func detectServer(url string) string {
+	if strings.Contains(url, "streampai") {
+		return "Streampai"
+	}
+	if strings.Contains(url, "vidstream") {
+		return "Vidstream"
+	}
+	if strings.Contains(url, "streamsb") {
+		return "StreamSB"
+	}
+	if strings.Contains(url, "mp4upload") {
+		return "MP4Upload"
+	}
+	return "Stream"
 }
 
 func chapterLess(a, b string) bool {

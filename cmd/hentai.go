@@ -610,7 +610,7 @@ func formatHentaiChoices(query string, results []watchhentai.SearchResult) strin
 		maxShow = len(results)
 	}
 	for i := 0; i < maxShow; i++ {
-		fmt.Fprintf(&b, "%d. *%s* [%s]\n", i+1, results[i].Title, results[i].ProviderName())
+		fmt.Fprintf(&b, "%d. *%s*\n", i+1, results[i].Title)
 	}
 
 	fmt.Fprintf(&b, "\n⚠️ _Konten 18+_\n👉 *Ketik nomor (1 - %d) untuk memilih.*", maxShow)

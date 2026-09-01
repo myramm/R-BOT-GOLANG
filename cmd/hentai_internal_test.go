@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"strings"
 	"testing"
 
 	"go.mau.fi/whatsmeow/types"
@@ -8,6 +9,7 @@ import (
 
 	"rbot/brain/config"
 	"rbot/brain/hentailimit"
+	"rbot/lib/minioppai"
 	"rbot/brain/store"
 )
 
@@ -17,33 +19,6 @@ func openHentaiStore(t *testing.T) {
 		t.Fatalf("store.Open: %v", err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-}
-
-func TestIsHentaiSlug(t *testing.T) {
-	valid := []string{"furachi-episode-1-id-01", "some-series-episode-12"}
-	invalid := []string{"furachi", "two words-ep", "WatchHentai.net/videos/x"}
-	for _, s := range valid {
-		if !isHentaiSlug(s) {
-			t.Errorf("isHentaiSlug(%q) = false, want true", s)
-		}
-	}
-	for _, s := range invalid {
-		if isHentaiSlug(s) {
-			t.Errorf("isHentaiSlug(%q) = true, want false", s)
-		}
-	}
-}
-
-func TestIsWatchHentaiInput(t *testing.T) {
-	if !isWatchHentaiInput("https://watchhentai.net/videos/furachi-episode-1-id-01/") {
-		t.Error("full URL harus dikenali sebagai input watchhentai")
-	}
-	if !isWatchHentaiInput("furachi-episode-1-id-01") {
-		t.Error("slug episode harus dikenali sebagai input watchhentai")
-	}
-	if isWatchHentaiInput("touhou big breasts") {
-		t.Error("query pencarian biasa tidak boleh dianggap slug/link")
-	}
 }
 
 func TestSafeHentaiFileName(t *testing.T) {
@@ -119,5 +94,40 @@ func TestIsGrupOfficialChat(t *testing.T) {
 	evt.Info.IsGroup = false
 	if isGrupOfficialChat(evt) {
 		t.Fatal("chat pribadi tidak boleh dianggap grup official")
+	}
+}
+
+// TestFormatHentaiEpisodeList_OnlyMiniOppai (Test 5 & 7) memastikan formatter
+// hanya menampilkan "ID minioppai" dan jumlah dihitung dari episode aktual.
+func TestFormatHentaiEpisodeList_OnlyMiniOppai(t *testing.T) {
+	info := &minioppai.SeriesInfo{Title: "Kotowarenai Haha", Genres: []string{"Harem", "Incest"}}
+	episodes := []minioppai.EpisodeLink{
+		{Number: "1", Title: "Kotowarenai Haha Episode 1", URL: "https://minioppai.org/ep1"},
+		{Number: "2", Title: "Kotowarenai Haha Episode 2", URL: "https://minioppai.org/ep2"},
+		{Number: "3", Title: "Kotowarenai Haha Episode 3", URL: "https://minioppai.org/ep3"},
+	}
+	output := formatHentaiEpisodeList(info, episodes)
+
+	if !strings.Contains(output, "ID minioppai") {
+		t.Error("output harus mengandung 'ID minioppai'")
+	}
+	if strings.Contains(output, "ENG watchhentai") {
+		t.Error("output TIDAK boleh mengandung 'ENG watchhentai'")
+	}
+	if !strings.Contains(output, "Daftar Episode (3)") {
+		t.Errorf("output harus mengandung 'Daftar Episode (3)', got: %q", output)
+	}
+}
+
+// TestFormatHentaiEpisodeList_Empty (Test 7) memastikan 0 episode ditampilkan
+// secara benar tanpa legacy fallback.
+func TestFormatHentaiEpisodeList_Empty(t *testing.T) {
+	info := &minioppai.SeriesInfo{Title: "Kotowarenai Haha"}
+	output := formatHentaiEpisodeList(info, nil)
+	if !strings.Contains(output, "Daftar Episode (0)") {
+		t.Errorf("expected 'Daftar Episode (0)', got: %q", output)
+	}
+	if strings.Contains(output, "ENG watchhentai") {
+		t.Error("output TIDAK boleh mengandung 'ENG watchhentai'")
 	}
 }

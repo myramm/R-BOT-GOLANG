@@ -16,11 +16,6 @@ func TestHentaiCommandRegistered(t *testing.T) {
 	if cmd.Name != "hentai" {
 		t.Errorf("Expected command name 'hentai', got '%s'", cmd.Name)
 	}
-
-	aliasCmd := command.Resolve("watchhentai")
-	if aliasCmd == nil || aliasCmd.Name != "hentai" {
-		t.Errorf("Expected alias 'watchhentai' to resolve to 'hentai'")
-	}
 }
 
 func TestHentaiHandlerCategory(t *testing.T) {

@@ -1,7 +1,7 @@
 // Package minioppai adalah scraper minioppai.org: search series, metadata,
-// daftar episode, dan opsi stream (mirror). Menggunakan kembali tipe dari
-// watchhentai (SearchResult, EpisodeLink, SeriesInfo, DownloadOption) agar
-// perintah .hentai dapat menggabungkan dua provider dengan satu struktur.
+// daftar episode, opsi stream (mirror), dan bagian "Download" halaman episode.
+// Satu-satunya provider untuk perintah .hentai; tipe hasil didefinisikan di
+// sini (self-contained) sehingga tidak bergantung pada 
 package minioppai
 
 import (
@@ -20,7 +20,6 @@ import (
 	"github.com/PuerkitoBio/goquery"
 
 	"rbot/lib/httpx"
-	"rbot/lib/watchhentai"
 )
 
 const (
@@ -30,6 +29,47 @@ const (
 
 // Provider adalah penanda sumber hasil minioppai.
 const Provider = "MINIOPPAI"
+
+// SearchResult adalah satu hasil pencarian series/episode.
+type SearchResult struct {
+	Title     string `json:"title"`
+	URL       string `json:"url"`
+	Thumbnail string `json:"thumbnail,omitempty"`
+	Source    string `json:"source,omitempty"` // penanda provider (kosong = MINIOPPAI)
+}
+
+// SeriesInfo adalah metadata halaman series: judul, sinopsis, dan genre.
+type SeriesInfo struct {
+	Title     string   `json:"title"`
+	URL       string   `json:"url"`
+	Thumbnail string   `json:"thumbnail,omitempty"`
+	Synopsis  string   `json:"synopsis,omitempty"`
+	Genres    []string `json:"genres,omitempty"`
+}
+
+// Episode adalah metadata lengkap satu halaman episode.
+type Episode struct {
+	Source      string `json:"source"`
+	Title       string `json:"title"`
+	Slug        string `json:"slug"`
+	URL         string `json:"url"`
+	Description string `json:"description,omitempty"`
+	Thumbnail   string `json:"thumbnail,omitempty"`
+	VideoURL    string `json:"video_url,omitempty"`
+}
+
+// EpisodeLink adalah tautan satu episode pada halaman series.
+type EpisodeLink struct {
+	Number string `json:"number"`
+	Title  string `json:"title"`
+	URL    string `json:"url"`
+}
+
+// DownloadOption adalah satu pilihan kualitas stream pada halaman episode.
+type DownloadOption struct {
+	Quality string `json:"quality"`
+	URL     string `json:"url"`
+}
 
 var (
 	reEpisodeNum    = regexp.MustCompile(`(?i)(?:episode|ep)[-_\s]*(\d+)`)
@@ -42,7 +82,7 @@ var (
 
 // GetSeriesInfo mengambil metadata series (judul, genre, sinopsis, thumbnail)
 // dari halaman /anime/<slug>/.
-func GetSeriesInfo(ctx context.Context, seriesURL string) (*watchhentai.SeriesInfo, error) {
+func GetSeriesInfo(ctx context.Context, seriesURL string) (*SeriesInfo, error) {
 	body, err := fetchHTML(ctx, seriesURL)
 	if err != nil {
 		return nil, err
@@ -73,7 +113,7 @@ func GetSeriesInfo(ctx context.Context, seriesURL string) (*watchhentai.SeriesIn
 	if title == "" {
 		return nil, fmt.Errorf("tidak dapat mem-parse halaman series %s", seriesURL)
 	}
-	return &watchhentai.SeriesInfo{
+	return &SeriesInfo{
 		Title:     title,
 		URL:       seriesURL,
 		Thumbnail: thumbnail,
@@ -83,7 +123,7 @@ func GetSeriesInfo(ctx context.Context, seriesURL string) (*watchhentai.SeriesIn
 }
 
 // GetEpisodeList mengambil daftar episode dari halaman series /anime/<slug>/.
-func GetEpisodeList(ctx context.Context, seriesURL string) ([]watchhentai.EpisodeLink, error) {
+func GetEpisodeList(ctx context.Context, seriesURL string) ([]EpisodeLink, error) {
 	body, err := fetchHTML(ctx, seriesURL)
 	if err != nil {
 		return nil, err
@@ -93,7 +133,7 @@ func GetEpisodeList(ctx context.Context, seriesURL string) ([]watchhentai.Episod
 		return nil, err
 	}
 
-	var eps []watchhentai.EpisodeLink
+	var eps []EpisodeLink
 	seen := make(map[string]bool)
 	doc.Find(`a[href]`).Each(func(i int, a *goquery.Selection) {
 		href := a.AttrOr("href", "")
@@ -119,7 +159,7 @@ func GetEpisodeList(ctx context.Context, seriesURL string) ([]watchhentai.Episod
 			return
 		}
 		title := "Episode " + number
-		eps = append(eps, watchhentai.EpisodeLink{Number: number, Title: title, URL: href})
+		eps = append(eps, EpisodeLink{Number: number, Title: title, URL: href})
 	})
 
 	sort.SliceStable(eps, func(i, j int) bool {
@@ -129,7 +169,7 @@ func GetEpisodeList(ctx context.Context, seriesURL string) ([]watchhentai.Episod
 }
 
 // Search mencari series di minioppai.org melalui halaman hasil pencarian HTML.
-func Search(ctx context.Context, query string) ([]watchhentai.SearchResult, error) {
+func Search(ctx context.Context, query string) ([]SearchResult, error) {
 	searchURL := fmt.Sprintf("%s/?s=%s", BaseURL, url.QueryEscape(query))
 	body, err := fetchHTML(ctx, searchURL)
 	if err != nil {
@@ -139,13 +179,13 @@ func Search(ctx context.Context, query string) ([]watchhentai.SearchResult, erro
 }
 
 // searchFromHTML mengurai hasil pencarian seri dari HTML halaman ?s=<query>.
-func searchFromHTML(body string) ([]watchhentai.SearchResult, error) {
+func searchFromHTML(body string) ([]SearchResult, error) {
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
 
-	var results []watchhentai.SearchResult
+	var results []SearchResult
 	seen := make(map[string]bool)
 	doc.Find(`a[href]`).Each(func(i int, a *goquery.Selection) {
 		href := a.AttrOr("href", "")
@@ -170,7 +210,7 @@ func searchFromHTML(body string) ([]watchhentai.SearchResult, error) {
 		if thumb == "" {
 			thumb = img.AttrOr("src", "")
 		}
-		results = append(results, watchhentai.SearchResult{
+		results = append(results, SearchResult{
 			Title:     cleanText(title),
 			URL:       href,
 			Thumbnail: thumb,
@@ -194,7 +234,7 @@ func searchFromHTML(body string) ([]watchhentai.SearchResult, error) {
 
 // GetEpisode mengambil metadata satu episode dari halaman episode, termasuk
 // opsi stream (mirror) bila tersedia.
-func GetEpisode(ctx context.Context, episodeURL string) (*watchhentai.Episode, error) {
+func GetEpisode(ctx context.Context, episodeURL string) (*Episode, error) {
 	body, err := fetchHTML(ctx, episodeURL)
 	if err != nil {
 		return nil, err
@@ -209,7 +249,7 @@ func GetEpisode(ctx context.Context, episodeURL string) (*watchhentai.Episode, e
 	}
 	thumbnail := doc.Find(`meta[property="og:image"]`).First().AttrOr("content", "")
 
-	return &watchhentai.Episode{
+	return &Episode{
 		Source:    Provider,
 		Title:     title,
 		Slug:      slugFromURL(episodeURL),
@@ -221,7 +261,7 @@ func GetEpisode(ctx context.Context, episodeURL string) (*watchhentai.Episode, e
 
 // GetStreamOptions membaca dropdown "Pilih Server Video" (mirror) pada halaman
 // episode. Setiap opsi memuat iframe stream, ditandai kualitas bila ada.
-func GetStreamOptions(ctx context.Context, episodeURL string) []watchhentai.DownloadOption {
+func GetStreamOptions(ctx context.Context, episodeURL string) []DownloadOption {
 	body, err := fetchHTML(ctx, episodeURL)
 	if err != nil {
 		return nil
@@ -265,8 +305,8 @@ func normalizeStreamURL(src string) string {
 }
 
 // parseStreamOptions mengurai opsi stream dari HTML halaman episode minioppai.
-func parseStreamOptions(body string) []watchhentai.DownloadOption {
-	var opts []watchhentai.DownloadOption
+func parseStreamOptions(body string) []DownloadOption {
+	var opts []DownloadOption
 	seen := make(map[string]bool)
 	for _, m := range reMirrorOpt.FindAllStringSubmatch(body, -1) {
 		val := strings.TrimSpace(m[1])
@@ -287,7 +327,7 @@ func parseStreamOptions(body string) []watchhentai.DownloadOption {
 		if src == "" {
 			continue
 		}
-		opts = append(opts, watchhentai.DownloadOption{Quality: quality, URL: src})
+		opts = append(opts, DownloadOption{Quality: quality, URL: src})
 	}
 	// Jika tidak ada dropdown mirror, fallback ke iframe utama.
 	if len(opts) == 0 {
@@ -296,7 +336,7 @@ func parseStreamOptions(body string) []watchhentai.DownloadOption {
 			if strings.HasPrefix(src, "//") {
 				src = "https:" + src
 			}
-			opts = append(opts, watchhentai.DownloadOption{Quality: "Stream", URL: src})
+			opts = append(opts, DownloadOption{Quality: "Stream", URL: src})
 		}
 	}
 	return opts
@@ -414,57 +454,179 @@ type EpisodeDownload struct {
 	IsBatch   bool           `json:"is_batch"`
 }
 
-// GetEpisodeDownloads mengambil link download per kualitas/format dari halaman episode minioppai.
+// GetEpisodeDownloads mengambil link download per kualitas dari halaman episode
+// minioppai. Bagian "Download" memuat baris kualitas (.soraurlx): label kualitas
+// (<strong>) diikuti link provider (MediaFire, KrakenFiles, PixelDrain).
 func GetEpisodeDownloads(ctx context.Context, epURL string) (*EpisodeDownload, error) {
 	body, err := fetchHTML(ctx, epURL)
 	if err != nil {
 		return nil, err
 	}
-	title := cleanText(parseTitle(body))
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+
+	title, groups := parseDownloadSection(doc, body)
+	if len(groups) == 0 {
+		return nil, fmt.Errorf("tidak ada pilihan download tersedia untuk episode ini")
+	}
 	isBatch := strings.Contains(epURL, "/batch/") || strings.Contains(strings.ToLower(title), "batch")
-
-	opts := parseStreamOptions(body)
-	if len(opts) == 0 {
-		return nil, fmt.Errorf("tidak ada pilihan kualitas tersedia untuk episode ini")
-	}
-
-	// Kelompokkan berdasarkan kualitas dan format
-	groupMap := make(map[string]*QualityGroup)
-	var order []string
-	for _, o := range opts {
-		quality := normalizeQuality(o.Quality)
-		if quality == "" {
-			quality = "Stream"
-		}
-		format := detectFormat(o.URL, quality)
-
-		key := quality + "|" + format
-		if _, ok := groupMap[key]; !ok {
-			groupMap[key] = &QualityGroup{
-				Quality: quality,
-				Format:  format,
-				Links:   []DownloadLink{},
-			}
-			order = append(order, key)
-		}
-		groupMap[key].Links = append(groupMap[key].Links, DownloadLink{
-			Server:    detectServer(o.URL),
-			URL:       o.URL,
-			DirectURL: ResolveDirectLink(ctx, detectServer(o.URL), o.URL),
-		})
-	}
-
-	var qualities []QualityGroup
-	for _, key := range order {
-		qualities = append(qualities, *groupMap[key])
-	}
 
 	return &EpisodeDownload{
 		Title:     title,
 		URL:       epURL,
-		Qualities: qualities,
+		Qualities: groups,
 		IsBatch:   isBatch,
 	}, nil
+}
+
+// qualityRank memetakan kualitas ke urutan tetap: 1080p -> 720p -> 480p -> 360p.
+// Kualitas di luar daftar dikenal diberi prioritas terendah dan tetap diurutkan
+// sesuai urutan dokumen di antara mereka.
+func qualityRank(q string) int {
+	switch strings.ToLower(strings.TrimSpace(q)) {
+	case "1080p":
+		return 0
+	case "720p":
+		return 1
+	case "480p":
+		return 2
+	case "360p":
+		return 3
+	}
+	return 99
+}
+
+// parseDownloadSection mengurai bagian "Download" pada halaman episode. Struktur
+// (dikonfirmasi dari minioppai.org/hajimete-no-hitozuma-episode-6/):
+//
+//	<div class="soraddlx soradlg">
+//	  <div class="sorattlx"><h3>{judul episode}</h3></div>
+//	  <div class="soraurlx"><strong>1080p</strong>
+//	    <a href="...">MediaFire</a><a href="...">KrakenFiles</a><a>PixelDrain</a></div>
+//	  <div class="soraurlx"><strong>720p</strong>...</div>
+//	  ...
+//	</div>
+//
+// Parser menggunakan selector semantik/atribut dengan fallback bila struktur
+// sedikit berubah, dan tidak pernah memproduksi URL palsu: hanya <a href>
+// yang valid yang dimasukkan, sibling non-link diabaikan.
+func parseDownloadSection(doc *goquery.Document, body string) (string, []QualityGroup) {
+	// 1) Judul episode: prioritas pada heading baris download, lalu h1, lalu <title>.
+	title := cleanText(doc.Find(".sorattlx h3, .sorattlx").First().Text())
+	if title == "" {
+		title = cleanText(doc.Find("h1").First().Text())
+	}
+	if title == "" {
+		title = cleanText(doc.Find("title").First().Text())
+	}
+
+	// 2) Kumpulkan baris kualitas. Prioritas utama: .soraurlx dalam konten utama.
+	var rows []*goquery.Selection
+	doc.Find(".soraurlx").Each(func(i int, s *goquery.Selection) {
+		rows = append(rows, s)
+	})
+
+	// 3) Fallback: bila tidak ada .soraurlx, cari di dalam blok "bixbox" yang
+	//    diawali heading berisi kata "Download" — urai <strong>/<a> berurutan.
+	if len(rows) == 0 {
+		rows = fallbackDownloadRows(doc)
+	}
+
+	var groups []QualityGroup
+	seen := make(map[string]bool)
+	for _, row := range rows {
+		quality := strings.TrimSpace(row.Find("strong").First().Text())
+		if quality == "" {
+			quality = strings.TrimSpace(row.Text())
+		}
+		quality = normalizeDownloadQuality(quality)
+		if quality == "" || seen[quality] {
+			continue
+		}
+		seen[quality] = true
+
+		var links []DownloadLink
+		row.Find("a[href]").Each(func(j int, a *goquery.Selection) {
+			href := strings.TrimSpace(a.AttrOr("href", ""))
+			server := strings.TrimSpace(a.Text())
+			if server == "" || !isValidDownloadURL(href) {
+				return
+			}
+			links = append(links, DownloadLink{Server: providerName(server), URL: href})
+		})
+
+		if len(links) > 0 {
+			groups = append(groups, QualityGroup{Quality: quality, Format: "MP4", Links: links})
+		}
+	}
+
+	// 4) Pertahankan urutan kualitas: 1080p -> 720p -> 480p -> 360p.
+	sort.SliceStable(groups, func(i, j int) bool {
+		return qualityRank(groups[i].Quality) < qualityRank(groups[j].Quality)
+	})
+
+	return title, groups
+}
+
+// fallbackDownloadRows menemukan baris kualitas bila struktur .soraurlx tidak
+// ada: hanya blok "bixbox" yang berjudul "Download" yang diproses, lalu setiap
+// <strong> yang diikuti satu atau lebih <a href> dianggap satu baris kualitas.
+func fallbackDownloadRows(doc *goquery.Document) []*goquery.Selection {
+	var rows []*goquery.Selection
+	doc.Find(".bixbox").Each(func(i int, box *goquery.Selection) {
+		heading := strings.ToLower(box.Find("h1, h2, h3, h4, .releases, .releases h3").First().Text())
+		if !strings.Contains(heading, "download") {
+			return
+		}
+		box.Find("strong").Each(func(j int, s *goquery.Selection) {
+			upper := strings.ToUpper(strings.TrimSpace(s.Text()))
+			if strings.Contains(upper, "P") && reQuality.MatchString(upper) {
+				rows = append(rows, s.Parent())
+			}
+		})
+	})
+	return rows
+}
+
+// normalizeDownloadQuality menormalkan label kualitas (mis. "1080p"). Mengembalikan
+// string kosong bila label bukan kualitas yang dikenal.
+func normalizeDownloadQuality(label string) string {
+	lower := strings.ToLower(strings.TrimSpace(label))
+	if m := reQuality.FindString(lower); m != "" && regexp.MustCompile(`(?i)^\d{3,4}p$`).MatchString(m) {
+		return m
+	}
+	return ""
+}
+
+// isValidDownloadURL memastikan URL berasal dari <a href> yang benar-benar
+// valid (http/https) sehingga tidak ada URL palsu/placeholder yang bocor.
+func isValidDownloadURL(raw string) bool {
+	if raw == "" || raw == "#" || strings.HasPrefix(raw, "javascript:") {
+		return false
+	}
+	u, err := url.Parse(raw)
+	return err == nil && (u.Scheme == "http" || u.Scheme == "https")
+}
+
+// knownProviders memetakan teks anchor ke nama server yang konsisten.
+var knownProviders = map[string]string{
+	"mediafire":   "MediaFire",
+	"krakenfiles": "KrakenFiles",
+	"pixeldrain":  "PixelDrain",
+}
+
+// providerName menormalkan nama provider dari teks anchor, dengan fallback ke
+// teks asli bila bukan provider yang dikenal.
+func providerName(text string) string {
+	lower := strings.ToLower(strings.TrimSpace(text))
+	for k, v := range knownProviders {
+		if strings.Contains(lower, k) {
+			return v
+		}
+	}
+	return strings.TrimSpace(text)
 }
 
 // ResolveDirectLink mencoba mengekstrak link unduhan langsung dari provider streaming.

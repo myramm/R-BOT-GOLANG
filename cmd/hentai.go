@@ -19,7 +19,7 @@ import (
 	"rbot/brain/identity"
 	"rbot/brain/premium"
 	"rbot/lib/minioppai"
-	"rbot/lib/watchhentai"
+	"rbot/lib/samehadaku"
 )
 
 type hentaiSessionStep int
@@ -32,12 +32,13 @@ const (
 
 type hentaiSession struct {
 	Step      hentaiSessionStep
-	Results   []watchhentai.SearchResult
-	Series    *watchhentai.SearchResult
-	Info      *watchhentai.SeriesInfo
-	Episodes  []watchhentai.EpisodeLink
+	Results   []minioppai.SearchResult
+	Series    *minioppai.SearchResult
+	Info      *minioppai.SeriesInfo
+	Episodes  []minioppai.EpisodeLink
 	Title     string
-	Options   []watchhentai.DownloadOption
+	Options   []minioppai.DownloadOption // opsi stream (mirror) bila ada
+	Download  *minioppai.EpisodeDownload // section download per kualitas/provider
 	CreatedAt time.Time
 }
 
@@ -48,14 +49,11 @@ var (
 
 const maxHentaiDocBytes = 2 * 1024 * 1024 * 1024 // 2GB batas dokumen WhatsApp
 
-var reHentaiSlug = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)+$`)
-
 func init() {
 	command.Register(&command.Command{
 		Name:        "hentai",
 		Category:    "Downloader",
-		Alias:       []string{"watchhentai"},
-		Description: "Cari & download video per episode & kualitas. Contoh: .hentai kotowarenai | .hentai <link episode>",
+		Description: "Cari & download video per episode & kualitas dari MiniOppai. Contoh: .hentai kotowarenai | .hentai <link episode minioppai>",
 		Handler:     hentaiHandler,
 	})
 
@@ -96,23 +94,6 @@ func clearHentaiSession(key string) {
 	hentaiMu.Lock()
 	defer hentaiMu.Unlock()
 	delete(hentaiSessions, key)
-}
-
-// isHentaiSlug true bila input berbentuk slug episode (contoh: kotowarenai-haha-episode-1-id-01)
-func isHentaiSlug(s string) bool {
-	s = strings.ToLower(strings.TrimSpace(s))
-	if strings.ContainsAny(s, " /?#") {
-		return false
-	}
-	if !strings.Contains(s, "-episode-") && !strings.HasSuffix(s, "-id-01") {
-		return false
-	}
-	return reHentaiSlug.MatchString(s)
-}
-
-func isWatchHentaiInput(s string) bool {
-	s = strings.ToLower(strings.TrimSpace(s))
-	return strings.Contains(s, "watchhentai.net/") || isHentaiSlug(s)
 }
 
 // isGrupOfficialChat true bila pesan berasal dari grup official (dicocokkan
@@ -159,125 +140,29 @@ func hentaiHandler(ctx context.Context, c *command.Ctx) error {
 	argStr := strings.TrimSpace(c.ArgStr())
 	if argStr == "" {
 		mp := config.MainPrefix()
-		_, err := c.Reply(ctx, fmt.Sprintf("Masukkan judul atau link episode.\n\n*Contoh:*\n• `%shentai kotowarenai` (Cari → pilih series → episode → kualitas)\n• `%shentai <link episode>`\n• `%shentai kotowarenai-haha-episode-1-id-01` (slug)\n\n⚠️ _Konten 18+. Disarankan di chat pribadi._", mp, mp, mp))
+		_, err := c.Reply(ctx, fmt.Sprintf("Masukkan judul atau link episode MiniOppai.\n\n*Contoh:*\n• `%shentai kotowarenai` (Cari → pilih series → episode → kualitas)\n• `%shentai <link episode minioppai>`\n\n⚠️ _Konten 18+. Disarankan di chat pribadi._", mp, mp))
 		return err
 	}
 
 	key := getSessionKey(c.Evt)
 
-	// Case 0: Link episode minioppai langsung -> tampilkan opsi stream.
+	// Case 0: Link episode minioppai langsung -> pilihan download/kualitas.
 	if isMiniOppaiURL(argStr) {
-		c.React(ctx, "⏳")
-		ep, epErr := minioppai.GetEpisode(ctx, argStr)
-		opts := minioppai.GetStreamOptions(ctx, argStr)
-		title := ""
-		if epErr == nil {
-			title = ep.Title
-		}
-		if title == "" {
-			title = "Episode"
-		}
-		if len(opts) == 0 {
-			if tolak := hentaiIzinFallback(c.Evt); tolak != "" {
-				c.React(ctx, "🚫")
-				_, e := c.Reply(ctx, tolak)
-				return e
-			}
-			c.React(ctx, "✅")
-			_, e := c.Reply(ctx, fmt.Sprintf("🔞 *%s*\n\n📺 *Link nonton:*\n%s", title, argStr))
-			return e
-		}
-		c.React(ctx, "✅")
-		saveHentaiSession(key, &hentaiSession{
-			Step:    stepSelectHentaiQuality,
-			Title:   title,
-			Options: opts,
-		})
-		_, e := c.Reply(ctx, formatHentaiQualityChoices(title, opts, c.Evt))
+		handleDirectMiniOppaiLink(ctx, c, key, argStr)
+		return nil
+	}
+
+	// Case 1: Pencarian standar (.hentai kotowarenai) dari MiniOppai.
+	c.React(ctx, "⏳")
+	results, err := minioppai.Search(ctx, argStr)
+	if err != nil {
+		c.React(ctx, "❌")
+		_, e := c.Reply(ctx, fmt.Sprintf("Gagal mencari: %s", err.Error()))
 		return e
 	}
-
-	// Case 1: Link / slug langsung -> langsung ke pilihan kualitas (mirip .anime <link>)
-	if isWatchHentaiInput(argStr) {
-		c.React(ctx, "⏳")
-		opts, err := watchhentai.GetDownloadOptions(ctx, argStr)
-		if err != nil {
-			// Fallback: halaman video tanpa halaman download -> ambil direct MP4 dari player
-			ep, epErr := watchhentai.GetEpisode(ctx, argStr)
-			if epErr != nil || ep.VideoURL == "" {
-				c.React(ctx, "❌")
-				msg := fmt.Sprintf("Gagal mengambil pilihan download: %s", err.Error())
-				if epErr != nil {
-					msg = fmt.Sprintf("Gagal mengambil detail episode: %s", epErr.Error())
-				}
-				_, e := c.Reply(ctx, msg)
-				return e
-			}
-			if tolak := hentaiIzinFallback(c.Evt); tolak != "" {
-				c.React(ctx, "🚫")
-				_, e := c.Reply(ctx, tolak)
-				return e
-			}
-			c.React(ctx, "✅")
-			go sendHentaiMedia(c, ep.Title, ep.VideoURL, "MP4")
-			return nil
-		}
-		c.React(ctx, "✅")
-
-		title := watchhentai.TitleFromEpisodeURL(argStr)
-		saveHentaiSession(key, &hentaiSession{
-			Step:    stepSelectHentaiQuality,
-			Title:   title,
-			Options: opts,
-		})
-		_, err = c.Reply(ctx, formatHentaiQualityChoices(title, opts, c.Evt))
-		return err
-	}
-
-	// Case 2: Pencarian standar (.hentai kotowarenai) dari 2 provider
-	c.React(ctx, "⏳")
-
-	// Jalankan pencarian di kedua provider secara paralel.
-	type searchOut struct {
-		results []watchhentai.SearchResult
-		err     error
-	}
-	whCh := make(chan searchOut, 1)
-	mpCh := make(chan searchOut, 1)
-
-	go func() {
-		r, e := watchhentai.Search(ctx, argStr)
-		whCh <- searchOut{r, e}
-	}()
-	go func() {
-		r, e := minioppai.Search(ctx, argStr)
-		mpCh <- searchOut{r, e}
-	}()
-
-	wh := <-whCh
-	mp := <-mpCh
-
-	results := make([]watchhentai.SearchResult, 0, len(wh.results)+len(mp.results))
-	if wh.err == nil {
-		results = append(results, wh.results...)
-	}
-	if mp.err == nil {
-		results = append(results, mp.results...)
-	}
-
 	if len(results) == 0 {
 		c.React(ctx, "❌")
-		var emoji string
-		if wh.err != nil {
-			emoji = fmt.Sprintf("WatchHentai: %v\n", wh.err)
-		}
-		if mp.err != nil {
-			emoji += fmt.Sprintf("MiniOppai: %v\n", mp.err)
-		}
-		if emoji == "" {
-			emoji = "tidak ditemukan."
-		}
-		_, e := c.Reply(ctx, fmt.Sprintf("'%s' tidak ditemukan.\n%s", argStr, emoji))
+		_, e := c.Reply(ctx, fmt.Sprintf("'%s' tidak ditemukan di MiniOppai.", argStr))
 		return e
 	}
 
@@ -287,7 +172,7 @@ func hentaiHandler(ctx context.Context, c *command.Ctx) error {
 		Results: results,
 	})
 
-	_, err := c.Reply(ctx, formatHentaiChoices(argStr, results))
+	_, err = c.Reply(ctx, formatHentaiChoices(argStr, results))
 	return err
 }
 
@@ -296,19 +181,56 @@ func isMiniOppaiURL(u string) bool {
 	return strings.Contains(strings.ToLower(u), "minioppai.org")
 }
 
-// isStreamPageURL menandai tautan halaman streaming (iframe/browser) yang bukan
-// file media langsung (mis. streampai.my.id) sehingga tidak cocok diunduh.
-func isStreamPageURL(u string) bool {
-	lower := strings.ToLower(u)
-	if strings.HasSuffix(lower, ".mp4") || strings.HasSuffix(lower, ".m3u8") {
-		return false
+// handleDirectMiniOppaiLink menangani URL episode minioppai yang diberikan
+// langsung: utamakan pilihan download, lalu opsi stream sebagai fallback.
+func handleDirectMiniOppaiLink(ctx context.Context, c *command.Ctx, key, url string) bool {
+	c.React(ctx, "⏳")
+	title := "Episode"
+
+	download, dlErr := minioppai.GetEpisodeDownloads(ctx, url)
+	if dlErr == nil && len(download.Qualities) > 0 {
+		if download.Title != "" {
+			title = download.Title
+		}
+		c.React(ctx, "✅")
+		saveHentaiSession(key, &hentaiSession{
+			Step:     stepSelectHentaiQuality,
+			Title:    title,
+			Download: download,
+		})
+		_, _ = c.Reply(ctx, formatHentaiDownloadChoices(title, download, c.Evt))
+		return true
 	}
-	return strings.Contains(lower, "streampai.") || strings.Contains(lower, "iframe")
+
+	ep, epErr := minioppai.GetEpisode(ctx, url)
+	if epErr == nil && ep.Title != "" {
+		title = ep.Title
+	}
+	opts := minioppai.GetStreamOptions(ctx, url)
+	if len(opts) > 0 {
+		c.React(ctx, "✅")
+		saveHentaiSession(key, &hentaiSession{
+			Step:    stepSelectHentaiQuality,
+			Title:   title,
+			Options: opts,
+		})
+		_, _ = c.Reply(ctx, formatHentaiQualityChoices(title, opts, c.Evt))
+		return true
+	}
+
+	if tolak := hentaiIzinFallback(c.Evt); tolak != "" {
+		c.React(ctx, "🚫")
+		_, _ = c.Reply(ctx, tolak)
+		return true
+	}
+	c.React(ctx, "✅")
+	_, _ = c.Reply(ctx, fmt.Sprintf("🔞 *%s*\n\n📺 *Link nonton:*\n%s", title, url))
+	return true
 }
 
 // sessSelectMiniOppaiSeries menangani user memilih series minioppai dari hasil
 // pencarian: memuat daftar episode & info series, lalu menampilkan episode.
-func sessSelectMiniOppaiSeries(ctx context.Context, c *command.Ctx, key string, sess *hentaiSession, selected watchhentai.SearchResult, evt *events.Message) bool {
+func sessSelectMiniOppaiSeries(ctx context.Context, c *command.Ctx, key string, sess *hentaiSession, selected minioppai.SearchResult, evt *events.Message) bool {
 	episodes, err := minioppai.GetEpisodeList(ctx, selected.URL)
 	if err != nil {
 		c.React(ctx, "❌")
@@ -318,22 +240,13 @@ func sessSelectMiniOppaiSeries(ctx context.Context, c *command.Ctx, key string, 
 	}
 	c.React(ctx, "✅")
 
-	// Ambil episode ENG dari watchhentai berdasarkan judul yang sama.
-	var engEpisodes []watchhentai.EpisodeLink
-	whResults, whErr := watchhentai.Search(ctx, selected.Title)
-	if whErr == nil && len(whResults) > 0 {
-		engEpisodes, _ = watchhentai.GetEpisodeList(ctx, whResults[0].URL)
-	}
-
-	// Gabungkan untuk indexing (ID + ENG).
-	sess.Episodes = append(episodes, engEpisodes...)
-
+	sess.Episodes = episodes
 	sess.Step = stepSelectHentaiEpisode
 	sess.Series = &selected
 	saveHentaiSession(key, sess)
 
 	// Ambil sinopsis & genre series (best-effort).
-	var info *watchhentai.SeriesInfo
+	var info *minioppai.SeriesInfo
 	if info, err = minioppai.GetSeriesInfo(ctx, selected.URL); err == nil {
 		info.URL = selected.URL
 		sess.Info = info
@@ -343,30 +256,46 @@ func sessSelectMiniOppaiSeries(ctx context.Context, c *command.Ctx, key string, 
 		}
 	}
 
-	_, _ = c.Reply(ctx, formatHentaiEpisodeList(info, episodes, engEpisodes))
+	_, _ = c.Reply(ctx, formatHentaiEpisodeList(info, episodes))
 	return true
 }
 
 // sessSelectMiniOppaiEpisode menangani user memilih episode minioppai: menampilkan
-// opsi stream (mirror/kualitas) bila ada, atau fallback ke link halaman episode.
-func sessSelectMiniOppaiEpisode(ctx context.Context, c *command.Ctx, key string, sess *hentaiSession, targetEp watchhentai.EpisodeLink, evt *events.Message) bool {
-	opts := minioppai.GetStreamOptions(ctx, targetEp.URL)
+// pilihan download bila ada, lalu opsi stream, atau fallback ke link halaman.
+func sessSelectMiniOppaiEpisode(ctx context.Context, c *command.Ctx, key string, sess *hentaiSession, targetEp minioppai.EpisodeLink, evt *events.Message) bool {
+	title := targetEp.Title
+	if title == "" {
+		title = "Episode " + targetEp.Number
+	}
 
+	download, dlErr := minioppai.GetEpisodeDownloads(ctx, targetEp.URL)
+	if dlErr == nil && len(download.Qualities) > 0 {
+		if download.Title != "" {
+			title = download.Title
+		}
+		c.React(ctx, "✅")
+		sess.Step = stepSelectHentaiQuality
+		sess.Title = title
+		sess.Download = download
+		sess.Options = nil
+		saveHentaiSession(key, sess)
+		_, _ = c.Reply(ctx, formatHentaiDownloadChoices(title, download, evt))
+		return true
+	}
+
+	opts := minioppai.GetStreamOptions(ctx, targetEp.URL)
 	if len(opts) > 0 {
 		c.React(ctx, "✅")
-		title := targetEp.Title
-		if title == "" {
-			title = "Episode " + targetEp.Number
-		}
 		sess.Step = stepSelectHentaiQuality
 		sess.Title = title
 		sess.Options = opts
+		sess.Download = nil
 		saveHentaiSession(key, sess)
 		_, _ = c.Reply(ctx, formatHentaiQualityChoices(title, opts, evt))
 		return true
 	}
 
-	// Tak ada mirror: berikan tautan halaman episode agar user menonton di browser.
+	// Tak ada download maupun mirror: berikan tautan halaman episode.
 	if tolak := hentaiIzinFallback(evt); tolak != "" {
 		c.React(ctx, "🚫")
 		_, _ = c.Reply(ctx, tolak)
@@ -374,7 +303,7 @@ func sessSelectMiniOppaiEpisode(ctx context.Context, c *command.Ctx, key string,
 		return true
 	}
 	c.React(ctx, "✅")
-	_, _ = c.Reply(ctx, fmt.Sprintf("🔞 *%s*\n\n📺 *Link nonton:*\n%s", sess.Series.Title, targetEp.URL))
+	_, _ = c.Reply(ctx, fmt.Sprintf("🔞 *%s*\n\n📺 *Link nonton:*\n%s", title, targetEp.URL))
 	clearHentaiSession(key)
 	return true
 }
@@ -395,76 +324,12 @@ func handleHentaiSessionReply(ctx context.Context, client *whatsmeow.Client, evt
 		if err != nil || choiceNum <= 0 || choiceNum > len(sess.Results) {
 			return false
 		}
-
 		selected := sess.Results[choiceNum-1]
 		c.React(ctx, "⏳")
-
-		if isMiniOppaiURL(selected.URL) {
-			return sessSelectMiniOppaiSeries(ctx, c, key, sess, selected, evt)
-		}
-
-		episodes, err := watchhentai.GetEpisodeList(ctx, selected.URL)
-		if err != nil {
-			c.React(ctx, "❌")
-			clearHentaiSession(key)
-			_, _ = c.Reply(ctx, fmt.Sprintf("Gagal memuat daftar episode: %s", err.Error()))
-			return true
-		}
-		c.React(ctx, "✅")
-
-		if len(episodes) == 0 {
-			// Halaman bukan series (kemungkinan langsung halaman video) -> ke pilihan kualitas
-			opts, optErr := watchhentai.GetDownloadOptions(ctx, selected.URL)
-			if optErr != nil {
-				clearHentaiSession(key)
-				ep, epErr := watchhentai.GetEpisode(ctx, selected.URL)
-				if epErr != nil || ep.VideoURL == "" {
-					c.React(ctx, "❌")
-					_, _ = c.Reply(ctx, "Tidak ada episode maupun pilihan download di halaman ini.")
-					return true
-				}
-				if tolak := hentaiIzinFallback(evt); tolak != "" {
-					c.React(ctx, "🚫")
-					_, _ = c.Reply(ctx, tolak)
-					return true
-				}
-				c.React(ctx, "✅")
-				go sendHentaiMedia(c, ep.Title, ep.VideoURL, "MP4")
-				return true
-			}
-
-			sess.Step = stepSelectHentaiQuality
-			sess.Series = &selected
-			sess.Title = watchhentai.TitleFromEpisodeURL(selected.URL)
-			sess.Options = opts
-			saveHentaiSession(key, sess)
-
-			_, _ = c.Reply(ctx, formatHentaiQualityChoices(sess.Title, opts, evt))
-			return true
-		}
-
-		sess.Step = stepSelectHentaiEpisode
-		sess.Series = &selected
-		sess.Episodes = episodes
-		saveHentaiSession(key, sess)
-
-		// Ambil sinopsis & genre series (best-effort, gagal = tampil tanpa sinopsis)
-		if info, infoErr := watchhentai.GetSeriesInfo(ctx, selected.URL); infoErr == nil {
-			info.URL = selected.URL
-			sess.Info = info
-			saveHentaiSession(key, sess)
-
-			// Kirim thumbnail sebagai foto asli (bukan URL) sebelum daftar episode
-			if info.Thumbnail != "" {
-				_ = c.SendMedia(ctx, info.Thumbnail, command.MediaImage, "", "", "", 10*1024*1024)
-			}
-		}
-
-		_, _ = c.Reply(ctx, formatHentaiEpisodeList(sess.Info, nil, episodes))
-		return true
+		return sessSelectMiniOppaiSeries(ctx, c, key, sess, selected, evt)
 
 	case stepSelectHentaiEpisode:
-		if sess.Series == nil || len(sess.Episodes) == 0 {
+		if len(sess.Episodes) == 0 {
 			clearHentaiSession(key)
 			return false
 		}
@@ -472,51 +337,26 @@ func handleHentaiSessionReply(ctx context.Context, client *whatsmeow.Client, evt
 		if err != nil || choiceNum <= 0 || choiceNum > len(sess.Episodes) {
 			return false
 		}
-
 		targetEp := sess.Episodes[choiceNum-1]
 		c.React(ctx, "⏳")
-
-		if isMiniOppaiURL(sess.Series.URL) {
-			return sessSelectMiniOppaiEpisode(ctx, c, key, sess, targetEp, evt)
-		}
-
-		opts, err := watchhentai.GetDownloadOptions(ctx, targetEp.URL)
-		if err != nil {
-			// Fallback: langsung ambil direct MP4 dari player
-			ep, epErr := watchhentai.GetEpisode(ctx, targetEp.URL)
-			if epErr != nil || ep.VideoURL == "" {
-				c.React(ctx, "❌")
-				_, _ = c.Reply(ctx, fmt.Sprintf("Gagal memuat pilihan download: %s", err.Error()))
-				clearHentaiSession(key)
-				return true
-			}
-			if tolak := hentaiIzinFallback(evt); tolak != "" {
-				c.React(ctx, "🚫")
-				_, _ = c.Reply(ctx, tolak)
-				clearHentaiSession(key)
-				return true
-			}
-			c.React(ctx, "✅")
-			go sendHentaiMedia(c, ep.Title, ep.VideoURL, "MP4")
-			clearHentaiSession(key)
-			return true
-		}
-		c.React(ctx, "✅")
-
-		title := watchhentai.TitleFromEpisodeURL(targetEp.URL)
-		sess.Step = stepSelectHentaiQuality
-		sess.Title = title
-		sess.Options = opts
-		saveHentaiSession(key, sess)
-
-		_, _ = c.Reply(ctx, formatHentaiQualityChoices(title, opts, evt))
-		return true
+		return sessSelectMiniOppaiEpisode(ctx, c, key, sess, targetEp, evt)
 
 	case stepSelectHentaiQuality:
 		choiceNum, err := strconv.Atoi(cleanInput)
 		if err != nil || choiceNum <= 0 {
 			return false
 		}
+
+		// Mode 1: section download (per kualitas + provider).
+		if sess.Download != nil && len(sess.Download.Qualities) > 0 {
+			if choiceNum > len(sess.Download.Qualities) {
+				_, _ = c.Reply(ctx, fmt.Sprintf("Nomor kualitas tidak valid. Pilih 1 - %d.", len(sess.Download.Qualities)))
+				return true
+			}
+			return handleHentaiDownloadQuality(ctx, c, key, sess, choiceNum-1, evt)
+		}
+
+		// Mode 2: opsi stream.
 		if sess.Options == nil || len(sess.Options) == 0 {
 			clearHentaiSession(key)
 			return false
@@ -525,81 +365,91 @@ func handleHentaiSessionReply(ctx context.Context, client *whatsmeow.Client, evt
 			_, _ = c.Reply(ctx, fmt.Sprintf("Nomor kualitas tidak valid. Pilih 1 - %d.", len(sess.Options)))
 			return true
 		}
-
 		selectedOpt := sess.Options[choiceNum-1]
 
-		dalamGrup := isGrupOfficialChat(evt)
-		isPrem := premium.IsPremium(evt)
-		userKey := identity.SenderPhone(evt)
-
-		// Stream halaman (minioppai via streampai iframe) bukan file MP4 langsung:
-		// cukup satu cek izin fallback (kuota 1 penggunaan) lalu kirim tautan.
-		if isStreamPageURL(selectedOpt.URL) {
-			if tolak := hentaiIzinFallback(evt); tolak != "" {
-				c.React(ctx, "🚫")
-				_, _ = c.Reply(ctx, tolak)
-				return true
-			}
-			c.React(ctx, "✅")
-			clearHentaiSession(key)
-			_, _ = c.Reply(ctx, fmt.Sprintf("🔞 *%s*\nKualitas: %s\n\n📺 *Link streaming:*\n%s", sess.Title, selectedOpt.Quality, selectedOpt.URL))
-			return true
-		}
-
-		// Izin download video: premium bebas; >=1080p premium-only; free pakai kuota harian.
-		if ok, tolak := hentaiIzin(userKey, selectedOpt.Quality, dalamGrup, isPrem); !ok {
+		if tolak := hentaiIzinFallback(evt); tolak != "" {
 			c.React(ctx, "🚫")
 			_, _ = c.Reply(ctx, tolak)
 			return true
 		}
-
-		c.React(ctx, "⏳")
+		c.React(ctx, "✅")
 		clearHentaiSession(key)
-
-		if !isPrem {
-			hentailimit.Record(userKey, selectedOpt.Quality)
-		}
-
-		_, _ = c.Reply(ctx, fmt.Sprintf("⏳ *Memproses %s (%s)...*\nProses download berjalan di background agar bot tetap responsif menerima pesan lain.", sess.Title, selectedOpt.Quality))
-
-		go sendHentaiMedia(c, sess.Title, selectedOpt.URL, selectedOpt.Quality)
+		_, _ = c.Reply(ctx, fmt.Sprintf("🔞 *%s*\nKualitas: %s\n\n📺 *Link streaming:*\n%s", sess.Title, selectedOpt.Quality, selectedOpt.URL))
 		return true
 	}
 
 	return false
 }
 
-// sendHentaiMedia mengunduh MP4 ke file sementara lalu mengirimkannya sebagai
-// video WhatsApp secara asynchronous. Jika gagal, kirim fallback link langsung.
-func sendHentaiMedia(c *command.Ctx, title, videoURL, quality string) {
-	bgCtx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
-	defer cancel()
+// handleHentaiDownloadQuality mengirim file/tautan untuk satu kualitas pada
+// section download: resolve provider lalu kirim langsung bila memungkinkan.
+func handleHentaiDownloadQuality(ctx context.Context, c *command.Ctx, key string, sess *hentaiSession, qualIdx int, evt *events.Message) bool {
+	qual := sess.Download.Qualities[qualIdx]
 
-	_, _ = c.Reply(bgCtx, fmt.Sprintf("⏳ *Memproses %s (%s)...*\nProses download berjalan di background.", title, quality))
+	dalamGrup := isGrupOfficialChat(evt)
+	isPrem := premium.IsPremium(evt)
+	userKey := identity.SenderPhone(evt)
 
-	tmpPath, err := downloadToTempFile(bgCtx, videoURL, 10*time.Minute, maxHentaiDocBytes)
-	if err != nil {
-		_, _ = c.Reply(bgCtx, fmt.Sprintf("❌ Gagal download video (%s).\n\n🚀 *Link langsung:*\n%s", err.Error(), videoURL))
-		return
+	if ok, tolak := hentaiIzin(userKey, qual.Quality, dalamGrup, isPrem); !ok {
+		c.React(ctx, "🚫")
+		_, _ = c.Reply(ctx, tolak)
+		return true
 	}
-	defer os.Remove(tmpPath)
-
-	fileData, readErr := os.ReadFile(tmpPath)
-	if readErr != nil || len(fileData) == 0 {
-		_, _ = c.Reply(bgCtx, fmt.Sprintf("❌ Gagal membaca file video.\n\n🚀 *Link langsung:*\n%s", videoURL))
-		return
+	if !isPrem {
+		hentailimit.Record(userKey, qual.Quality)
 	}
 
-	fileName := safeHentaiFileName(title, quality)
-	caption := fmt.Sprintf("🔞 *%s*\nKualitas: %s", title, quality)
-	sendErr := c.SendMediaBytesWithMetadata(bgCtx, fileData, command.MediaVideo, caption, fileName, "video/mp4", nil)
-	if sendErr != nil {
-		_, _ = c.Reply(bgCtx, fmt.Sprintf("⚠️ Gagal mengirim file (%s).\n\n🚀 *Link langsung:*\n%s", sendErr.Error(), videoURL))
-		return
+	title := sess.Title
+	if title == "" {
+		title = sess.Download.Title
 	}
-	c.React(bgCtx, "✅")
+
+	c.React(ctx, "⏳")
+	clearHentaiSession(key)
+	_, _ = c.Reply(ctx, fmt.Sprintf("⏳ *Memproses %s (%s)...*\nProses download berjalan di background agar bot tetap responsif menerima pesan lain.", title, qual.Quality))
+
+	go func() {
+		bgCtx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+		defer cancel()
+
+		resolved := make([]minioppai.DownloadLink, len(qual.Links))
+		var fileSent bool
+
+		for i, l := range qual.Links {
+			directURL := samehadaku.ResolveDirectLink(bgCtx, l.Server, l.URL)
+			resolved[i] = minioppai.DownloadLink{
+				Server:    l.Server,
+				URL:       l.URL,
+				DirectURL: directURL,
+			}
+			if !fileSent && directURL != "" && directURL != l.URL {
+				tmpPath, dlErr := downloadToTempFile(bgCtx, directURL, 10*time.Minute, maxHentaiDocBytes)
+				if dlErr == nil && tmpPath != "" {
+					fileData, readErr := os.ReadFile(tmpPath)
+					os.Remove(tmpPath)
+					if readErr == nil && len(fileData) > 0 {
+						fileName := safeHentaiFileName(title, qual.Quality)
+						caption := fmt.Sprintf("🔞 *%s*\nKualitas: %s", title, qual.Quality)
+						if sendErr := c.SendMediaBytesWithMetadata(bgCtx, fileData, command.MediaVideo, caption, fileName, "video/mp4", nil); sendErr == nil {
+							fileSent = true
+							c.React(bgCtx, "✅")
+						}
+					}
+				}
+			}
+		}
+
+		if !fileSent {
+			c.React(bgCtx, "✅")
+			updated := qual
+			updated.Links = resolved
+			_, _ = c.Reply(bgCtx, formatHentaiFinalDownloads(title, updated))
+		}
+	}()
+	return true
 }
 
+// safeHentaiFileName membuat nama file video dari judul & kualitas.
 func safeHentaiFileName(title, quality string) string {
 	cleanTitle := regexp.MustCompile(`[^\w\s\.-]`).ReplaceAllString(title, "")
 	cleanTitle = regexp.MustCompile(`\s+`).ReplaceAllString(cleanTitle, "_")
@@ -610,9 +460,9 @@ func safeHentaiFileName(title, quality string) string {
 	return cleanTitle + ".mp4"
 }
 
-func formatHentaiChoices(query string, results []watchhentai.SearchResult) string {
+func formatHentaiChoices(query string, results []minioppai.SearchResult) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "🔎 *Hasil Pencarian: '%s'*\n\n", query)
+	fmt.Fprintf(&b, "🔎 *Hasil Pencarian MiniOppai: '%s'*\n\n", query)
 
 	maxShow := 8
 	if len(results) < maxShow {
@@ -626,7 +476,10 @@ func formatHentaiChoices(query string, results []watchhentai.SearchResult) strin
 	return b.String()
 }
 
-func formatHentaiEpisodeList(info *watchhentai.SeriesInfo, idEpisodes, engEpisodes []watchhentai.EpisodeLink) string {
+// formatHentaiEpisodeList menampilkan daftar episode hanya dari source
+// "ID minioppai". Jumlah episode dihitung dari episode yang benar-benar
+// berhasil ditemukan oleh scraper MiniOppai.
+func formatHentaiEpisodeList(info *minioppai.SeriesInfo, episodes []minioppai.EpisodeLink) string {
 	var b strings.Builder
 	if info != nil {
 		title := info.Title
@@ -646,11 +499,9 @@ func formatHentaiEpisodeList(info *watchhentai.SeriesInfo, idEpisodes, engEpisod
 		}
 	}
 
-	allCount := len(idEpisodes) + len(engEpisodes)
-	fmt.Fprintf(&b, "\n📜 *Daftar Episode (%d):*\n\n", allCount)
-
+	fmt.Fprintf(&b, "\n📜 *Daftar Episode (%d):*\n\n", len(episodes))
 	fmt.Fprintf(&b, "*ID minioppai:*\n")
-	for i, ep := range idEpisodes {
+	for i, ep := range episodes {
 		label := ep.Title
 		if label == "" {
 			label = "Episode " + ep.Number
@@ -658,37 +509,66 @@ func formatHentaiEpisodeList(info *watchhentai.SeriesInfo, idEpisodes, engEpisod
 		fmt.Fprintf(&b, "%d. %s\n", i+1, label)
 	}
 
-	fmt.Fprintf(&b, "*ENG watchhentai:*\n")
-	for i, ep := range engEpisodes {
-		label := ep.Title
-		if label == "" {
-			label = "Episode " + ep.Number
-		}
-		fmt.Fprintf(&b, "%d. %s\n", len(idEpisodes)+i+1, label)
-	}
-
-	fmt.Fprintf(&b, "\n⚠️ _Konten 18+_\n👉 *Ketik nomor episode (1 - %d) untuk memilih kualitas.*", allCount)
+	fmt.Fprintf(&b, "\n⚠️ _Konten 18+_\n👉 *Ketik nomor episode (1 - %d) untuk memilih kualitas.*", len(episodes))
 	return b.String()
 }
 
-func formatHentaiQualityChoices(title string, opts []watchhentai.DownloadOption, evt *events.Message) string {
+func formatHentaiQualityChoices(title string, opts []minioppai.DownloadOption, evt *events.Message) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "🎬 *%s*\n", title)
+	fmt.Fprintf(&b, "Pilih Kualitas Stream:\n\n")
+
+	for i, o := range opts {
+		fmt.Fprintf(&b, "%d. *%s*\n", i+1, o.Quality)
+	}
+
+	fmt.Fprintf(&b, "\n⚠️ _Konten 18+_\n👉 *Ketik nomor kualitas (1 - %d).*", len(opts))
+	return b.String()
+}
+
+// formatHentaiDownloadChoices menampilkan pilihan kualitas dari section download
+// (1080p -> 720p -> 480p -> 360p) lengkap dengan provider tiap kualitas.
+func formatHentaiDownloadChoices(title string, ep *minioppai.EpisodeDownload, evt *events.Message) string {
 	isPremUser := premium.IsPremium(evt)
 	var b strings.Builder
 	fmt.Fprintf(&b, "🎬 *%s*\n", title)
 	fmt.Fprintf(&b, "Pilih Kualitas Download:\n\n")
 
-	for i, o := range opts {
+	for i, q := range ep.Qualities {
 		badge := ""
-		if !hentailimit.IsFreeQuality(o.Quality) {
+		if !hentailimit.IsFreeQuality(q.Quality) {
 			if isPremUser {
 				badge = " ✨ [PREMIUM]"
 			} else {
 				badge = " 💎 [PREMIUM ONLY]"
 			}
 		}
-		fmt.Fprintf(&b, "%d. *%s*%s\n", i+1, o.Quality, badge)
+		fmt.Fprintf(&b, "%d. *%s*%s\n", i+1, q.Quality, badge)
 	}
 
-	fmt.Fprintf(&b, "\n⚠️ _Konten 18+_\n👉 *Ketik nomor kualitas (1 - %d) untuk download.*", len(opts))
+	fmt.Fprintf(&b, "\n⚠️ _Konten 18+_\n👉 *Ketik nomor kualitas (1 - %d) untuk download.*", len(ep.Qualities))
+	return b.String()
+}
+
+// formatHentaiFinalDownloads menampilkan daftar tautan provider yang sudah
+// di-resolve untuk satu kualitas.
+func formatHentaiFinalDownloads(title string, q minioppai.QualityGroup) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "✅ *Download %s*\n", title)
+	fmt.Fprintf(&b, "Kualitas: *%s*\n\n", q.Quality)
+	fmt.Fprintf(&b, "🚀 *Server / Provider Download:*\n")
+
+	for _, link := range q.Links {
+		dlURL := link.DirectURL
+		if dlURL == "" {
+			dlURL = link.URL
+		}
+		if dlURL == "" {
+			continue
+		}
+		fmt.Fprintf(&b, " • *%-12s* : %s\n", link.Server, dlURL)
+	}
+
+	fmt.Fprintf(&b, "\n_Catatan: Jika ukuran file di bawah batas WhatsApp, file akan otomatis dikirimkan langsung._")
 	return b.String()
 }

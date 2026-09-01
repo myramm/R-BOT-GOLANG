@@ -288,6 +288,7 @@ func run(ctx context.Context) error {
 			fmt.Println(" PENTING: masukkan kode dalam < 2 menit, jangan sampai kadaluarsa.")
 			fmt.Println("==============================")
 		}
+	}
 
 	log.Printf("[rbot] %d command terdaftar", command.Count())
 	jadibot.Init(ctx)

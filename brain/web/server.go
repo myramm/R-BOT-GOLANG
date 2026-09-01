@@ -397,6 +397,20 @@ func BuildStatusPayload() map[string]any {
 		}
 	}
 
+	// Selalu kosongkan state pairing di payload kalau sudah login.
+	// Ini mencegah UI menampilkan banner pairing & kode lama yang nyangkut
+	// ("kumat") setelah pairing berhasil atau reconnect.
+	if loggedIn {
+		stateMu.Lock()
+		if pairingCode != "" || passkeyNeeded {
+			pairingCode = ""
+			passkeyNeeded = false
+		}
+		stateMu.Unlock()
+		pairCode = ""
+		passkey = false
+	}
+
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
 

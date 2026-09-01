@@ -49,7 +49,7 @@ var (
 )
 
 func init() {
-	command.SimiHook = HandleQuotedMessage
+	command.SimiHook = handleWithActions
 }
 
 const promptStoreKey = "simi:system_prompt"

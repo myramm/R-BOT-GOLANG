@@ -199,6 +199,8 @@ func run(ctx context.Context) error {
 			web.BroadcastMetricsNow()
 		case *events.LoggedOut:
 			log.Printf("[rbot] sesi WhatsApp logout; hapus session/store.db untuk pairing baru")
+			web.SetPairingCode("")
+			web.SetPasskeyRequired(false)
 			web.BroadcastMetricsNow()
 		case *events.PairPasskeyRequest:
 			// Flow passkey baru Meta (sejak akhir Juni 2026): setelah kode pairing
@@ -219,6 +221,15 @@ func run(ctx context.Context) error {
 			} else {
 				log.Printf("[rbot] cocokkan kode di HP WhatsApp lalu konfirmasi untuk menyelesaikan pairing")
 			}
+		case *events.PairSuccess:
+			// Pairing berhasil: kosongkan state pairing di dashboard agar banner hilang.
+			log.Printf("[rbot] pairing berhasil, wipe banner pairing di dashboard")
+			web.SetPairingCode("")
+			web.SetPasskeyRequired(false)
+			web.BroadcastMetricsNow()
+		case *events.PairError:
+			log.Printf("[rbot] pairing gagal: %v", evt.Error)
+			web.SetPasskeyRequired(false)
 		}
 	})
 

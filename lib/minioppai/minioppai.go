@@ -37,7 +37,7 @@ var (
 	reIframeSrc     = regexp.MustCompile(`(?i)<iframe[^>]*src="([^"]+)"`)
 	reQuality       = regexp.MustCompile(`(?i)(\d{3,4}p|\bmp4\b)`)
 	reDirectMP4     = regexp.MustCompile(`(?i)https?://[^"'\s<>]+\.mp4`)
-	reSkipLinkText  = regexp.MustCompile(`(?i)(watch\s*now|hentai\s*episodes|bukan\s*episode|next|prev|previous|back|home|menu)`)
+	reSkipLinkText = regexp.MustCompile(`(?i)(watch\s*now|hentai\s*episodes|bukan\s*episode|next|prev|previous|back|home|menu|^\s*(id|eng|sub|indo|english)\s*$|\s*(id|eng|sub)\s*$)`)
 )
 
 // GetSeriesInfo mengambil metadata series (judul, genre, sinopsis, thumbnail)
@@ -99,6 +99,9 @@ func GetEpisodeList(ctx context.Context, seriesURL string) ([]watchhentai.Episod
 		href := a.AttrOr("href", "")
 		linkText := strings.TrimSpace(a.Text())
 		if reSkipLinkText.MatchString(linkText) {
+			return
+		}
+		if len(linkText) < 3 {
 			return
 		}
 		if !strings.HasPrefix(href, BaseURL+"/") || strings.Contains(href, "/anime/") || seen[href] {
